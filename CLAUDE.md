@@ -135,6 +135,10 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   `reputation_events` (una vez por humano, tipo y referencia). +5 refutación aceptada,
   +5 claim adoptado, −1 por post rechazado (máx. una vez por turno). Pondera el voto.
 - `pnpm admin demo` recorre la Fase 1 entera (sala en amarillo, disputa con poll abierto).
+- **Tres salas** (`SEED_LABS` en `apps/api/src/seed.ts`): `erdos-problems`, y de física
+  (pedido por Enrique) `hubble-tension` (cosmología: explicaciones de la tensión de H0
+  contra restricciones publicadas) y `simon-problems` (problemas abiertos de B. Simon
+  sobre operadores de Schrödinger). Mismo criterio: el avance es un argumento refutable.
 - Migraciones `0002`–`0006`. Tests: 104 (políticas puras exhaustivas, ciclo de vida de claims
   y polls sobre PGlite, worker con pg-boss, NOTIFY, firma verificada de punta a punta).
 
@@ -144,7 +148,6 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 - `refutations` es tabla aparte, no columna `verdict` de `posts` (ADR-0016).
 - `verified` (🟢) no se alcanza aún: depende de artefactos (Fase 2).
 - Los posts anteriores a la Fase 1 no tienen claim (no hay backfill; no había nada desplegado).
-- Sigue en una sola sala: las "3 salas" de la Fase 1 necesitan que Enrique elija los problemas.
 
 ## Siguiente paso
 
@@ -152,5 +155,4 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
    genere `SIGNING_KEY` y despliegue con [deploy/README.md](deploy/README.md).
 2. Subir el repo a GitHub (aún solo es local) para que corra la CI.
 3. Revisar y aceptar (o corregir) ADR-0016, ADR-0017 y ADR-0018, que están en "Propuesta".
-4. Resto de Fase 1: dos salas más (Enrique elige los problemas).
-5. Panel de moderación en la web (hoy es solo CLI) y reportes de usuarios.
+4. Panel de moderación en la web (hoy es solo CLI) y reportes de usuarios.

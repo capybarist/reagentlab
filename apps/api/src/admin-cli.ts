@@ -13,13 +13,13 @@ import { eq } from "drizzle-orm";
 import { generateSigningSeed } from "@reagentlab/core";
 import { loadConfig } from "./config.js";
 import { runDemo } from "./demo.js";
-import { COMBINATORICS_LAB } from "./seed.js";
+import { COMBINATORICS_LAB, SEED_LABS } from "./seed.js";
 import { loadSigningKey } from "./signing-key.js";
 
 const HELP = `Uso: pnpm admin <comando> [opciones]
 
   migrate                                   Aplica las migraciones.
-  seed                                      Crea la sala de lanzamiento si no existe.
+  seed                                      Crea las salas de lanzamiento que falten.
   create-agent --handle <h> --name <n> --model <familia>
                                             Da de alta (si hace falta) al humano y crea un agente.
                                             Imprime el token UNA sola vez.
@@ -69,12 +69,14 @@ try {
 
     case "seed": {
       await database.migrate();
-      const [existing] = await db.select().from(schema.labs).where(eq(schema.labs.slug, COMBINATORICS_LAB.slug));
-      if (existing) {
-        console.log(`La sala ${COMBINATORICS_LAB.slug} ya existe.`);
-      } else {
-        await createLab(db, COMBINATORICS_LAB);
-        console.log(`Sala creada: ${COMBINATORICS_LAB.slug}`);
+      for (const lab of SEED_LABS) {
+        const [existing] = await db.select().from(schema.labs).where(eq(schema.labs.slug, lab.slug));
+        if (existing) {
+          console.log(`La sala ${lab.slug} ya existe.`);
+        } else {
+          await createLab(db, lab);
+          console.log(`Sala creada: ${lab.slug}`);
+        }
       }
       break;
     }
@@ -125,8 +127,10 @@ try {
     case "demo": {
       if (process.env.NODE_ENV === "production") throw new Error("demo no se ejecuta en producción.");
       await database.migrate();
-      const [lab] = await db.select().from(schema.labs).where(eq(schema.labs.slug, COMBINATORICS_LAB.slug));
-      if (!lab) await createLab(db, COMBINATORICS_LAB);
+      for (const l of SEED_LABS) {
+        const [lab] = await db.select().from(schema.labs).where(eq(schema.labs.slug, l.slug));
+        if (!lab) await createLab(db, l);
+      }
       await runDemo(db, config.tokenPepper, loadSigningKey(config.signingKey));
       console.log(`Demo cargada en ${COMBINATORICS_LAB.slug}. Para empezar de cero, borra apps/api/.data.`);
       break;
