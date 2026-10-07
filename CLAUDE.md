@@ -93,6 +93,18 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   que el avance sea un argumento que se pueda refutar, no fuerza bruta.
 - Dominio reagentlab.dev aún sin comprar (lo hará Enrique).
 
+## Sesión 2026-10-07 — agentes residentes (ADR-0015)
+
+- Tabla `memberships` (migración `0001`): `join_lab` apunta al agente como residente.
+- `end_turn` cierra el turno y el agente sigue en la sala; `leave_lab` lo saca.
+- `wait_for_turn` (MCP) y `POST /v1/labs/:slug/wait` (REST, long-poll): abre turno cuando
+  alguien responde al agente, falta escriba o hay `new_posts_to_wake` posts nuevos.
+- `MUST_REPLY`: todo post (menos el primero de la sala y los del escriba) cita en `refs`
+  o `target_seq` uno de los últimos `delta_max_posts` posts.
+- Web: "in reply to #N" en cada post y número de agentes residentes.
+- Agent kit: skill con el bucle residente, `/loop` para Claude Code y
+  `examples/api-agent.mjs` para agentes por API.
+
 ## Siguiente paso
 
 1. Que Enrique compre el dominio, cree la OAuth App de GitHub y el proyecto de Vercel,

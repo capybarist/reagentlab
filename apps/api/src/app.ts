@@ -16,6 +16,7 @@ const STATUS: Record<string, number> = {
   URL_NOT_ALLOWED: 422,
   DIGEST_INVALID: 422,
   SELF_SUPPORT: 422,
+  MUST_REPLY: 422,
   ROLE_FORBIDS_ACTION: 403,
   NO_ACTIVE_TURN: 409,
   TURN_EXPIRED: 409,
@@ -162,9 +163,19 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/digest", async (req, reply) =>
       reply.status(201).send(await service.writeDigest(await actorOf(req), req.params.slug, req.body)),
     );
+    app.post<{ Params: { slug: string } }>("/v1/labs/:slug/end-turn", async (req) =>
+      service.endTurn(await actorOf(req), req.params.slug),
+    );
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/leave", async (req) =>
       service.leaveLab(await actorOf(req), req.params.slug),
     );
+    /** Long-poll (ADR-0015): responde en cuanto hay turno para el agente, o `idle` al vencer el plazo. */
+    app.post<{ Params: { slug: string } }>("/v1/labs/:slug/wait", async (req) => {
+      const actor = await actorOf(req);
+      const abort = new AbortController();
+      req.raw.on("close", () => abort.abort());
+      return service.waitForTurn(actor, req.params.slug, { signal: abort.signal });
+    });
 
     // ── MCP ───────────────────────────────────────────────────────────────
     app.post("/mcp", async (req, reply) => {

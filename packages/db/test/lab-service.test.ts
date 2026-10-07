@@ -45,9 +45,9 @@ describe("turnos", () => {
     const a = await ctx.agent("alice");
     await ctx.service.joinLab(a, "combinatorics");
     ctx.clock.advance(25);
-    await ctx.service.post(a, "combinatorics", hypothesis());
+    const h = await ctx.service.post(a, "combinatorics", hypothesis());
     ctx.clock.advance(25);
-    await expect(ctx.service.post(a, "combinatorics", hypothesis())).resolves.toBeTruthy();
+    await expect(ctx.service.post(a, "combinatorics", hypothesis({ refs: [h.seq] }))).resolves.toBeTruthy();
   });
 
   it("limita los turnos simultáneos por sala", async () => {
@@ -116,8 +116,8 @@ describe("posts y anticomplacencia", () => {
     const a = await ctx.agent("alice");
     await ctx.service.joinLab(a, "combinatorics");
     await ctx.service.post(a, "combinatorics", hypothesis());
-    await ctx.service.post(a, "combinatorics", hypothesis());
-    await expectCode(ctx.service.post(a, "combinatorics", hypothesis()), "POST_LIMIT_REACHED");
+    await ctx.service.post(a, "combinatorics", hypothesis({ refs: [1] }));
+    await expectCode(ctx.service.post(a, "combinatorics", hypothesis({ refs: [2] })), "POST_LIMIT_REACHED");
   });
 
   it("registra los rechazos como eventos privados", async () => {
@@ -148,7 +148,7 @@ describe("digest", () => {
     ctx = await setup({ digest_stale_after_posts: 3 });
     const a = await ctx.agent("alice");
     await ctx.service.joinLab(a, "combinatorics");
-    for (let i = 0; i < 3; i++) await ctx.service.post(a, "combinatorics", hypothesis());
+    for (let i = 0; i < 3; i++) await ctx.service.post(a, "combinatorics", hypothesis({ refs: i ? [i] : [] }));
     const s1 = await ctx.agent("scribe-1");
     expect((await ctx.service.joinLab(s1, "combinatorics")).role).toBe("scribe");
     ctx.clock.advance(31);
@@ -160,7 +160,7 @@ describe("digest", () => {
     ctx = await setup({ digest_stale_after_posts: 3, max_posts_per_turn: 10 });
     const a = await ctx.agent("alice");
     await ctx.service.joinLab(a, "combinatorics");
-    for (let i = 0; i < 3; i++) await ctx.service.post(a, "combinatorics", hypothesis());
+    for (let i = 0; i < 3; i++) await ctx.service.post(a, "combinatorics", hypothesis({ refs: i ? [i] : [] }));
     await expectCode(
       ctx.service.writeDigest(a, "combinatorics", { content_md: digestMd("x"), based_on_seq: 3 }),
       "ROLE_FORBIDS_ACTION",
@@ -193,7 +193,7 @@ describe("digest", () => {
     ctx = await setup({ delta_max_posts: 5, max_posts_per_turn: 20, digest_stale_after_posts: 100 });
     const a = await ctx.agent("alice");
     await ctx.service.joinLab(a, "combinatorics");
-    for (let i = 0; i < 8; i++) await ctx.service.post(a, "combinatorics", hypothesis());
+    for (let i = 0; i < 8; i++) await ctx.service.post(a, "combinatorics", hypothesis({ refs: i ? [i] : [] }));
     const b = await ctx.agent("bob");
     const pack = await ctx.service.joinLab(b, "combinatorics");
     expect(pack.delta.truncated).toBe(true);
@@ -201,5 +201,135 @@ describe("digest", () => {
     const page = await ctx.service.readPosts("combinatorics", 0, 3);
     expect(page.posts.map((p) => p.seq)).toEqual([1, 2, 3]);
     expect(page.has_more).toBe(true);
+  });
+});
+
+describe("respuesta obligatoria (ADR-0015)", () => {
+  it("exige citar un post reciente salvo en una sala vacía", async () => {
+    ctx = await setup({ delta_max_posts: 5, max_posts_per_turn: 20, digest_stale_after_posts: 100 });
+    const a = await ctx.agent("alice");
+    await ctx.service.joinLab(a, "combinatorics");
+    await ctx.service.post(a, "combinatorics", hypothesis());
+    for (let i = 1; i < 7; i++) await ctx.service.post(a, "combinatorics", hypothesis({ refs: [i] }));
+
+    const err = await ctx.service.post(a, "combinatorics", hypothesis()).catch((e: DomainError) => e);
+    expect(err).toBeInstanceOf(DomainError);
+    expect((err as DomainError).code).toBe("MUST_REPLY");
+    expect((err as DomainError).details).toEqual({
+      recent: [3, 4, 5, 6, 7].map((seq) => ({ seq, type: "hypothesis", agent: "alice" })),
+    });
+    // Citar solo algo antiguo no basta; citar algo reciente sí.
+    await expectCode(ctx.service.post(a, "combinatorics", hypothesis({ refs: [2] })), "MUST_REPLY");
+    await expect(ctx.service.post(a, "combinatorics", hypothesis({ refs: [1, 5] }))).resolves.toBeTruthy();
+  });
+
+  it("una refutación cuenta como respuesta a su objetivo", async () => {
+    ctx = await setup();
+    const a = await ctx.agent("alice");
+    const b = await ctx.agent("bob");
+    await ctx.service.joinLab(a, "combinatorics");
+    await ctx.service.joinLab(b, "combinatorics");
+    await ctx.service.post(a, "combinatorics", hypothesis());
+    const r = await ctx.service.post(b, "combinatorics", {
+      type: "refutation",
+      body: BODY,
+      target_seq: 1,
+      confidence: 0.8,
+      evidence: [{ kind: "computation", description: "A construction for n = 7 beats the claimed bound." }],
+    });
+    expect(r.target_seq).toBe(1);
+  });
+});
+
+describe("residentes y wait_for_turn (ADR-0015)", () => {
+  it("end_turn cierra el turno pero el agente sigue residente; leave_lab lo saca", async () => {
+    ctx = await setup();
+    const a = await ctx.agent("alice");
+    await ctx.service.joinLab(a, "combinatorics");
+    await ctx.service.endTurn(a, "combinatorics");
+    expect((await ctx.service.getLab("combinatorics")).lab).toMatchObject({ active_turns: 0, residents: 1 });
+    await expectCode(ctx.service.endTurn(a, "combinatorics"), "NO_ACTIVE_TURN");
+    expect(await ctx.service.leaveLab(a, "combinatorics")).toEqual({ status: "left", closed_turn_id: null });
+    expect((await ctx.service.listLabs())[0]!.residents).toBe(0);
+  });
+
+  it("deja de contar como residente tras resident_idle_days sin señales", async () => {
+    ctx = await setup({ resident_idle_days: 2 });
+    const a = await ctx.agent("alice");
+    await ctx.service.joinLab(a, "combinatorics");
+    await ctx.service.endTurn(a, "combinatorics");
+    ctx.clock.advance(3 * 24 * 60);
+    expect((await ctx.service.getLab("combinatorics")).lab.residents).toBe(0);
+  });
+
+  it("primera visita y turno abierto despiertan al momento; sin novedades, idle", async () => {
+    ctx = await setup();
+    const a = await ctx.agent("alice");
+    const first = await ctx.service.checkWake(a, "combinatorics");
+    expect(first).toMatchObject({ status: "turn", reason: "first_visit" });
+    expect(await ctx.service.checkWake(a, "combinatorics")).toMatchObject({ status: "turn", reason: "open_turn" });
+    await ctx.service.endTurn(a, "combinatorics");
+    expect(await ctx.service.checkWake(a, "combinatorics")).toMatchObject({ status: "idle" });
+  });
+
+  it("despierta a quien recibe una respuesta, aunque sea un solo post", async () => {
+    ctx = await setup({ new_posts_to_wake: 5 });
+    const a = await ctx.agent("alice");
+    const b = await ctx.agent("bob");
+    await ctx.service.joinLab(a, "combinatorics");
+    const h = await ctx.service.post(a, "combinatorics", hypothesis());
+    await ctx.service.endTurn(a, "combinatorics");
+
+    await ctx.service.joinLab(b, "combinatorics");
+    expect(await ctx.service.checkWake(a, "combinatorics")).toMatchObject({ status: "idle" });
+    const e = await ctx.service.post(b, "combinatorics", evidence([h.seq]));
+    await ctx.service.endTurn(b, "combinatorics");
+
+    const res = await ctx.service.checkWake(a, "combinatorics");
+    expect(res).toMatchObject({ status: "turn", reason: "reply_to_you", replies_to_you: [e.seq] });
+  });
+
+  it("despierta con new_posts_to_wake posts de otros y respeta la cola", async () => {
+    ctx = await setup({ new_posts_to_wake: 2, max_active_turns: 2, digest_stale_after_posts: 100 });
+    const [a, b, c] = [await ctx.agent("alice"), await ctx.agent("bob"), await ctx.agent("carol")];
+    // a y b han tenido turno antes; b más recientemente que a.
+    for (const x of [a, b]) {
+      await ctx.service.joinLab(x, "combinatorics");
+      await ctx.service.endTurn(x, "combinatorics");
+      ctx.clock.advance(1);
+    }
+    await ctx.service.joinLab(c, "combinatorics");
+    await ctx.service.post(c, "combinatorics", hypothesis());
+    expect(await ctx.service.checkWake(a, "combinatorics")).toMatchObject({ status: "idle" });
+    await ctx.service.post(c, "combinatorics", hypothesis({ refs: [1] }));
+
+    // Queda una plaza libre (c sigue con turno): es para a, que lleva más tiempo sin turno.
+    expect(await ctx.service.checkWake(b, "combinatorics")).toMatchObject({ status: "idle" });
+    expect(await ctx.service.checkWake(a, "combinatorics")).toMatchObject({ status: "turn", reason: "new_posts" });
+    // Sala llena: b espera.
+    expect(await ctx.service.checkWake(b, "combinatorics")).toMatchObject({ status: "idle" });
+  });
+
+  it("despierta a un residente cuando falta escriba", async () => {
+    ctx = await setup({ digest_stale_after_posts: 3, new_posts_to_wake: 50 });
+    const [a, s] = [await ctx.agent("alice"), await ctx.agent("sam")];
+    await ctx.service.joinLab(s, "combinatorics");
+    await ctx.service.endTurn(s, "combinatorics");
+    await ctx.service.joinLab(a, "combinatorics");
+    await ctx.service.post(a, "combinatorics", hypothesis());
+    await ctx.service.post(a, "combinatorics", hypothesis({ refs: [1] }));
+    await ctx.service.post(a, "combinatorics", hypothesis({ refs: [2] }));
+    const res = await ctx.service.checkWake(s, "combinatorics");
+    expect(res).toMatchObject({ status: "turn", reason: "scribe_needed" });
+    expect(res.status === "turn" && res.context.role).toBe("scribe");
+  });
+
+  it("waitForTurn devuelve idle al vencer el plazo", async () => {
+    ctx = await setup();
+    const a = await ctx.agent("alice");
+    await ctx.service.joinLab(a, "combinatorics");
+    await ctx.service.endTurn(a, "combinatorics");
+    const res = await ctx.service.waitForTurn(a, "combinatorics", { maxSeconds: 0.05, pollMs: 20 });
+    expect(res.status).toBe("idle");
   });
 });

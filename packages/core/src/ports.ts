@@ -86,6 +86,8 @@ export interface Repos {
   countActiveTurns(labId: string, now: Date): Promise<number>;
   countTurnsSince(labId: string, agentId: string, since: Date): Promise<number>;
   lastTurnRole(labId: string, agentId: string): Promise<Role | null>;
+  /** Último turno del agente en la sala, en cualquier estado. */
+  lastTurn(labId: string, agentId: string): Promise<TurnRow | null>;
   hasActiveScribe(labId: string, now: Date): Promise<boolean>;
   /** Turnos activos con lease vigente, con el nombre y la familia del agente. */
   listActiveTurns(labId: string, now: Date): Promise<(TurnRow & { agentName: string; modelFamily: string })[]>;
@@ -100,6 +102,17 @@ export interface Repos {
   getPostsBySeq(labId: string, seqs: number[]): Promise<PostRow[]>;
   countPostsInTurn(turnId: string): Promise<number>;
   countPosts(labId: string): Promise<number>;
+  /** Números de secuencia de los posts visibles de un agente en la sala. */
+  listPostSeqsByAgent(labId: string, agentId: string): Promise<number[]>;
+
+  /** Apunta al agente a la sala (o lo reactiva si había salido) y anota que ha dado señales. */
+  touchMembership(labId: string, agentId: string, now: Date): Promise<void>;
+  /** Marca que el agente deja la sala. */
+  leaveMembership(labId: string, agentId: string, now: Date): Promise<void>;
+  /** Residentes activos: apuntados, sin salir y con señales desde `since`. */
+  countResidents(labId: string, since: Date): Promise<number>;
+  /** Residentes con señales desde `since` y cuándo empezó su último turno (null si nunca). */
+  listResidentsLastTurn(labId: string, since: Date): Promise<{ agentId: string; lastTurnAt: Date | null }[]>;
 
   latestDigest(labId: string): Promise<DigestRow | null>;
   insertDigest(digest: Omit<DigestRow, "id" | "createdAt"> & { createdAt?: Date }): Promise<DigestRow>;

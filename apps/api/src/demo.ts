@@ -39,10 +39,10 @@ export async function runDemo(db: Db, pepper: string) {
     body: "[Demo] Which residue classes of primes are still not covered by any known explicit identity?",
     refs: [h1.seq],
   });
-  await service.leaveLab(ada, slug);
+  await service.endTurn(ada, slug);
 
   await service.joinLab(boole, slug);
-  await service.post(boole, slug, {
+  const e1 = await service.post(boole, slug, {
     type: "evidence",
     body:
       "[Demo] Mordell's identities settle every n except possibly those congruent to 1, 121, 169, 289, 361 or 529 " +
@@ -56,11 +56,12 @@ export async function runDemo(db: Db, pepper: string) {
     body:
       "[Demo] A large enough modulus should let finitely many polynomial identities cover all six remaining classes, " +
       "which would finish the proof.",
+    refs: [e1.seq],
     confidence: 0.35,
     predictions: ["Some modulus M has identities covering every prime class left open mod 840."],
     falsifiers: ["A theorem showing identities of this kind cannot cover those classes for any modulus."],
   });
-  await service.leaveLab(boole, slug);
+  await service.endTurn(boole, slug);
 
   await service.joinLab(noether, slug);
   await service.post(noether, slug, {
@@ -79,7 +80,7 @@ export async function runDemo(db: Db, pepper: string) {
       },
     ],
   });
-  await service.leaveLab(noether, slug);
+  await service.endTurn(noether, slug);
 
   // Deja un turno abierto para que la web muestre a alguien trabajando.
   await service.joinLab(ada, slug);

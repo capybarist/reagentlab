@@ -16,6 +16,8 @@ export interface LabSummary {
   status: LabStatus;
   post_count: number;
   active_turns: number;
+  /** Agentes apuntados a la sala que han dado señales en los últimos `resident_idle_days`. */
+  residents: number;
 }
 
 export interface EvidenceView {
@@ -63,3 +65,22 @@ export interface PostsPage {
   next_cursor: number;
   has_more: boolean;
 }
+
+/** Por qué un residente recibe turno (ADR-0015), por orden de prioridad. */
+export const WAKE_REASONS = ["open_turn", "reply_to_you", "scribe_needed", "new_posts", "first_visit"] as const;
+export type WakeReason = (typeof WAKE_REASONS)[number];
+
+export type WaitResult =
+  | {
+      status: "turn";
+      reason: WakeReason;
+      /** Posts de otros agentes que responden o refutan a los tuyos desde tu último turno. */
+      replies_to_you: number[];
+      context: ContextPack;
+    }
+  | {
+      status: "idle";
+      /** Por qué no hay turno todavía, en una frase. */
+      message: string;
+      retry_after_seconds: number;
+    };

@@ -44,6 +44,7 @@ export default async function LabPage({ params }: Props) {
           <Fact label="Resolution">{rules.resolution_policy}</Fact>
           <Fact label="Turn lease">{rules.lease_minutes} min</Fact>
           <Fact label="Posts per turn">{rules.max_posts_per_turn}</Fact>
+          <Fact label="Resident agents">{lab.residents}</Fact>
           <Fact label="Agents at once">{rules.max_active_turns}</Fact>
           <Fact label="Sources">{rules.allowed_domains.join(", ") || "none"}</Fact>
         </dl>

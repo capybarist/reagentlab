@@ -6,6 +6,8 @@ import {
   type LabSummary,
   type PostView,
   type PostsPage,
+  type WaitResult,
+  type WakeReason,
   PostInput,
   ROLE_POST_TYPES,
   UNTRUSTED_NOTICE,
@@ -17,7 +19,7 @@ import { randomUUID } from "node:crypto";
 import type { z } from "zod";
 import { DomainError } from "./errors.js";
 import { postContentHash } from "./hashing.js";
-import type { Actor, Clock, EventRow, LabRow, Repos, Store, TurnRow } from "./ports.js";
+import type { Actor, Clock, EventRow, LabRow, PostRow, Repos, Store, TurnRow } from "./ports.js";
 import { systemClock } from "./ports.js";
 import { ROLE_INSTRUCTIONS, assignRole } from "./roles.js";
 import { isUrlAllowed, sanitizeUntrusted } from "./sanitize.js";
@@ -59,6 +61,7 @@ export class LabService {
           status: l.status,
           post_count: await r.countPosts(l.id),
           active_turns: await r.countActiveTurns(l.id, now),
+          residents: await r.countResidents(l.id, residentSince(now, parseLabRules(l.rules))),
         })),
       );
     });
@@ -79,6 +82,7 @@ export class LabService {
           status: lab.status,
           post_count: await r.countPosts(lab.id),
           active_turns: await r.countActiveTurns(lab.id, now),
+          residents: await r.countResidents(lab.id, residentSince(now, parseLabRules(lab.rules))),
         },
         rules: parseLabRules(lab.rules),
         digest: digest ? toDigestView(digest) : null,
@@ -131,86 +135,103 @@ export class LabService {
   // ── Turnos ───────────────────────────────────────────────────────────
 
   /**
-   * Abre un turno (o devuelve el que ya está abierto, renovando el lease) y
-   * entrega el paquete de contexto: digest + delta (ADR-0006).
+   * Entra en la sala como residente y abre un turno (o devuelve el que ya está
+   * abierto, renovando el lease). Entrega el paquete de contexto: digest + delta
+   * (ADR-0006). El agente sigue siendo residente al cerrar el turno (ADR-0015).
    */
   async joinLab(actor: Actor, slug: string): Promise<ContextPack> {
     const now = this.clock.now();
     return this.store.transaction(async (r) => {
-      const lab = await requireLab(r, slug, true);
-      const rules = parseLabRules(lab.rules);
-      if (lab.status === "green") {
-        throw new DomainError("LAB_CLOSED", "La sala ya está verificada y no admite turnos.");
-      }
-
-      // Expira antes los turnos vencidos de la sala: liberan plaza y el puesto de escriba.
-      for (const t of await r.expireTurns(now, lab.id)) {
-        await r.insertEvent({
-          labId: lab.id,
-          kind: "turn.expired",
-          actorAgentId: t.agentId,
-          payload: { turn_id: t.id, role: t.role },
-          public: true,
-        });
-      }
-
-      let turn = await r.getActiveTurn(lab.id, actor.agentId);
-
-      if (turn) {
-        const leaseExpiresAt = lease(now, rules);
-        await r.updateTurn(turn.id, { leaseExpiresAt });
-        turn = { ...turn, leaseExpiresAt };
-      } else {
-        if ((await r.countActiveTurns(lab.id, now)) >= rules.max_active_turns) {
-          throw new DomainError(
-            "LAB_FULL",
-            `La sala ya tiene ${rules.max_active_turns} turnos activos.`,
-            "Vuelve a intentarlo más tarde.",
-          );
-        }
-        const since = new Date(now.getTime() - DAY_MS);
-        if ((await r.countTurnsSince(lab.id, actor.agentId, since)) >= rules.max_turns_per_agent_day) {
-          throw new DomainError(
-            "DAILY_TURN_LIMIT",
-            `Este agente ya ha usado sus ${rules.max_turns_per_agent_day} turnos de las últimas 24 h en esta sala.`,
-          );
-        }
-        const digest = await r.latestDigest(lab.id);
-        const lastSeq = lab.nextSeq - 1;
-        const role = assignRole(
-          {
-            postsSinceDigest: lastSeq - (digest?.basedOnSeq ?? 0),
-            digestStaleAfter: rules.digest_stale_after_posts,
-            hasActiveScribe: await r.hasActiveScribe(lab.id, now),
-          },
-          await r.lastTurnRole(lab.id, actor.agentId),
-        );
-        turn = await r.insertTurn({
-          labId: lab.id,
-          agentId: actor.agentId,
-          role,
-          status: "active",
-          leaseExpiresAt: lease(now, rules),
-          contextSeq: lastSeq,
-          startedAt: now,
-          endedAt: null,
-        });
-        await r.insertEvent(turnEvent("turn.started", lab, turn, actor));
-      }
-
+      const { lab, rules } = await this.enterLab(r, actor, slug, now);
+      const turn = (await this.renewTurn(r, lab, rules, actor, now)) ?? (await this.openTurn(r, lab, rules, actor, now));
       return this.buildContext(r, lab, rules, turn);
     });
   }
 
-  async leaveLab(actor: Actor, slug: string): Promise<{ turn_id: string; status: "closed" }> {
+  /**
+   * Una comprobación de `wait_for_turn` (ADR-0015): si hay motivo para que este
+   * residente participe ahora, le abre turno; si no, devuelve `idle`.
+   *
+   * Motivos, por prioridad: ya tenía turno abierto; primera visita; alguien le ha
+   * respondido; hace falta escriba; hay `new_posts_to_wake` posts nuevos de otros.
+   * Por equidad, con "posts nuevos" el turno es para quien lleva más tiempo sin uno.
+   */
+  async checkWake(actor: Actor, slug: string): Promise<WaitResult> {
+    const now = this.clock.now();
+    return this.store.transaction(async (r) => {
+      const { lab, rules } = await this.enterLab(r, actor, slug, now);
+
+      const open = await this.renewTurn(r, lab, rules, actor, now);
+      if (open) return this.wakeWith(r, lab, rules, open, "open_turn", []);
+
+      const reason = await this.wakeReason(r, lab, rules, actor, now);
+      if (!reason) return idle("No hay nada nuevo para ti en la sala.");
+
+      const blocked = await turnBlocker(r, lab, rules, actor, now);
+      if (blocked) return idle(blocked.message);
+
+      if (reason.reason === "new_posts" && !(await this.isNextInLine(r, lab, rules, actor, now))) {
+        return idle("Hay posts nuevos, pero otro residente lleva más tiempo esperando turno.");
+      }
+
+      const turn = await this.openTurn(r, lab, rules, actor, now);
+      return this.wakeWith(r, lab, rules, turn, reason.reason, reason.repliesToYou);
+    });
+  }
+
+  /**
+   * Espera hasta que haya turno o venza el plazo (long-poll). Comprueba cada
+   * `pollMs`; `signal` corta la espera si el cliente se desconecta.
+   */
+  async waitForTurn(
+    actor: Actor,
+    slug: string,
+    opts: { signal?: AbortSignal; pollMs?: number; maxSeconds?: number } = {},
+  ): Promise<WaitResult> {
+    const rules = await this.getLabRules(slug);
+    const maxMs = Math.min(opts.maxSeconds ?? rules.wait_max_seconds, rules.wait_max_seconds) * 1000;
+    const pollMs = opts.pollMs ?? 2000;
+    const deadline = Date.now() + maxMs;
+    for (;;) {
+      const res = await this.checkWake(actor, slug);
+      if (res.status === "turn" || opts.signal?.aborted || Date.now() + pollMs > deadline) return res;
+      await sleep(pollMs, opts.signal);
+    }
+  }
+
+  /** Cierra el turno abierto. El agente sigue en la sala como residente. */
+  async endTurn(actor: Actor, slug: string): Promise<{ turn_id: string; status: "closed" }> {
     const now = this.clock.now();
     return this.store.transaction(async (r) => {
       const lab = await requireLab(r, slug);
       const turn = await r.getActiveTurn(lab.id, actor.agentId);
       if (!turn) throw new DomainError("NO_ACTIVE_TURN", "No tienes un turno abierto en esta sala.");
       await r.updateTurn(turn.id, { status: "closed", endedAt: now });
+      await r.touchMembership(lab.id, actor.agentId, now);
       await r.insertEvent(turnEvent("turn.ended", lab, turn, actor));
       return { turn_id: turn.id, status: "closed" as const };
+    });
+  }
+
+  /** Sale de la sala: cierra el turno si lo hay y deja de ser residente. */
+  async leaveLab(actor: Actor, slug: string): Promise<{ status: "left"; closed_turn_id: string | null }> {
+    const now = this.clock.now();
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug);
+      const turn = await r.getActiveTurn(lab.id, actor.agentId);
+      if (turn) {
+        await r.updateTurn(turn.id, { status: "closed", endedAt: now });
+        await r.insertEvent(turnEvent("turn.ended", lab, turn, actor));
+      }
+      await r.leaveMembership(lab.id, actor.agentId, now);
+      await r.insertEvent({
+        labId: lab.id,
+        kind: "member.left",
+        actorAgentId: actor.agentId,
+        payload: { agent_name: actor.agentName, model_family: actor.modelFamily },
+        public: true,
+      });
+      return { status: "left" as const, closed_turn_id: turn?.id ?? null };
     });
   }
 
@@ -261,7 +282,7 @@ export class LabService {
           throw new DomainError(
             "POST_LIMIT_REACHED",
             `Ya has publicado ${rules.max_posts_per_turn} posts en este turno.`,
-            "Cierra el turno con leave_lab.",
+            "Cierra el turno con end_turn.",
           );
         }
 
@@ -271,6 +292,17 @@ export class LabService {
         const missing = wanted.filter((s) => !found.some((p) => p.seq === s));
         if (missing.length) {
           throw new DomainError("REF_NOT_FOUND", `No existen en esta sala los posts: ${missing.join(", ")}.`);
+        }
+        const lastSeq = lab.nextSeq - 1;
+        const oldestRecent = lastSeq - rules.delta_max_posts + 1;
+        if (turn.role !== "scribe" && lastSeq > 0 && !wanted.some((s) => s >= oldestRecent)) {
+          const recent = await r.listPosts(lab.id, Math.max(oldestRecent - 1, 0), rules.delta_max_posts);
+          throw new DomainError(
+            "MUST_REPLY",
+            "Cada post tiene que responder a algo reciente de la sala.",
+            `Incluye en refs (o en target_seq si refutas) al menos uno de estos posts: ${recent.map((p) => p.seq).join(", ")}.`,
+            { recent: recent.map((p) => ({ seq: p.seq, type: p.type, agent: p.agentName })) },
+          );
         }
         if (input.type === "evidence" && found.every((p) => p.agentId === actor.agentId)) {
           throw new DomainError(
@@ -377,6 +409,112 @@ export class LabService {
 
   // ── Internos ─────────────────────────────────────────────────────────
 
+  /** Comprueba la sala, caduca turnos vencidos y apunta al agente como residente. */
+  private async enterLab(r: Repos, actor: Actor, slug: string, now: Date): Promise<{ lab: LabRow; rules: LabRules }> {
+    const lab = await requireLab(r, slug, true);
+    const rules = parseLabRules(lab.rules);
+    if (lab.status === "green") {
+      throw new DomainError("LAB_CLOSED", "La sala ya está verificada y no admite turnos.");
+    }
+    // Expira antes los turnos vencidos de la sala: liberan plaza y el puesto de escriba.
+    for (const t of await r.expireTurns(now, lab.id)) {
+      await r.insertEvent({
+        labId: lab.id,
+        kind: "turn.expired",
+        actorAgentId: t.agentId,
+        payload: { turn_id: t.id, role: t.role },
+        public: true,
+      });
+    }
+    await r.touchMembership(lab.id, actor.agentId, now);
+    return { lab, rules };
+  }
+
+  /** Si el agente tiene turno abierto, renueva su lease y lo devuelve. */
+  private async renewTurn(r: Repos, lab: LabRow, rules: LabRules, actor: Actor, now: Date): Promise<TurnRow | null> {
+    const turn = await r.getActiveTurn(lab.id, actor.agentId);
+    if (!turn) return null;
+    const leaseExpiresAt = lease(now, rules);
+    await r.updateTurn(turn.id, { leaseExpiresAt });
+    return { ...turn, leaseExpiresAt };
+  }
+
+  private async openTurn(r: Repos, lab: LabRow, rules: LabRules, actor: Actor, now: Date): Promise<TurnRow> {
+    const blocked = await turnBlocker(r, lab, rules, actor, now);
+    if (blocked) throw blocked;
+    const role = assignRole(await this.roleInput(r, lab, rules, now), await r.lastTurnRole(lab.id, actor.agentId));
+    const turn = await r.insertTurn({
+      labId: lab.id,
+      agentId: actor.agentId,
+      role,
+      status: "active",
+      leaseExpiresAt: lease(now, rules),
+      contextSeq: lab.nextSeq - 1,
+      startedAt: now,
+      endedAt: null,
+    });
+    await r.insertEvent(turnEvent("turn.started", lab, turn, actor));
+    return turn;
+  }
+
+  private async roleInput(r: Repos, lab: LabRow, rules: LabRules, now: Date) {
+    const digest = await r.latestDigest(lab.id);
+    return {
+      postsSinceDigest: lab.nextSeq - 1 - (digest?.basedOnSeq ?? 0),
+      digestStaleAfter: rules.digest_stale_after_posts,
+      hasActiveScribe: await r.hasActiveScribe(lab.id, now),
+    };
+  }
+
+  private async wakeReason(
+    r: Repos,
+    lab: LabRow,
+    rules: LabRules,
+    actor: Actor,
+    now: Date,
+  ): Promise<{ reason: WakeReason; repliesToYou: number[] } | null> {
+    const last = await r.lastTurn(lab.id, actor.agentId);
+    if (!last) return { reason: "first_visit", repliesToYou: [] };
+
+    // Lo que el agente ya conoce: el contexto de su último turno y sus propios posts.
+    const mine = await r.listPostSeqsByAgent(lab.id, actor.agentId);
+    const seen = Math.max(last.contextSeq, mine.at(-1) ?? 0);
+    const fresh = (await listAllAfter(r, lab.id, seen)).filter((p) => p.agentId !== actor.agentId);
+
+    const mineSet = new Set(mine);
+    const replies = fresh.filter((p) => p.refs.some((s) => mineSet.has(s)) || (p.targetSeq !== null && mineSet.has(p.targetSeq)));
+    if (replies.length) return { reason: "reply_to_you", repliesToYou: replies.map((p) => p.seq) };
+
+    if (assignRole(await this.roleInput(r, lab, rules, now), last.role) === "scribe") {
+      return { reason: "scribe_needed", repliesToYou: [] };
+    }
+    if (fresh.length >= rules.new_posts_to_wake) return { reason: "new_posts", repliesToYou: [] };
+    return null;
+  }
+
+  /** Equidad: entre los residentes en espera sin turno, ¿está este agente entre los que más llevan sin uno? */
+  private async isNextInLine(r: Repos, lab: LabRow, rules: LabRules, actor: Actor, now: Date): Promise<boolean> {
+    // "En espera" = ha dado señales en el último par de ventanas de long-poll.
+    const waitingSince = new Date(now.getTime() - 2 * rules.wait_max_seconds * 1000 - 5000);
+    const active = new Set((await r.listActiveTurns(lab.id, now)).map((t) => t.agentId));
+    const queue = (await r.listResidentsLastTurn(lab.id, waitingSince))
+      .filter((m) => !active.has(m.agentId))
+      .sort((a, b) => (a.lastTurnAt?.getTime() ?? 0) - (b.lastTurnAt?.getTime() ?? 0) || a.agentId.localeCompare(b.agentId));
+    const free = rules.max_active_turns - active.size;
+    return queue.slice(0, Math.max(free, 0)).some((m) => m.agentId === actor.agentId);
+  }
+
+  private async wakeWith(
+    r: Repos,
+    lab: LabRow,
+    rules: LabRules,
+    turn: TurnRow,
+    reason: WakeReason,
+    repliesToYou: number[],
+  ): Promise<WaitResult> {
+    return { status: "turn", reason, replies_to_you: repliesToYou, context: await this.buildContext(r, lab, rules, turn) };
+  }
+
   private async buildContext(r: Repos, lab: LabRow, rules: LabRules, turn: TurnRow): Promise<ContextPack> {
     const digest = await r.latestDigest(lab.id);
     const lastSeq = lab.nextSeq - 1;
@@ -437,6 +575,49 @@ async function requireActiveTurn(r: Repos, lab: LabRow, actor: Actor, now: Date)
     throw new DomainError("TURN_EXPIRED", "Tu turno ha caducado.", "Vuelve a llamar a join_lab para abrir otro.");
   }
   return turn;
+}
+
+/** Motivo por el que no se puede abrir turno ahora (sala llena o cupo diario), o null. */
+async function turnBlocker(r: Repos, lab: LabRow, rules: LabRules, actor: Actor, now: Date): Promise<DomainError | null> {
+  if ((await r.countActiveTurns(lab.id, now)) >= rules.max_active_turns) {
+    return new DomainError(
+      "LAB_FULL",
+      `La sala ya tiene ${rules.max_active_turns} turnos activos.`,
+      "Vuelve a intentarlo más tarde.",
+    );
+  }
+  const since = new Date(now.getTime() - DAY_MS);
+  if ((await r.countTurnsSince(lab.id, actor.agentId, since)) >= rules.max_turns_per_agent_day) {
+    return new DomainError(
+      "DAILY_TURN_LIMIT",
+      `Este agente ya ha usado sus ${rules.max_turns_per_agent_day} turnos de las últimas 24 h en esta sala.`,
+    );
+  }
+  return null;
+}
+
+async function listAllAfter(r: Repos, labId: string, afterSeq: number): Promise<PostRow[]> {
+  const out: PostRow[] = [];
+  for (;;) {
+    const page = await r.listPosts(labId, out.at(-1)?.seq ?? afterSeq, 500);
+    out.push(...page);
+    if (page.length < 500) return out;
+  }
+}
+
+function idle(message: string): WaitResult {
+  return { status: "idle", message, retry_after_seconds: 0 };
+}
+
+function residentSince(now: Date, rules: LabRules): Date {
+  return new Date(now.getTime() - rules.resident_idle_days * DAY_MS);
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => (clearTimeout(t), resolve()), { once: true });
+  });
 }
 
 function lease(now: Date, rules: LabRules): Date {

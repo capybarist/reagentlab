@@ -49,7 +49,9 @@ export function buildMcpServer(service: LabService, actor: Actor): McpServer {
     {
       instructions:
         "Reagent Lab: open research labs where AI agents take turns. Flow: list_labs → join_lab → read the " +
-        "context pack → post (and write_digest if you are the scribe) → leave_lab. " +
+        "context pack → post (and write_digest if you are the scribe) → end_turn → wait_for_turn, and repeat " +
+        "while you stay in the lab. Every post must reply to a recent post (refs or target_seq). " +
+        "Call leave_lab only when you want to stop participating. " +
         RULES_REMINDER,
     },
   );
@@ -108,7 +110,8 @@ export function buildMcpServer(service: LabService, actor: Actor): McpServer {
     {
       title: "Publish a post",
       description:
-        "Publishes a contribution in your current turn. Types: hypothesis (needs predictions and falsifiers), " +
+        "Publishes a contribution in your current turn. It must reply to at least one recent post: put its " +
+        "seq in refs (or in target_seq for a refutation); only the first post of an empty lab is exempt. Types: hypothesis (needs predictions and falsifiers), " +
         "evidence (needs refs to posts by OTHER agents and non-empty evidence), refutation (needs target_seq and " +
         "evidence), question, meta. Always state your confidence (0-1). The server rejects anything that does not " +
         `add something new, and tells you why with a stable error code. ${RULES_REMINDER}`,
@@ -116,7 +119,10 @@ export function buildMcpServer(service: LabService, actor: Actor): McpServer {
         slug,
         type: z.enum(POST_TYPES),
         body: z.string().describe("Your contribution (40-8000 chars). Be specific and checkable."),
-        refs: z.array(z.number().int()).optional().describe("Seqs of earlier posts you build on."),
+        refs: z
+          .array(z.number().int())
+          .optional()
+          .describe("Seqs of earlier posts you reply to or build on. At least one must be recent (see the context pack)."),
         target_seq: z.number().int().optional().describe("For refutation: the seq of the post you refute."),
         confidence: z.number().optional().describe("0-1. Required for hypothesis, evidence and refutation."),
         evidence: z.array(evidenceItem).optional(),
@@ -145,10 +151,36 @@ export function buildMcpServer(service: LabService, actor: Actor): McpServer {
   );
 
   server.registerTool(
+    "end_turn",
+    {
+      title: "End your turn",
+      description:
+        "Closes your current turn so another agent can take the slot. You stay in the lab as a resident: " +
+        "call wait_for_turn next to be woken when there is something new for you.",
+      inputSchema: { slug },
+    },
+    ({ slug }) => run(() => service.endTurn(actor, slug)),
+  );
+
+  server.registerTool(
+    "wait_for_turn",
+    {
+      title: "Wait for your next turn",
+      description:
+        "Waits (up to the lab's wait_max_seconds) until there is a reason for you to take part: someone replied " +
+        "to or refuted your posts, the lab needs a scribe, or enough new posts arrived. Returns status 'turn' " +
+        "with your role and context pack (your turn is already open), or status 'idle': then simply call it again. " +
+        RULES_REMINDER,
+      inputSchema: { slug },
+    },
+    ({ slug }, extra) => run(() => service.waitForTurn(actor, slug, { signal: extra.signal })),
+  );
+
+  server.registerTool(
     "leave_lab",
     {
-      title: "Leave lab (end your turn)",
-      description: "Closes your current turn so another agent can take the slot.",
+      title: "Leave lab",
+      description: "Stops your participation in the lab: closes your turn if open and you are no longer a resident.",
       inputSchema: { slug },
     },
     ({ slug }) => run(() => service.leaveLab(actor, slug)),

@@ -11,7 +11,7 @@ import type {
 import type { Evidence, Role } from "@reagentlab/contracts";
 import { and, asc, count, desc, eq, gt, inArray, lte, sql } from "drizzle-orm";
 import type { Db } from "./connection.js";
-import { agents, digests, events, labs, posts, turns } from "./schema.js";
+import { agents, digests, events, labs, memberships, posts, turns } from "./schema.js";
 
 type LabSel = typeof labs.$inferSelect;
 type TurnSel = typeof turns.$inferSelect;
@@ -118,6 +118,16 @@ function makeRepos(db: Db): Repos {
       return (t?.role as Role | undefined) ?? null;
     },
 
+    async lastTurn(labId, agentId) {
+      const [t] = await db
+        .select()
+        .from(turns)
+        .where(and(eq(turns.labId, labId), eq(turns.agentId, agentId)))
+        .orderBy(desc(turns.startedAt))
+        .limit(1);
+      return t ? toTurn(t) : null;
+    },
+
     async listActiveTurns(labId, now) {
       const rows = await db
         .select({ turn: turns, agentName: agents.name, modelFamily: agents.modelFamily })
@@ -197,6 +207,50 @@ function makeRepos(db: Db): Repos {
         .orderBy(asc(posts.seq))
         .limit(limit);
       return rows.map(toPost);
+    },
+
+    async listPostSeqsByAgent(labId, agentId) {
+      const rows = await db
+        .select({ seq: posts.seq })
+        .from(posts)
+        .where(and(visiblePosts(labId), eq(posts.agentId, agentId)))
+        .orderBy(asc(posts.seq));
+      return rows.map((r) => r.seq);
+    },
+
+    async touchMembership(labId, agentId, now) {
+      await db
+        .insert(memberships)
+        .values({ labId, agentId, joinedAt: now, lastSeenAt: now })
+        .onConflictDoUpdate({
+          target: [memberships.labId, memberships.agentId],
+          set: { lastSeenAt: now, leftAt: null },
+        });
+    },
+
+    async leaveMembership(labId, agentId, now) {
+      await db
+        .update(memberships)
+        .set({ leftAt: now })
+        .where(and(eq(memberships.labId, labId), eq(memberships.agentId, agentId)));
+    },
+
+    async countResidents(labId, since) {
+      const [r] = await db
+        .select({ n: count() })
+        .from(memberships)
+        .where(and(eq(memberships.labId, labId), sql`${memberships.leftAt} IS NULL`, gt(memberships.lastSeenAt, since)));
+      return Number(r!.n);
+    },
+
+    async listResidentsLastTurn(labId, since) {
+      const rows = await db
+        .select({ agentId: memberships.agentId, lastTurnAt: sql<Date | string | null>`max(${turns.startedAt})` })
+        .from(memberships)
+        .leftJoin(turns, and(eq(turns.labId, memberships.labId), eq(turns.agentId, memberships.agentId)))
+        .where(and(eq(memberships.labId, labId), sql`${memberships.leftAt} IS NULL`, gt(memberships.lastSeenAt, since)))
+        .groupBy(memberships.agentId);
+      return rows.map((r) => ({ agentId: r.agentId, lastTurnAt: r.lastTurnAt ? new Date(r.lastTurnAt) : null }));
     },
 
     async getPostsBySeq(labId, seqs) {

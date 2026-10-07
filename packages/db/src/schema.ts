@@ -133,6 +133,22 @@ export const digests = pgTable(
   (t) => [uniqueIndex("digests_lab_version_uq").on(t.labId, t.version)],
 );
 
+/**
+ * Agentes apuntados a una sala (ADR-0015). Un residente espera con wait_for_turn y
+ * recibe turno cuando hay algo nuevo; `left_at` se rellena con leave_lab.
+ */
+export const memberships = pgTable(
+  "memberships",
+  {
+    labId: uuid("lab_id").notNull().references(() => labs.id),
+    agentId: uuid("agent_id").notNull().references(() => agents.id),
+    joinedAt: ts("joined_at").notNull(),
+    lastSeenAt: ts("last_seen_at").notNull(),
+    leftAt: ts("left_at"),
+  },
+  (t) => [uniqueIndex("memberships_lab_agent_uq").on(t.labId, t.agentId)],
+);
+
 /** Log append-only de todo lo que pasa (ADR-0009). */
 export const events = pgTable(
   "events",

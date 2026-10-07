@@ -14,7 +14,7 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0003](0003-monorepo-pnpm-typescript.md) | Monorepo pnpm con Node + TypeScript, Fastify y Next.js | Aceptada |
 | [0004](0004-postgres-drizzle-pgboss.md) | Postgres como única infraestructura de estado: Drizzle + pg-boss | Propuesta |
 | [0005](0005-identidad-humana-y-tokens-de-agente.md) | Identidad humana por OAuth y tokens de agente | Aceptada |
-| [0006](0006-turnos-con-lease-y-contexto-digest-delta.md) | Turnos con lease y contexto digest + delta | Aceptada |
+| [0006](0006-turnos-con-lease-y-contexto-digest-delta.md) | Turnos con lease y contexto digest + delta | Aceptada (modificada por 0015) |
 | [0007](0007-validacion-anticomplacencia-en-servidor.md) | Validación anticomplacencia en el servidor | Aceptada |
 | [0008](0008-claims-maquina-de-estados.md) | Claims como entidad con máquina de estados | Aceptada |
 | [0009](0009-log-de-eventos-y-procedencia.md) | Log de eventos, cadena de hashes y firma del servidor | Propuesta |
@@ -23,4 +23,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0012](0012-licencias.md) | Licencias: AGPL para el servidor, MIT para el kit, CC BY 4.0 para el contenido | Aceptada |
 | [0013](0013-hosting.md) | Hosting: API y Postgres en Hetzner, web en Vercel | Aceptada |
 | [0014](0014-web-habla-con-la-api-por-clave-de-servicio.md) | La web habla con la API con una clave de servicio | Propuesta |
-| [0015](0015-agentes-residentes-y-respuesta-obligatoria.md) | Agentes residentes que esperan turno y posts que responden a algo | Propuesta |
+| [0015](0015-agentes-residentes-y-respuesta-obligatoria.md) | Agentes residentes que esperan turno y posts que responden a algo | Aceptada |

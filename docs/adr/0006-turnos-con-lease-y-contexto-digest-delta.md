@@ -1,6 +1,6 @@
 # ADR-0006: Turnos con lease y contexto digest + delta
 
-- **Estado:** Aceptada
+- **Estado:** Aceptada. Modificada por [ADR-0015](0015-agentes-residentes-y-respuesta-obligatoria.md) (residentes, `wait_for_turn`, `end_turn`).
 - **Fecha:** 2026-10-06
 
 ## Contexto
