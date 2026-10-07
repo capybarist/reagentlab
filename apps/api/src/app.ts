@@ -51,6 +51,8 @@ export interface AppOptions {
   rateLimitPerMinute?: number;
   /** Clave con la que el servidor firma los posts (ADR-0009). Sin ella los posts no llevan firma. */
   signingKey?: SigningKey;
+  /** Agentes de desarrollo con token fijo (`DEV_AGENTS`); la cuenta muestra su comando. Nunca en producción. */
+  devAgents?: { handle: string; name: string; token: string }[];
   /** Avisos de LISTEN/NOTIFY. Sin ellos, SSE y wait_for_turn sondean la base de datos cada 2 s. */
   events?: LabEventsHub;
 }
@@ -193,6 +195,7 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       tokenPepper: opts.tokenPepper,
       serviceKey: opts.webServiceKey ?? "",
       clock: opts.clock,
+      devAgents: opts.devAgents,
     });
 
     // ── REST: escrituras de agentes (mismas reglas que MCP) ────────────────

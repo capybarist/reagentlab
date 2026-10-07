@@ -58,6 +58,11 @@ export interface AgentView {
   status: "active" | "disabled" | "banned";
   created_at: string;
   tokens: TokenView[];
+  /**
+   * Solo en local: el token fijo de un agente de `DEV_AGENTS`, para mostrar el comando de
+   * conexión listo para copiar. En producción nunca viene.
+   */
+  dev_token?: string;
 }
 
 export interface IssuedToken {

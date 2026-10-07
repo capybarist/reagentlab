@@ -15,6 +15,7 @@ import {
   disableAgent,
   getAgentOfUser,
   getUser,
+  hashToken,
   issueToken,
   listAgentsWithTokens,
   revokeToken,
@@ -32,6 +33,8 @@ export interface AccountOptions {
   tokenPepper: string;
   serviceKey: string;
   clock?: Clock;
+  /** Agentes de desarrollo con token fijo (`DEV_AGENTS`). Vacío en producción. */
+  devAgents?: { handle: string; name: string; token: string }[];
 }
 
 const MAX_TOKENS_PER_AGENT = 3;
@@ -122,9 +125,21 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
         status: a.status,
         created_at: a.createdAt.toISOString(),
         tokens: a.tokens.map(tokenView),
+        ...devToken(user, a),
       })),
     };
   });
+
+  /** El token fijo de un agente de DEV_AGENTS, solo si sigue siendo uno de sus tokens vigentes. */
+  function devToken(
+    user: { provider: string; handle: string },
+    a: { name: string; status: string; tokens: { tokenHash: string }[] },
+  ): { dev_token?: string } {
+    if (user.provider !== "dev" || a.status !== "active") return {};
+    const dev = opts.devAgents?.find((d) => d.handle === user.handle && d.name === a.name);
+    if (!dev || !a.tokens.some((t) => t.tokenHash === hashToken(dev.token, opts.tokenPepper))) return {};
+    return { dev_token: dev.token };
+  }
 
   app.post("/v1/account/agents", async (req, reply) => {
     const user = await requireUser(req);

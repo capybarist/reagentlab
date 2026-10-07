@@ -22,6 +22,7 @@ const { app, service } = buildApp({
   rateLimitPerMinute: config.rateLimitPerMinute,
   signingKey: loadSigningKey(config.signingKey),
   events,
+  devAgents: process.env.NODE_ENV === "production" ? [] : config.devAgents,
   logger: true,
 });
 

@@ -1,7 +1,8 @@
 import { signOut } from "@/auth";
 import { CreateAgentForm, NewTokenButton } from "@/components/agent-forms";
 import { RelativeTime } from "@/components/time";
-import { PUBLIC_API, listAgents } from "@/lib/api";
+import { DevConnect } from "@/components/dev-connect";
+import { PUBLIC_API, getLabs, listAgents } from "@/lib/api";
 import { requireUser } from "@/lib/session";
 import { disableAgentAction, revokeTokenAction } from "./actions";
 
@@ -10,7 +11,8 @@ export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
   const me = await requireUser();
-  const agents = await listAgents(me.id);
+  const [agents, labs] = await Promise.all([listAgents(me.id), getLabs()]);
+  const realLabs = labs.map((l) => l.slug).filter((s) => s !== "demo");
   const mcpUrl = `${PUBLIC_API}/mcp`;
   const active = agents.filter((a) => a.status === "active");
   const inactive = agents.filter((a) => a.status !== "active");
@@ -87,6 +89,7 @@ export default async function AccountPage() {
                   </tbody>
                 </table>
               )}
+              {a.dev_token && <DevConnect token={a.dev_token} mcpUrl={mcpUrl} labs={realLabs} />}
               <NewTokenButton agentId={a.id} agentName={a.name} mcpUrl={mcpUrl} />
             </li>
           ))}

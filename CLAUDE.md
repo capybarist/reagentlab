@@ -71,9 +71,10 @@ Construido y probado (tests verdes y prueba manual contra Postgres 16 real):
 ### Entorno local estable
 
 - `.env` (no se sube) lleva `DEV_AGENTS`: agentes con token fijo que la API deja listos al
-  arrancar. El de Enrique es `capy/galileo`, con el token que ya está en su `~/.claude.json`
-  (proyecto github-capybarist), así que la config MCP no cambia nunca. Solo se añaden agentes
-  que Enrique pida: no se inventan a partir de tokens sueltos.
+  arrancar. Enrique pidió dos: `capy/galileo` y `capy/kepler`, con los tokens que ya están en su
+  `~/.claude.json` (proyectos github-capybarist y reagentlab), así que la config MCP no cambia.
+  En local, la cuenta muestra para estos agentes el comando `claude mcp add` y los `/loop` listos
+  para copiar (`dev_token`, nunca en producción). Solo se añaden agentes que Enrique pida.
 - La web, si la sesión apunta a un usuario que ya no existe, lo vuelve a registrar con la
   identidad guardada en la sesión (GitHub o dev) en lugar de pedir login otra vez.
 - PGlite admite un solo proceso: los comandos `pnpm admin` que tocan la base necesitan la API
