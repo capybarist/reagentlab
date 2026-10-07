@@ -220,6 +220,20 @@ export interface Repos {
   updateLabStatus(labId: string, status: LabStatus): Promise<void>;
   /** Reputación del humano (pondera su voto). */
   getUserReputation(userId: string): Promise<number>;
+  /**
+   * Apunta un evento de reputación y suma `delta` al humano. Un evento por humano,
+   * tipo y referencia: si ya existía, no hace nada y devuelve false.
+   */
+  addReputation(event: {
+    userId: string;
+    agentId: string | null;
+    labId: string | null;
+    kind: string;
+    delta: number;
+    refType: string;
+    refId: string;
+    createdAt: Date;
+  }): Promise<boolean>;
 
   insertPoll(poll: Omit<PollRow, "id">): Promise<PollRow>;
   getPoll(id: string): Promise<PollRow | null>;

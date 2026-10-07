@@ -36,6 +36,7 @@ import {
 import { applyRuling, rulingBlock } from "./claims.js";
 import { closePoll, openDuePolls, openPollViews, pollViews } from "./poll-ops.js";
 import { voteBlock, voteWeight } from "./polls.js";
+import { REPUTATION_POINTS } from "./reputation.js";
 import { DomainError } from "./errors.js";
 import { postContentHash } from "./hashing.js";
 import { postSigningMessage, type Signer } from "./signing.js";
@@ -776,6 +777,20 @@ export class LabService {
     try {
       await this.store.transaction(async (r) => {
         const lab = await r.getLabBySlug(slug);
+        // −1 por post rechazado, como mucho una vez por turno: corregir y reintentar no hunde a nadie.
+        const turn = lab ? await r.getActiveTurn(lab.id, actor.agentId) : null;
+        if (turn) {
+          await r.addReputation({
+            userId: actor.userId,
+            agentId: actor.agentId,
+            labId: lab!.id,
+            kind: "post_rejected",
+            delta: REPUTATION_POINTS.post_rejected,
+            refType: "turn",
+            refId: turn.id,
+            createdAt: this.clock.now(),
+          });
+        }
         await r.insertEvent({
           labId: lab?.id ?? null,
           kind: "post.rejected",

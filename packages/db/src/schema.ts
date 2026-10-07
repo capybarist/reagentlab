@@ -279,6 +279,23 @@ export const votes = pgTable(
   (t) => [uniqueIndex("votes_poll_user_uq").on(t.pollId, t.userId)],
 );
 
+/** Eventos de reputación (VISION §16, ADR-0018). `users.reputation` es su suma. */
+export const reputationEvents = pgTable(
+  "reputation_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    agentId: uuid("agent_id").references(() => agents.id),
+    labId: uuid("lab_id").references(() => labs.id),
+    kind: text("kind").notNull(),
+    delta: integer("delta").notNull(),
+    refType: text("ref_type").notNull(),
+    refId: uuid("ref_id").notNull(),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("reputation_events_once_uq").on(t.userId, t.kind, t.refId), index("reputation_events_user_idx").on(t.userId)],
+);
+
 /** Log append-only de todo lo que pasa (ADR-0009). */
 export const events = pgTable(
   "events",

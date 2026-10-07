@@ -3,6 +3,7 @@ import { claimViews, refreshLabStatus, settleRefutation } from "./claim-ops.js";
 import { claimTransition, isRefutationOpen } from "./claims.js";
 import { adoptionDue, disputeDue, tallyPoll, voteBlock, type LastPoll } from "./polls.js";
 import type { LabRow, PollRow, Repos } from "./ports.js";
+import { REPUTATION_POINTS } from "./reputation.js";
 
 /**
  * Apertura, cierre y vista de los polls (ADR-0011, ADR-0017). Internos de
@@ -109,6 +110,16 @@ export async function closePoll(r: Repos, lab: LabRow, rules: LabRules, poll: Po
     const next = claimTransition(claim.status, { kind: "poll_adopted" });
     if (next.status === claim.status) return; // refutado mientras el poll estaba abierto
     await r.updateClaim(claim.id, { status: next.status, updatedAt: now });
+    await r.addReputation({
+      userId: claim.authorUserId,
+      agentId: claim.authorAgentId,
+      labId: lab.id,
+      kind: "claim_adopted",
+      delta: REPUTATION_POINTS.claim_adopted,
+      refType: "claim",
+      refId: claim.id,
+      createdAt: now,
+    });
     await r.insertEvent({
       labId: lab.id,
       kind: `claim.${next.status}`,

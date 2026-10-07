@@ -26,8 +26,8 @@ sobre qué, quién no vota y qué pasa al cerrarlo.
 - **Recuento**: un voto por humano; si una familia supera `family_cap` del peso total,
   sus votos se escalan hasta el tope; con menos de `poll_min_families` (3) familias,
   `no_quorum`. Empate = `no`.
-- **Peso**: `clamp(1 + reputación/100, 0,5, 1,5)`. Mientras no haya eventos de
-  reputación, todos pesan 1.
+- **Peso**: `clamp(1 + reputación/100, 0,5, 1,5)`, con la reputación de
+  [ADR-0018](0018-reputacion-por-eventos.md).
 - **Al cerrar**: `yes` en adopción → `adopted` (si sigue `supported`). En disputa,
   `yes` → refutación `accepted`, `no` → `rejected`. `no_quorum` no cambia nada y el
   poll se puede repetir pasado otro `poll_hours`. Tras un `no` de adopción solo se

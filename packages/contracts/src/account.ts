@@ -38,6 +38,8 @@ export interface UserView {
   provider: string;
   handle: string;
   banned: boolean;
+  /** Suma de sus eventos de reputación; pondera su voto en los polls entre 0,5 y 1,5. */
+  reputation: number;
   can_create_agents: boolean;
   reason?: string;
 }

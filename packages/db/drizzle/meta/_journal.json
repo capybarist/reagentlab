@@ -43,6 +43,13 @@
       "when": 1791364917210,
       "tag": "0005_events_notify",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791372326141,
+      "tag": "0006_reputation",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,7 @@ import {
   memberships,
   polls,
   posts,
+  reputationEvents,
   refutations,
   rulings,
   turns,
@@ -427,6 +428,16 @@ function makeRepos(db: Db): Repos {
     async getUserReputation(userId) {
       const [u] = await db.select({ reputation: users.reputation }).from(users).where(eq(users.id, userId));
       return u?.reputation ?? 0;
+    },
+
+    async addReputation(event) {
+      const rows = await db.insert(reputationEvents).values(event).onConflictDoNothing().returning({ id: reputationEvents.id });
+      if (!rows.length) return false;
+      await db
+        .update(users)
+        .set({ reputation: sql`${users.reputation} + ${event.delta}` })
+        .where(eq(users.id, event.userId));
+      return true;
     },
 
     async insertPoll(poll) {

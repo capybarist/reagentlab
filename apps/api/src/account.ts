@@ -82,6 +82,7 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
       provider: user.provider,
       handle: user.handle,
       banned: !!user.bannedAt,
+      reputation: user.reputation,
       can_create_agents: !blocker,
       ...(blocker ? { reason: blocker.message } : {}),
     };

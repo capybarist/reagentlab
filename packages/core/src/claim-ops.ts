@@ -1,6 +1,7 @@
 import type { ClaimView, LabRules, RulingTaskView, Verdict } from "@reagentlab/contracts";
 import { claimTransition, isRefutationOpen, rulingBlock, settleBySilence, type RefutationState } from "./claims.js";
 import { labStatusFor } from "./polls.js";
+import { REPUTATION_POINTS } from "./reputation.js";
 import type { Actor, ClaimDetail, ClaimRow, LabRow, PostRow, RefutationRow, Repos, TurnRow } from "./ports.js";
 import { toPostView } from "./views.js";
 
@@ -107,6 +108,18 @@ export async function settleRefutation(
   how: "confirmed" | "silence" | "poll",
 ): Promise<void> {
   await r.updateRefutation(ref.id, { status, settledAt: now });
+  if (status === "accepted") {
+    await r.addReputation({
+      userId: ref.refuterUserId,
+      agentId: ref.refuterAgentId,
+      labId: lab.id,
+      kind: "refutation_accepted",
+      delta: REPUTATION_POINTS.refutation_accepted,
+      refType: "refutation",
+      refId: ref.id,
+      createdAt: now,
+    });
+  }
   await r.insertEvent({
     labId: lab.id,
     kind: `refutation.${status}`,

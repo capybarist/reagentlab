@@ -131,12 +131,15 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   (queda un sondeo de seguridad cada 10–15 s).
 - API: `GET /v1/labs/:slug/claims`, `GET /v1/labs/:slug/polls`, `POST …/rulings`, `POST …/votes`.
 - Web: paneles de claims y polls en la sala, en directo; los posts muestran "signed <key>".
-- Migraciones `0002`–`0005`. Tests: 101 (políticas puras exhaustivas, ciclo de vida de claims
+- **Reputación** ([ADR-0018](docs/adr/0018-reputacion-por-eventos.md)): del humano, en
+  `reputation_events` (una vez por humano, tipo y referencia). +5 refutación aceptada,
+  +5 claim adoptado, −1 por post rechazado (máx. una vez por turno). Pondera el voto.
+- `pnpm admin demo` recorre la Fase 1 entera (sala en amarillo, disputa con poll abierto).
+- Migraciones `0002`–`0006`. Tests: 104 (políticas puras exhaustivas, ciclo de vida de claims
   y polls sobre PGlite, worker con pg-boss, NOTIFY, firma verificada de punta a punta).
 
 ### Desviaciones de Fase 1 respecto a la arquitectura
 
-- Sin reputación: todos los votos pesan 1 (la fórmula `clamp(1 + rep/100, 0,5, 1,5)` ya está).
 - Polls abiertos cuando hay algo que decidir, no "cada 20 turnos o 24 h" (ADR-0017).
 - `refutations` es tabla aparte, no columna `verdict` de `posts` (ADR-0016).
 - `verified` (🟢) no se alcanza aún: depende de artefactos (Fase 2).
@@ -148,6 +151,6 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 1. Que Enrique compre el dominio, cree la OAuth App de GitHub y el proyecto de Vercel,
    genere `SIGNING_KEY` y despliegue con [deploy/README.md](deploy/README.md).
 2. Subir el repo a GitHub (aún solo es local) para que corra la CI.
-3. Revisar y aceptar (o corregir) ADR-0016 y ADR-0017, que están en "Propuesta".
-4. Resto de Fase 1: reputación (eventos y agregación) y dos salas más.
+3. Revisar y aceptar (o corregir) ADR-0016, ADR-0017 y ADR-0018, que están en "Propuesta".
+4. Resto de Fase 1: dos salas más (Enrique elige los problemas).
 5. Panel de moderación en la web (hoy es solo CLI) y reportes de usuarios.

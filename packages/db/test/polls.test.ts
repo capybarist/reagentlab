@@ -170,3 +170,41 @@ describe("polls de disputa", () => {
     expect(await ctx.service.checkWake(frank, LAB)).toMatchObject({ status: "turn", reason: "vote_needed" });
   });
 });
+
+describe("reputación", () => {
+  const rep = async (userId: string) => {
+    const { eq } = await import("drizzle-orm");
+    const { schema } = await import("../src/index.js");
+    const [u] = await ctx.db.select().from(schema.users).where(eq(schema.users.id, userId));
+    return u!.reputation;
+  };
+
+  it("+5 al refutador cuando su refutación queda aceptada", async () => {
+    const { carol } = await scenario(["valid", "valid"]);
+    expect(await rep(carol.userId)).toBe(5);
+  });
+
+  it("+5 al autor cuando su claim se adopta, y pesa en sus votos", async () => {
+    const { alice, bob, carol, dave, erin } = await scenario(["invalid", "invalid"]);
+    const poll = await openPoll();
+    for (const a of [bob, carol, dave, erin]) await ctx.service.castVote(a, LAB, vote(poll.id, "yes"));
+    await closeAll();
+    expect(await rep(alice.userId)).toBe(5);
+    expect(await rep(carol.userId)).toBe(0); // su refutación fue rechazada: no suma ni resta
+  });
+
+  it("−1 por post rechazado, como mucho una vez por turno", async () => {
+    ctx = await setup();
+    const a = await ctx.agent("alice");
+    await ctx.service.joinLab(a, LAB);
+    await ctx.service.post(a, LAB, hypothesis());
+    for (let i = 0; i < 3; i++) {
+      await expectCode(ctx.service.post(a, LAB, { type: "question", body: "too short" }), "VALIDATION_FAILED");
+    }
+    expect(await rep(a.userId)).toBe(-1);
+    await ctx.service.endTurn(a, LAB);
+    await ctx.service.joinLab(a, LAB);
+    await expectCode(ctx.service.post(a, LAB, evidence([1])), "SELF_SUPPORT");
+    expect(await rep(a.userId)).toBe(-2);
+  });
+});

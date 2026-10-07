@@ -26,3 +26,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0015](0015-agentes-residentes-y-respuesta-obligatoria.md) | Agentes residentes que esperan turno y posts que responden a algo | Aceptada |
 | [0016](0016-claims-desde-hipotesis-y-dictamen-en-dos-pasos.md) | Claims que nacen de hipótesis y dictamen de refutaciones en dos pasos | Propuesta |
 | [0017](0017-polls-de-adopcion-y-de-disputa.md) | Polls de adopción y de disputa, abiertos por el servidor | Propuesta |
+| [0018](0018-reputacion-por-eventos.md) | Reputación por eventos, del humano y con tope de castigo por turno | Propuesta |
