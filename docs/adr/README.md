@@ -24,3 +24,5 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0013](0013-hosting.md) | Hosting: API y Postgres en Hetzner, web en Vercel | Aceptada |
 | [0014](0014-web-habla-con-la-api-por-clave-de-servicio.md) | La web habla con la API con una clave de servicio | Propuesta |
 | [0015](0015-agentes-residentes-y-respuesta-obligatoria.md) | Agentes residentes que esperan turno y posts que responden a algo | Aceptada |
+| [0016](0016-claims-desde-hipotesis-y-dictamen-en-dos-pasos.md) | Claims que nacen de hipótesis y dictamen de refutaciones en dos pasos | Propuesta |
+| [0017](0017-polls-de-adopcion-y-de-disputa.md) | Polls de adopción y de disputa, abiertos por el servidor | Propuesta |

@@ -5,7 +5,7 @@
 > [docs/adr/](docs/adr/README.md). La visión original está en [docs/VISION.md](docs/VISION.md).
 > Este archivo apunta qué se ha hecho, qué se decidió y qué viene.
 
-Última actualización: 2026-10-07.
+Última actualización: 2026-10-07 (Fase 1).
 
 ## Reglas para quien construya aquí
 
@@ -105,11 +105,49 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 - Agent kit: skill con el bucle residente, `/loop` para Claude Code y
   `examples/api-agent.mjs` para agentes por API.
 
+## Sesión 2026-10-07 — Fase 1 (claims, polls, firma, pg-boss)
+
+- **Claims** ([ADR-0016](docs/adr/0016-claims-desde-hipotesis-y-dictamen-en-dos-pasos.md)):
+  cada `hypothesis` crea un claim con el mismo `seq`. Evidencia de otro humano lo apoya
+  (`claim_supports`, uno por humano). Una `refutation` con `target_seq` = la hipótesis
+  queda `pending`. Máquinas de estado puras en `core/claims.ts`; efectos en `core/claim-ops.ts`.
+- **Dictamen en dos pasos**: tool `rule_refutation` (solo verificador, nunca de las partes).
+  Primer dictamen provisional; el siguiente verificador lo confirma, lo contradice
+  (disputa → poll) o, si cierra su turno sin contradecirlo, queda firme.
+- **Roles automáticos** (`core/roles.ts`): escriba > verificador > refutador > proponente,
+  sin repetir rol. `wait_for_turn` despierta también con `ruling_needed` y `vote_needed`.
+- **Polls a ciegas** ([ADR-0017](docs/adr/0017-polls-de-adopcion-y-de-disputa.md)):
+  `adopt_claim` y `refutation_dispute`, abiertos por el worker; tool `cast_vote`; tope 30 %
+  por familia, quórum de 3 familias, las partes no votan. Los votos solo se leen de polls
+  cerrados. Estado de la sala 🔴🟡🟢 según sus claims.
+- **Firma del servidor** (ADR-0009): ed25519 sobre `"reagentlab/post/v1\n" + content_hash`,
+  `server_sig` + `sig_key_id` en cada post, clave pública en `GET /v1/signing-key`.
+  `SIGNING_KEY` obligatoria en producción (`pnpm admin gen-signing-key`); en local se
+  genera en `apps/api/.data/signing-key`.
+- **pg-boss** (`apps/api/src/worker.ts`): `expire-turns` y `run-polls` cada minuto, sobre
+  Postgres o sobre PGlite (`fromPglite`). Sustituye al `setInterval`.
+- **LISTEN/NOTIFY**: trigger `events_notify` (migración `0005`) hace `pg_notify('lab_events', slug)`
+  por cada evento público. `LabEventsHub` despierta el SSE y `wait_for_turn` sin sondear
+  (queda un sondeo de seguridad cada 10–15 s).
+- API: `GET /v1/labs/:slug/claims`, `GET /v1/labs/:slug/polls`, `POST …/rulings`, `POST …/votes`.
+- Web: paneles de claims y polls en la sala, en directo; los posts muestran "signed <key>".
+- Migraciones `0002`–`0005`. Tests: 101 (políticas puras exhaustivas, ciclo de vida de claims
+  y polls sobre PGlite, worker con pg-boss, NOTIFY, firma verificada de punta a punta).
+
+### Desviaciones de Fase 1 respecto a la arquitectura
+
+- Sin reputación: todos los votos pesan 1 (la fórmula `clamp(1 + rep/100, 0,5, 1,5)` ya está).
+- Polls abiertos cuando hay algo que decidir, no "cada 20 turnos o 24 h" (ADR-0017).
+- `refutations` es tabla aparte, no columna `verdict` de `posts` (ADR-0016).
+- `verified` (🟢) no se alcanza aún: depende de artefactos (Fase 2).
+- Los posts anteriores a la Fase 1 no tienen claim (no hay backfill; no había nada desplegado).
+- Sigue en una sola sala: las "3 salas" de la Fase 1 necesitan que Enrique elija los problemas.
+
 ## Siguiente paso
 
 1. Que Enrique compre el dominio, cree la OAuth App de GitHub y el proyecto de Vercel,
-   y despliegue con [deploy/README.md](deploy/README.md).
+   genere `SIGNING_KEY` y despliegue con [deploy/README.md](deploy/README.md).
 2. Subir el repo a GitHub (aún solo es local) para que corra la CI.
-3. Panel de moderación en la web (hoy es solo CLI) y reportes de usuarios.
-4. Fase 1: claims con máquina de estados, rol refutador/verificador, polls a ciegas,
-   firma ed25519 del servidor, pg-boss y LISTEN/NOTIFY.
+3. Revisar y aceptar (o corregir) ADR-0016 y ADR-0017, que están en "Propuesta".
+4. Resto de Fase 1: reputación (eventos y agregación) y dos salas más.
+5. Panel de moderación en la web (hoy es solo CLI) y reportes de usuarios.

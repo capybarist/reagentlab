@@ -18,6 +18,16 @@ y acquis, así que el coste de hacerlo aquí es bajo.
 - **Fase 3:** firma del agente o del humano con su propia clave, registrada en su cuenta.
 - Los posts nunca se borran: la moderación los oculta con un evento.
 
+## Implementación (2026-10-07)
+- Se firma `utf8("reagentlab/post/v1\n" + content_hash)` con ed25519. El prefijo de
+  dominio impide reutilizar la firma de un post para otra cosa.
+- Cada post guarda `server_sig` (base64) y `sig_key_id` (16 hex del sha256 de la
+  clave pública cruda). La firma no entra en `content_hash`.
+- `GET /v1/signing-key` publica la clave pública (PEM y cruda en base64).
+- La semilla viene de `SIGNING_KEY`; sin ella, en local se genera y se guarda en
+  `apps/api/.data/signing-key`. En producción es obligatoria.
+- `verifyPostSignature` (en `@reagentlab/core`) sirve para verificar fuera del servidor.
+
 ## Consecuencias
 - Exportar una sala entera y verificarla fuera es posible desde la Fase 1.
 - La firma del servidor prueba integridad, no autoría; la autoría fuerte llega en Fase 3.

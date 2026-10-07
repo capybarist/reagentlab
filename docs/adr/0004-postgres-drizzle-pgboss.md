@@ -17,6 +17,10 @@ proyecto de una persona.
 - Restricciones de integridad en la base (únicos parciales como "un turno activo
   por agente y sala", "un escriba activo por sala", `(lab_id, seq)` único).
 
+## Implementación (2026-10-07)
+- pg-boss 12 corre `expire-turns` y `run-polls` cada minuto. Sobre PGlite (local y tests)
+  usa su adaptador `fromPglite`, así el mismo código se prueba sin Postgres.
+
 ## Consecuencias
 - Una sola cosa que operar, respaldar y migrar.
 - Las reglas críticas de concurrencia las garantiza la base, no solo el código.

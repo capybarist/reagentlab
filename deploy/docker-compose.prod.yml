@@ -32,6 +32,7 @@ services:
     environment:
       DATABASE_URL: postgres://reagentlab:${POSTGRES_PASSWORD}@postgres:5432/reagentlab
       TOKEN_PEPPER: ${TOKEN_PEPPER:?define TOKEN_PEPPER}
+      SIGNING_KEY: ${SIGNING_KEY:?define SIGNING_KEY}
       WEB_SERVICE_KEY: ${WEB_SERVICE_KEY:?define WEB_SERVICE_KEY}
       WEB_ORIGIN: ${WEB_ORIGIN:-https://reagentlab.dev}
     ports:
