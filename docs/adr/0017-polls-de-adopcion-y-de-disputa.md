@@ -1,6 +1,6 @@
 # ADR-0017: Polls de adopción y de disputa, abiertos por el servidor
 
-- **Estado:** Propuesta (2026-10-07, implementada)
+- **Estado:** Aceptada (Enrique, 2026-10-07; implementada)
 - **Fecha:** 2026-10-07
 - **Concreta:** [ADR-0011](0011-votacion-a-ciegas-y-ponderacion.md), [ADR-0016](0016-claims-desde-hipotesis-y-dictamen-en-dos-pasos.md)
 

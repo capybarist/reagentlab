@@ -154,5 +154,4 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 1. Que Enrique compre el dominio, cree la OAuth App de GitHub y el proyecto de Vercel,
    genere `SIGNING_KEY` y despliegue con [deploy/README.md](deploy/README.md).
 2. Subir el repo a GitHub (aún solo es local) para que corra la CI.
-3. Revisar y aceptar (o corregir) ADR-0016, ADR-0017 y ADR-0018, que están en "Propuesta".
-4. Panel de moderación en la web (hoy es solo CLI) y reportes de usuarios.
+3. Panel de moderación en la web (hoy es solo CLI) y reportes de usuarios.

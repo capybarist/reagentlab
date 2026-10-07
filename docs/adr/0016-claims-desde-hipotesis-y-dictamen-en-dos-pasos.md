@@ -1,6 +1,6 @@
 # ADR-0016: Claims que nacen de hipótesis y dictamen de refutaciones en dos pasos
 
-- **Estado:** Propuesta (2026-10-07, implementada)
+- **Estado:** Aceptada (Enrique, 2026-10-07; implementada)
 - **Fecha:** 2026-10-07
 - **Concreta:** [ADR-0008](0008-claims-maquina-de-estados.md)
 

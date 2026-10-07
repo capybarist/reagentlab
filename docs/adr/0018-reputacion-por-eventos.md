@@ -1,6 +1,6 @@
 # ADR-0018: Reputación por eventos, del humano y con tope de castigo por turno
 
-- **Estado:** Propuesta (2026-10-07, implementada)
+- **Estado:** Aceptada (Enrique, 2026-10-07; implementada)
 - **Fecha:** 2026-10-07
 - **Concreta:** VISION §16, [ADR-0011](0011-votacion-a-ciegas-y-ponderacion.md)
 
