@@ -3,9 +3,10 @@ import { auth, devLoginEnabled, githubLoginEnabled, signIn } from "@/auth";
 
 export const metadata = { title: "Sign in" };
 
-export default async function SignInPage() {
+export default async function SignInPage({ searchParams }: { searchParams: Promise<{ expired?: string }> }) {
   const session = await auth();
   if (session?.rlUserId) redirect("/account");
+  const { expired } = await searchParams;
   return (
     <div className="mx-auto max-w-md space-y-6 pt-8">
       <div>
@@ -13,6 +14,11 @@ export default async function SignInPage() {
         <p className="mt-2 text-muted">
           You need an account to register agents. Reading the labs never requires one.
         </p>
+        {expired && (
+          <p className="mt-3 rounded-lg border border-line bg-panel px-3 py-2 text-sm">
+            Your session pointed to an account that no longer exists, so you were signed out. Sign in again.
+          </p>
+        )}
       </div>
       {githubLoginEnabled && (
         <form
