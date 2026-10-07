@@ -1,17 +1,36 @@
 import type {
+  ClaimDetail,
+  ClaimRow,
   DigestRow,
   EventRow,
   LabRow,
   NewPost,
+  PollRow,
   PostRow,
+  RefutationRow,
   Repos,
   Store,
   TurnRow,
 } from "@reagentlab/core";
-import type { Evidence, Role } from "@reagentlab/contracts";
+import type { ClaimStatus, Evidence, PollResult, Role } from "@reagentlab/contracts";
 import { and, asc, count, desc, eq, gt, inArray, lte, sql } from "drizzle-orm";
 import type { Db } from "./connection.js";
-import { agents, digests, events, labs, memberships, posts, turns } from "./schema.js";
+import {
+  agents,
+  claimSupports,
+  claims,
+  digests,
+  events,
+  labs,
+  memberships,
+  polls,
+  posts,
+  refutations,
+  rulings,
+  turns,
+  users,
+  votes,
+} from "./schema.js";
 
 type LabSel = typeof labs.$inferSelect;
 type TurnSel = typeof turns.$inferSelect;
@@ -30,6 +49,12 @@ const toLab = (l: LabSel): LabRow => ({
 const toTurn = (t: TurnSel): TurnRow => ({ ...t });
 
 const toDigest = (d: DigestSel): DigestRow => ({ ...d });
+
+const toClaim = (c: typeof claims.$inferSelect): ClaimRow => ({ ...c });
+
+const toPoll = (p: typeof polls.$inferSelect): PollRow => ({ ...p, result: (p.result as PollResult | null) ?? null });
+
+const toRefutation = (r: typeof refutations.$inferSelect): RefutationRow => ({ ...r });
 
 const postColumns = {
   post: posts,
@@ -57,9 +82,14 @@ function toPost(r: { post: typeof posts.$inferSelect; agentName: string; modelFa
     falsifiers: p.falsifiers as string[],
     contentHash: p.contentHash,
     prevHash: p.prevHash,
+    serverSig: p.serverSig,
+    sigKeyId: p.sigKeyId,
     createdAt: p.createdAt,
   };
 }
+
+/** uuid que no existe, para `IN (...)` con lista vacía. */
+const NONE = "00000000-0000-0000-0000-000000000000";
 
 function makeRepos(db: Db): Repos {
   const visiblePosts = (labId: string) => and(eq(posts.labId, labId), sql`${posts.hiddenAt} IS NULL`);
@@ -271,6 +301,203 @@ function makeRepos(db: Db): Repos {
     async countPosts(labId) {
       const [r] = await db.select({ n: count() }).from(posts).where(visiblePosts(labId));
       return Number(r!.n);
+    },
+
+    async getAgent(agentId) {
+      const [a] = await db
+        .select({ userId: agents.userId, name: agents.name, modelFamily: agents.modelFamily })
+        .from(agents)
+        .where(eq(agents.id, agentId));
+      return a ?? null;
+    },
+
+    async insertClaim(claim) {
+      const [c] = await db.insert(claims).values(claim).returning();
+      return toClaim(c!);
+    },
+
+    async getClaimsBySeq(labId, seqs) {
+      if (!seqs.length) return [];
+      const rows = await db
+        .select()
+        .from(claims)
+        .where(and(eq(claims.labId, labId), inArray(claims.originSeq, seqs)));
+      return rows.map(toClaim);
+    },
+
+    async updateClaim(id, patch) {
+      await db.update(claims).set(patch).where(eq(claims.id, id));
+    },
+
+    async listClaimDetails(labId, opts) {
+      const rows = await db
+        .select({ claim: claims, authorName: agents.name, authorFamily: agents.modelFamily, body: posts.body })
+        .from(claims)
+        .innerJoin(posts, eq(posts.id, claims.originPostId))
+        .innerJoin(agents, eq(agents.id, claims.authorAgentId))
+        .where(
+          and(
+            eq(claims.labId, labId),
+            sql`${posts.hiddenAt} IS NULL`,
+            opts.statuses?.length ? inArray(claims.status, opts.statuses as ClaimStatus[]) : undefined,
+            opts.seqs ? inArray(claims.originSeq, opts.seqs.length ? opts.seqs : [-1]) : undefined,
+          ),
+        )
+        .orderBy(desc(claims.originSeq))
+        .limit(opts.limit);
+      return rows.map(
+        (r): ClaimDetail => ({ ...toClaim(r.claim), authorName: r.authorName, authorFamily: r.authorFamily, body: r.body }),
+      );
+    },
+
+    async addClaimSupport(support) {
+      const rows = await db.insert(claimSupports).values(support).onConflictDoNothing().returning();
+      return rows.length > 0;
+    },
+
+    async insertRefutation(ref) {
+      const [r] = await db.insert(refutations).values(ref).returning();
+      return toRefutation(r!);
+    },
+
+    async getRefutationBySeq(labId, postSeq) {
+      const [r] = await db
+        .select()
+        .from(refutations)
+        .where(and(eq(refutations.labId, labId), eq(refutations.postSeq, postSeq)));
+      return r ? toRefutation(r) : null;
+    },
+
+    async updateRefutation(id, patch) {
+      await db.update(refutations).set(patch).where(eq(refutations.id, id));
+    },
+
+    async listRefutations(labId, statuses) {
+      const rows = await db
+        .select()
+        .from(refutations)
+        .where(and(eq(refutations.labId, labId), inArray(refutations.status, statuses)))
+        .orderBy(asc(refutations.postSeq));
+      return rows.map(toRefutation);
+    },
+
+    async listRefutationsForClaims(claimIds) {
+      if (!claimIds.length) return [];
+      const rows = await db
+        .select()
+        .from(refutations)
+        .where(inArray(refutations.claimId, claimIds))
+        .orderBy(asc(refutations.postSeq));
+      return rows.map(toRefutation);
+    },
+
+    async insertRuling(ruling) {
+      const [r] = await db.insert(rulings).values(ruling).returning();
+      return { ...r! };
+    },
+
+    async listRulingUsers(refutationId) {
+      const rows = await db.select({ userId: rulings.userId }).from(rulings).where(eq(rulings.refutationId, refutationId));
+      return rows.map((r) => r.userId);
+    },
+
+    async listRuledInTurn(turnId) {
+      const rows = await db.select({ id: rulings.refutationId }).from(rulings).where(eq(rulings.turnId, turnId));
+      return rows.map((r) => r.id);
+    },
+
+    async claimStatusCounts(labId) {
+      const rows = await db
+        .select({ status: claims.status, n: count() })
+        .from(claims)
+        .where(eq(claims.labId, labId))
+        .groupBy(claims.status);
+      return Object.fromEntries(rows.map((r) => [r.status, Number(r.n)]));
+    },
+
+    async getLabStatus(labId) {
+      const [l] = await db.select({ status: labs.status }).from(labs).where(eq(labs.id, labId));
+      return l?.status ?? null;
+    },
+
+    async updateLabStatus(labId, status) {
+      await db.update(labs).set({ status }).where(eq(labs.id, labId));
+    },
+
+    async getUserReputation(userId) {
+      const [u] = await db.select({ reputation: users.reputation }).from(users).where(eq(users.id, userId));
+      return u?.reputation ?? 0;
+    },
+
+    async insertPoll(poll) {
+      const [p] = await db.insert(polls).values(poll).returning();
+      return toPoll(p!);
+    },
+
+    async getPoll(id) {
+      const [p] = await db.select().from(polls).where(eq(polls.id, id));
+      return p ? toPoll(p) : null;
+    },
+
+    async listPolls(labId, opts) {
+      const rows = await db
+        .select()
+        .from(polls)
+        .where(
+          and(
+            eq(polls.labId, labId),
+            opts.status ? eq(polls.status, opts.status) : undefined,
+            opts.claimIds ? inArray(polls.claimId, opts.claimIds.length ? opts.claimIds : [NONE]) : undefined,
+            opts.refutationIds
+              ? inArray(polls.refutationId, opts.refutationIds.length ? opts.refutationIds : [NONE])
+              : undefined,
+          ),
+        )
+        .orderBy(desc(polls.opensAt), desc(polls.id))
+        .limit(opts.limit);
+      return rows.map(toPoll);
+    },
+
+    async listDuePolls(now) {
+      const rows = await db
+        .select()
+        .from(polls)
+        .where(and(eq(polls.status, "open"), lte(polls.closesAt, now)))
+        .orderBy(asc(polls.closesAt));
+      return rows.map(toPoll);
+    },
+
+    async updatePoll(id, patch) {
+      await db.update(polls).set(patch).where(eq(polls.id, id));
+    },
+
+    async insertVote(vote) {
+      const rows = await db.insert(votes).values(vote).onConflictDoNothing().returning({ id: votes.id });
+      return rows.length > 0;
+    },
+
+    async hasVoted(pollId, userId) {
+      const [r] = await db
+        .select({ n: count() })
+        .from(votes)
+        .where(and(eq(votes.pollId, pollId), eq(votes.userId, userId)));
+      return Number(r!.n) > 0;
+    },
+
+    async listClosedPollVotes(pollId) {
+      // El filtro por estado va en la consulta: un poll abierto nunca devuelve votos.
+      const rows = await db
+        .select({ vote: votes, agentName: agents.name })
+        .from(votes)
+        .innerJoin(polls, eq(polls.id, votes.pollId))
+        .innerJoin(agents, eq(agents.id, votes.agentId))
+        .where(and(eq(votes.pollId, pollId), eq(polls.status, "closed")))
+        .orderBy(asc(votes.createdAt));
+      return rows.map((r) => ({ ...r.vote, agentName: r.agentName }));
+    },
+
+    async listVotesForTally(pollId) {
+      return db.select().from(votes).where(eq(votes.pollId, pollId));
     },
 
     async latestDigest(labId) {

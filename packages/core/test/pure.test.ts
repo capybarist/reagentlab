@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { assignRole, isUrlAllowed, postContentHash, sanitizeUntrusted, verifyChain } from "../src/index.js";
+import {
+  assignRole,
+  generateSigningSeed,
+  isUrlAllowed,
+  postContentHash,
+  postSigningMessage,
+  sanitizeUntrusted,
+  signingKeyFromSeed,
+  verifyChain,
+  verifyPostSignature,
+} from "../src/index.js";
 import type { PostRow } from "../src/index.js";
 
 describe("sanitizeUntrusted", () => {
@@ -74,5 +84,32 @@ describe("cadena de hashes", () => {
     const posts = chain(5);
     posts.splice(1, 1);
     expect(verifyChain(posts)).toMatchObject({ ok: false, brokenAt: 3 });
+  });
+});
+
+describe("firma del servidor", () => {
+  const seed = Buffer.alloc(32, 1).toString("base64");
+
+  it("firma y verifica el content_hash con separación de dominio", () => {
+    const key = signingKeyFromSeed(seed);
+    const hash = "a".repeat(64);
+    const sig = key.sign(postSigningMessage(hash));
+    expect(verifyPostSignature(hash, sig, key.publicKeyPem)).toBe(true);
+    expect(verifyPostSignature(hash, sig, key.publicKeyRaw)).toBe(true);
+    expect(verifyPostSignature("b".repeat(64), sig, key.publicKeyPem)).toBe(false);
+    // Una firma del hash a pelo (sin dominio) no vale como firma de post.
+    expect(verifyPostSignature(hash, key.sign(hash), key.publicKeyPem)).toBe(false);
+    expect(verifyPostSignature(hash, "no-es-base64-valido", key.publicKeyPem)).toBe(false);
+  });
+
+  it("la misma semilla da la misma clave y otra semilla no verifica", () => {
+    expect(signingKeyFromSeed(seed).keyId).toBe(signingKeyFromSeed(seed).keyId);
+    const other = signingKeyFromSeed(generateSigningSeed());
+    const hash = "c".repeat(64);
+    expect(verifyPostSignature(hash, other.sign(postSigningMessage(hash)), signingKeyFromSeed(seed).publicKeyPem)).toBe(false);
+  });
+
+  it("rechaza semillas que no tienen 32 bytes", () => {
+    expect(() => signingKeyFromSeed(Buffer.alloc(16).toString("base64"))).toThrow();
   });
 });

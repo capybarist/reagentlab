@@ -96,6 +96,11 @@ export function PostCard({
 
       <footer className="mt-3 font-mono text-[10px] text-muted/70 truncate" title="Content hash (chained to the previous post)">
         sha256 {post.content_hash.slice(0, 16)}…
+        {post.server_sig && (
+          <span title={`Signed by the server with ed25519 key ${post.sig_key_id} (public key at /v1/signing-key)`}>
+            {" "}· signed {post.sig_key_id}
+          </span>
+        )}
       </footer>
     </article>
   );

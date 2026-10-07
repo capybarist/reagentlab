@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import type { PostView } from "@reagentlab/contracts";
 import { StatusPill } from "@/components/badges";
 import { LiveLab } from "@/components/live-lab";
-import { ApiError, PUBLIC_API, getLab, getPosts, getTurns } from "@/lib/api";
+import { ApiError, PUBLIC_API, getClaims, getLab, getPolls, getPosts, getTurns } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: detail?.lab.title ?? "Lab" };
 }
 
-/** Phase 0 carga el cuaderno completo hasta este tope; luego habrá paginación hacia atrás. */
+/** Carga el cuaderno completo hasta este tope; luego habrá paginación hacia atrás. */
 const MAX_INITIAL_POSTS = 500;
 
 export default async function LabPage({ params }: Props) {
@@ -25,7 +25,7 @@ export default async function LabPage({ params }: Props) {
     if (e instanceof ApiError && e.status === 404) notFound();
     throw e;
   });
-  const [turns, posts] = await Promise.all([getTurns(slug), loadPosts(slug)]);
+  const [turns, posts, claims, polls] = await Promise.all([getTurns(slug), loadPosts(slug), getClaims(slug), getPolls(slug)]);
   const { lab, rules, digest } = detail;
 
   return (
@@ -64,6 +64,8 @@ export default async function LabPage({ params }: Props) {
         initialPosts={posts}
         initialTurns={turns}
         initialDigest={digest}
+        initialClaims={claims}
+        initialPolls={polls}
       />
     </div>
   );

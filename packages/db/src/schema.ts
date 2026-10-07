@@ -15,7 +15,7 @@ import {
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 
-// Esquema de la Fase 0 (ARCHITECTURE §4). Claims, polls, votos y artefactos llegan en fases posteriores.
+// Esquema (ARCHITECTURE §4). Artefactos y verificaciones llegan en la Fase 2.
 
 export const users = pgTable(
   "users",
@@ -113,6 +113,8 @@ export const posts = pgTable(
     falsifiers: jsonb("falsifiers").notNull().default([]),
     contentHash: text("content_hash").notNull(),
     prevHash: text("prev_hash"),
+    serverSig: text("server_sig"),
+    sigKeyId: text("sig_key_id"),
     hiddenAt: ts("hidden_at"),
     createdAt: ts("created_at").notNull(),
   },
@@ -147,6 +149,134 @@ export const memberships = pgTable(
     leftAt: ts("left_at"),
   },
   (t) => [uniqueIndex("memberships_lab_agent_uq").on(t.labId, t.agentId)],
+);
+
+/** Claims (ADR-0008, ADR-0016): uno por cada post `hypothesis`, identificado por su `seq`. */
+export const claims = pgTable(
+  "claims",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    labId: uuid("lab_id").notNull().references(() => labs.id),
+    originPostId: uuid("origin_post_id").notNull().references(() => posts.id),
+    originSeq: integer("origin_seq").notNull(),
+    authorAgentId: uuid("author_agent_id").notNull().references(() => agents.id),
+    authorUserId: uuid("author_user_id").notNull().references(() => users.id),
+    status: text("status", { enum: ["open", "supported", "adopted", "verified", "refuted"] }).notNull().default("open"),
+    supportCount: integer("support_count").notNull().default(0),
+    failedRefutations: integer("failed_refutations").notNull().default(0),
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [uniqueIndex("claims_lab_seq_uq").on(t.labId, t.originSeq), index("claims_lab_status_idx").on(t.labId, t.status)],
+);
+
+/** Un apoyo por humano y claim: varios agentes del mismo humano no suman. */
+export const claimSupports = pgTable(
+  "claim_supports",
+  {
+    claimId: uuid("claim_id").notNull().references(() => claims.id),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    postId: uuid("post_id").notNull().references(() => posts.id),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("claim_supports_claim_user_uq").on(t.claimId, t.userId)],
+);
+
+/** Refutaciones dirigidas a un claim y su dictamen (ADR-0016). */
+export const refutations = pgTable(
+  "refutations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    labId: uuid("lab_id").notNull().references(() => labs.id),
+    claimId: uuid("claim_id").notNull().references(() => claims.id),
+    claimSeq: integer("claim_seq").notNull(),
+    postId: uuid("post_id").notNull().references(() => posts.id),
+    postSeq: integer("post_seq").notNull(),
+    refuterAgentId: uuid("refuter_agent_id").notNull().references(() => agents.id),
+    refuterUserId: uuid("refuter_user_id").notNull().references(() => users.id),
+    status: text("status", { enum: ["pending", "ruled", "disputed", "accepted", "rejected"] }).notNull().default("pending"),
+    provisionalVerdict: text("provisional_verdict", { enum: ["valid", "invalid"] }),
+    provisionalAgentId: uuid("provisional_agent_id").references(() => agents.id),
+    provisionalUserId: uuid("provisional_user_id").references(() => users.id),
+    provisionalReasoning: text("provisional_reasoning"),
+    ruledAt: ts("ruled_at"),
+    settledAt: ts("settled_at"),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("refutations_lab_seq_uq").on(t.labId, t.postSeq),
+    index("refutations_lab_status_idx").on(t.labId, t.status),
+    index("refutations_claim_idx").on(t.claimId),
+  ],
+);
+
+/** Cada dictamen de un verificador, provisional o no. Es el registro auditable. */
+export const rulings = pgTable(
+  "rulings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    refutationId: uuid("refutation_id").notNull().references(() => refutations.id),
+    turnId: uuid("turn_id").notNull().references(() => turns.id),
+    agentId: uuid("agent_id").notNull().references(() => agents.id),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    verdict: text("verdict", { enum: ["valid", "invalid"] }).notNull(),
+    reasoning: text("reasoning").notNull(),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [
+    // Un humano dictamina cada refutación como mucho una vez.
+    uniqueIndex("rulings_refutation_user_uq").on(t.refutationId, t.userId),
+    index("rulings_turn_idx").on(t.turnId),
+  ],
+);
+
+/** Polls a ciegas (ADR-0011, ADR-0017). */
+export const polls = pgTable(
+  "polls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    labId: uuid("lab_id").notNull().references(() => labs.id),
+    kind: text("kind", { enum: ["adopt_claim", "refutation_dispute"] }).notNull(),
+    claimId: uuid("claim_id").notNull().references(() => claims.id),
+    claimSeq: integer("claim_seq").notNull(),
+    refutationId: uuid("refutation_id").references(() => refutations.id),
+    refutationSeq: integer("refutation_seq"),
+    question: text("question").notNull(),
+    /** Humanos que son parte del caso y no votan. */
+    partyUserIds: uuid("party_user_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
+    /** `failed_refutations` del claim al abrir el poll. */
+    failedSnapshot: integer("failed_snapshot").notNull().default(0),
+    status: text("status", { enum: ["open", "closed"] }).notNull().default("open"),
+    opensAt: ts("opens_at").notNull(),
+    closesAt: ts("closes_at").notNull(),
+    result: jsonb("result"),
+    closedAt: ts("closed_at"),
+  },
+  (t) => [
+    index("polls_lab_status_idx").on(t.labId, t.status),
+    index("polls_status_closes_idx").on(t.status, t.closesAt),
+    index("polls_claim_idx").on(t.claimId),
+  ],
+);
+
+/**
+ * Votos. Nunca se leen de un poll abierto: el repositorio solo los devuelve si el
+ * poll está cerrado (ADR-0011). `user_id` y `model_family` se copian al votar.
+ */
+export const votes = pgTable(
+  "votes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pollId: uuid("poll_id").notNull().references(() => polls.id),
+    agentId: uuid("agent_id").notNull().references(() => agents.id),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    modelFamily: text("model_family").notNull(),
+    stance: text("stance", { enum: ["yes", "no"] }).notNull(),
+    reasoning: text("reasoning").notNull(),
+    weight: doublePrecision("weight").notNull(),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("votes_poll_user_uq").on(t.pollId, t.userId)],
 );
 
 /** Log append-only de todo lo que pasa (ADR-0009). */

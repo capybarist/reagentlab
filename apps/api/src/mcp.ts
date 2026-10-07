@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { POST_TYPES } from "@reagentlab/contracts";
+import { POST_TYPES, STANCES, VERDICTS } from "@reagentlab/contracts";
 import { type Actor, DomainError, type LabService } from "@reagentlab/core";
 import { z } from "zod";
 
@@ -43,7 +43,11 @@ async function run(fn: () => Promise<unknown>): Promise<CallToolResult> {
   }
 }
 
-export function buildMcpServer(service: LabService, actor: Actor): McpServer {
+export function buildMcpServer(
+  service: LabService,
+  actor: Actor,
+  waitOpts: (slug: string) => Parameters<LabService["waitForTurn"]>[2] = () => ({}),
+): McpServer {
   const server = new McpServer(
     { name: "reagentlab", version: "0.0.1" },
     {
@@ -151,6 +155,45 @@ export function buildMcpServer(service: LabService, actor: Actor): McpServer {
   );
 
   server.registerTool(
+    "rule_refutation",
+    {
+      title: "Rule on a refutation (verifier only)",
+      description:
+        "Only for the verifier role. Rules on a refutation listed in your context pack's `rulings_needed`. " +
+        "verdict 'valid' means the refutation breaks the claim; 'invalid' means the claim survives it. Check the " +
+        "argument yourself; do not defer to either side. The first ruling is provisional: the next verifier confirms " +
+        "it (final) or contradicts it (a poll decides). A provisional ruling you leave uncontradicted when you end " +
+        `your turn becomes final. ${RULES_REMINDER}`,
+      inputSchema: {
+        slug,
+        refutation_seq: z.number().int().describe("Seq of the refutation post."),
+        verdict: z.enum(VERDICTS),
+        reasoning: z.string().describe("Which step you checked and what you found (40-4000 chars)."),
+      },
+    },
+    ({ slug, ...input }) => run(() => service.ruleRefutation(actor, slug, input)),
+  );
+
+  server.registerTool(
+    "cast_vote",
+    {
+      title: "Vote in an open poll",
+      description:
+        "Votes in a poll listed in your context pack's `open_polls` (only where you_can_vote is true). Polls are " +
+        "blind: nobody sees counts or other votes until the poll closes, then every vote and its reasoning is " +
+        "published. One vote per human, even with several agents. Reason on your own from the claim and its " +
+        `evidence; do not guess what others will vote. ${RULES_REMINDER}`,
+      inputSchema: {
+        slug,
+        poll_id: z.string().describe("id of the poll, from open_polls."),
+        stance: z.enum(STANCES).describe("Answer to the poll's question."),
+        reasoning: z.string().describe("Your own reasoning (80-4000 chars). Published when the poll closes."),
+      },
+    },
+    ({ slug, ...input }) => run(() => service.castVote(actor, slug, input)),
+  );
+
+  server.registerTool(
     "end_turn",
     {
       title: "End your turn",
@@ -173,7 +216,7 @@ export function buildMcpServer(service: LabService, actor: Actor): McpServer {
         RULES_REMINDER,
       inputSchema: { slug },
     },
-    ({ slug }, extra) => run(() => service.waitForTurn(actor, slug, { signal: extra.signal })),
+    ({ slug }, extra) => run(() => service.waitForTurn(actor, slug, { signal: extra.signal, ...waitOpts(slug) })),
   );
 
   server.registerTool(

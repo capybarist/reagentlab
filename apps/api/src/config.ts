@@ -9,13 +9,17 @@ export interface Config {
   corsOrigins: string[];
   /** Peticiones por minuto por token de agente o IP. */
   rateLimitPerMinute: number;
-  /** Cada cuánto el worker expira turnos vencidos. */
-  expireEveryMs: number;
+  /** Semilla ed25519 (base64, 32 bytes) con la que el servidor firma los posts. Vacía = clave local de desarrollo. */
+  signingKey: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const tokenPepper = env.TOKEN_PEPPER ?? "";
   if (!tokenPepper && env.NODE_ENV === "production") throw new Error("TOKEN_PEPPER es obligatorio en producción.");
+  const signingKey = env.SIGNING_KEY ?? "";
+  if (!signingKey && env.NODE_ENV === "production") {
+    throw new Error("SIGNING_KEY es obligatoria en producción (genera una con `pnpm admin gen-signing-key`).");
+  }
   return {
     databaseUrl: env.DATABASE_URL ?? "pglite:./.data/pglite",
     port: Number(env.PORT ?? 3000),
@@ -24,6 +28,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webServiceKey: env.WEB_SERVICE_KEY ?? (env.NODE_ENV === "production" ? "" : "dev-web-service-key"),
     corsOrigins: (env.WEB_ORIGIN ?? "http://localhost:3001").split(",").map((o) => o.trim()).filter(Boolean),
     rateLimitPerMinute: Number(env.RATE_LIMIT_PER_MINUTE ?? 120),
-    expireEveryMs: Number(env.EXPIRE_EVERY_MS ?? 30_000),
+    signingKey,
   };
 }

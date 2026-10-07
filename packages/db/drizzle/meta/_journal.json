@@ -15,6 +15,34 @@
       "when": 1791360522759,
       "tag": "0001_eager_morgan_stark",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791363835693,
+      "tag": "0002_claims",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791364342319,
+      "tag": "0003_polls",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791364690786,
+      "tag": "0004_server_signature",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791364917210,
+      "tag": "0005_events_notify",
+      "breakpoints": true
     }
   ]
 }

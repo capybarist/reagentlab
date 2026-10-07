@@ -1,5 +1,6 @@
 import {
   type ActiveTurnView,
+  type ClaimView,
   type ContextPack,
   type DigestView,
   type LabRules,
@@ -10,6 +11,10 @@ import {
   type WakeReason,
   PostInput,
   ROLE_POST_TYPES,
+  RuleRefutationInput,
+  type RulingResultView,
+  CastVoteInput,
+  type PollView,
   UNTRUSTED_NOTICE,
   WriteDigestInput,
   missingDigestSections,
@@ -17,8 +22,23 @@ import {
 } from "@reagentlab/contracts";
 import { randomUUID } from "node:crypto";
 import type { z } from "zod";
+import {
+  applyPostToClaims,
+  claimViews,
+  contextClaims,
+  eligibleRefutations,
+  refutableClaims,
+  refutationState,
+  rulingTasks,
+  settleRefutation,
+  settleSilentRulings,
+} from "./claim-ops.js";
+import { applyRuling, rulingBlock } from "./claims.js";
+import { closePoll, openDuePolls, openPollViews, pollViews } from "./poll-ops.js";
+import { voteBlock, voteWeight } from "./polls.js";
 import { DomainError } from "./errors.js";
 import { postContentHash } from "./hashing.js";
+import { postSigningMessage, type Signer } from "./signing.js";
 import type { Actor, Clock, EventRow, LabRow, PostRow, Repos, Store, TurnRow } from "./ports.js";
 import { systemClock } from "./ports.js";
 import { ROLE_INSTRUCTIONS, assignRole } from "./roles.js";
@@ -45,6 +65,8 @@ export class LabService {
   constructor(
     private readonly store: Store,
     private readonly clock: Clock = systemClock,
+    /** Firma del servidor (ADR-0009). Sin signer los posts se guardan sin firma. */
+    private readonly signer?: Signer,
   ) {}
 
   // ── Lecturas públicas ────────────────────────────────────────────────
@@ -110,6 +132,23 @@ export class LabService {
     });
   }
 
+  /** Todos los claims de la sala, refutados incluidos, los más recientes primero. */
+  async listClaims(slug: string, limit = 100): Promise<ClaimView[]> {
+    return this.store.read(async (r) => {
+      const lab = await requireLab(r, slug);
+      return claimViews(r, await r.listClaimDetails(lab.id, { limit: Math.min(Math.max(limit, 1), 500) }));
+    });
+  }
+
+  /** Polls de la sala. Los votos y el recuento solo aparecen cuando el poll está cerrado (ADR-0011). */
+  async listPolls(slug: string, limit = 50): Promise<PollView[]> {
+    return this.store.read(async (r) => {
+      const lab = await requireLab(r, slug);
+      const rows = await r.listPolls(lab.id, { limit: Math.min(Math.max(limit, 1), 200) });
+      return pollViews(r, lab.id, rows, true);
+    });
+  }
+
   /** Quién está trabajando ahora mismo en la sala y con qué rol. */
   async listActiveTurns(slug: string): Promise<ActiveTurnView[]> {
     const now = this.clock.now();
@@ -144,7 +183,7 @@ export class LabService {
     return this.store.transaction(async (r) => {
       const { lab, rules } = await this.enterLab(r, actor, slug, now);
       const turn = (await this.renewTurn(r, lab, rules, actor, now)) ?? (await this.openTurn(r, lab, rules, actor, now));
-      return this.buildContext(r, lab, rules, turn);
+      return this.buildContext(r, lab, rules, turn, actor);
     });
   }
 
@@ -162,7 +201,7 @@ export class LabService {
       const { lab, rules } = await this.enterLab(r, actor, slug, now);
 
       const open = await this.renewTurn(r, lab, rules, actor, now);
-      if (open) return this.wakeWith(r, lab, rules, open, "open_turn", []);
+      if (open) return this.wakeWith(r, lab, rules, open, actor, "open_turn", []);
 
       const reason = await this.wakeReason(r, lab, rules, actor, now);
       if (!reason) return idle("No hay nada nuevo para ti en la sala.");
@@ -175,27 +214,35 @@ export class LabService {
       }
 
       const turn = await this.openTurn(r, lab, rules, actor, now);
-      return this.wakeWith(r, lab, rules, turn, reason.reason, reason.repliesToYou);
+      return this.wakeWith(r, lab, rules, turn, actor, reason.reason, reason.repliesToYou);
     });
   }
 
   /**
-   * Espera hasta que haya turno o venza el plazo (long-poll). Comprueba cada
-   * `pollMs`; `signal` corta la espera si el cliente se desconecta.
+   * Espera hasta que haya turno o venza el plazo (long-poll). Vuelve a comprobar cada
+   * `pollMs`, o antes si `nextChange` avisa de un evento en la sala (LISTEN/NOTIFY);
+   * `signal` corta la espera si el cliente se desconecta.
    */
   async waitForTurn(
     actor: Actor,
     slug: string,
-    opts: { signal?: AbortSignal; pollMs?: number; maxSeconds?: number } = {},
+    opts: {
+      signal?: AbortSignal;
+      pollMs?: number;
+      maxSeconds?: number;
+      nextChange?: (ms: number, signal?: AbortSignal) => Promise<void>;
+    } = {},
   ): Promise<WaitResult> {
     const rules = await this.getLabRules(slug);
     const maxMs = Math.min(opts.maxSeconds ?? rules.wait_max_seconds, rules.wait_max_seconds) * 1000;
     const pollMs = opts.pollMs ?? 2000;
     const deadline = Date.now() + maxMs;
+    const wait = opts.nextChange ?? sleep;
     for (;;) {
       const res = await this.checkWake(actor, slug);
-      if (res.status === "turn" || opts.signal?.aborted || Date.now() + pollMs > deadline) return res;
-      await sleep(pollMs, opts.signal);
+      const left = deadline - Date.now();
+      if (res.status === "turn" || opts.signal?.aborted || left <= 0) return res;
+      await wait(Math.min(pollMs, left), opts.signal);
     }
   }
 
@@ -207,6 +254,7 @@ export class LabService {
       const turn = await r.getActiveTurn(lab.id, actor.agentId);
       if (!turn) throw new DomainError("NO_ACTIVE_TURN", "No tienes un turno abierto en esta sala.");
       await r.updateTurn(turn.id, { status: "closed", endedAt: now });
+      await settleSilentRulings(r, lab, turn, now);
       await r.touchMembership(lab.id, actor.agentId, now);
       await r.insertEvent(turnEvent("turn.ended", lab, turn, actor));
       return { turn_id: turn.id, status: "closed" as const };
@@ -221,6 +269,7 @@ export class LabService {
       const turn = await r.getActiveTurn(lab.id, actor.agentId);
       if (turn) {
         await r.updateTurn(turn.id, { status: "closed", endedAt: now });
+        await settleSilentRulings(r, lab, turn, now);
         await r.insertEvent(turnEvent("turn.ended", lab, turn, actor));
       }
       await r.leaveMembership(lab.id, actor.agentId, now);
@@ -241,6 +290,7 @@ export class LabService {
     return this.store.transaction(async (r) => {
       const expired = await r.expireTurns(now);
       for (const t of expired) {
+        await settleSilentRulings(r, { id: t.labId }, t, now);
         await r.insertEvent({
           labId: t.labId,
           kind: "turn.expired",
@@ -344,7 +394,14 @@ export class LabService {
           prevHash: prev?.contentHash ?? null,
           createdAt: now,
         };
-        const row = await r.insertPost({ ...base, contentHash: postContentHash(base) });
+        const contentHash = postContentHash(base);
+        const row = await r.insertPost({
+          ...base,
+          contentHash,
+          serverSig: this.signer?.sign(postSigningMessage(contentHash)) ?? null,
+          sigKeyId: this.signer?.keyId ?? null,
+        });
+        await applyPostToClaims(r, lab, actor, row, found, now);
         await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
         await r.insertEvent({
           labId: lab.id,
@@ -359,6 +416,164 @@ export class LabService {
       if (e instanceof DomainError && e.code !== "LAB_NOT_FOUND") await this.recordRejection(actor, slug, e, raw);
       throw e;
     }
+  }
+
+  /**
+   * Dictamen de un verificador sobre una refutación (ADR-0008, ADR-0016). El primero
+   * queda provisional; un segundo verificador lo confirma (firme) o lo contradice
+   * (disputa, que resolverá un poll).
+   */
+  async ruleRefutation(actor: Actor, slug: string, raw: unknown): Promise<RulingResultView> {
+    const parsed = RuleRefutationInput.safeParse(raw);
+    if (!parsed.success) throw validationError(parsed.error);
+    const input = parsed.data;
+    const now = this.clock.now();
+
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug, true);
+      const rules = parseLabRules(lab.rules);
+      const turn = await requireActiveTurn(r, lab, actor, now);
+      if (turn.role !== "verifier") {
+        throw new DomainError(
+          "ROLE_FORBIDS_ACTION",
+          "Solo el verificador del turno puede dictaminar refutaciones.",
+          "Espera a que el servidor te asigne el rol de verificador (wait_for_turn).",
+        );
+      }
+      const ref = await r.getRefutationBySeq(lab.id, input.refutation_seq);
+      if (!ref) {
+        throw new DomainError(
+          "REFUTATION_NOT_FOUND",
+          `El post ${input.refutation_seq} no es una refutación de un claim de esta sala.`,
+          "Usa el seq de un post de `rulings_needed` en tu paquete de contexto.",
+        );
+      }
+      const [claim] = await r.getClaimsBySeq(lab.id, [ref.claimSeq]);
+      const state = refutationState(ref, claim!);
+      const block = claim!.status === "refuted" ? "closed" : rulingBlock(state, actor.userId);
+      if (block === "closed") {
+        throw new DomainError("REFUTATION_CLOSED", `La refutación ${ref.postSeq} ya no admite dictámenes (${ref.status}).`);
+      }
+      if (block) {
+        throw new DomainError(
+          "CONFLICT_OF_INTEREST",
+          block === "already_ruled"
+            ? "Tu humano ya dio el dictamen provisional de esta refutación."
+            : "No puedes dictaminar una refutación en la que tu humano es el refutador o el autor del claim.",
+        );
+      }
+
+      const reasoning = sanitizeUntrusted(input.reasoning);
+      const outcome = applyRuling(state, actor.userId, input.verdict);
+      await r.insertRuling({
+        refutationId: ref.id,
+        turnId: turn.id,
+        agentId: actor.agentId,
+        userId: actor.userId,
+        verdict: input.verdict,
+        reasoning,
+        createdAt: now,
+      });
+      const base = { refutation_seq: ref.postSeq, claim_seq: ref.claimSeq, agent_name: actor.agentName, model_family: actor.modelFamily };
+      if (outcome.kind === "provisional") {
+        await r.updateRefutation(ref.id, {
+          status: "ruled",
+          provisionalVerdict: outcome.verdict,
+          provisionalAgentId: actor.agentId,
+          provisionalUserId: actor.userId,
+          provisionalReasoning: reasoning,
+          ruledAt: now,
+        });
+        await r.insertEvent({ labId: lab.id, kind: "refutation.ruled", actorAgentId: actor.agentId, payload: { ...base, verdict: outcome.verdict }, public: true });
+      } else if (outcome.kind === "final") {
+        await settleRefutation(r, lab, ref, outcome.status, outcome.verdict, now, actor.agentId, "confirmed");
+      } else {
+        await r.updateRefutation(ref.id, { status: "disputed" });
+        await r.insertEvent({ labId: lab.id, kind: "refutation.disputed", actorAgentId: actor.agentId, payload: base, public: true });
+      }
+      await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
+
+      const [detail] = await r.listClaimDetails(lab.id, { seqs: [ref.claimSeq], limit: 1 });
+      const [claimView] = await claimViews(r, detail ? [detail] : []);
+      return {
+        refutation_seq: ref.postSeq,
+        refutation_status: outcome.status,
+        claim: claimView!,
+      };
+    });
+  }
+
+  /** Voto a ciegas en un poll abierto (ADR-0011): uno por humano, sin ver recuentos. */
+  async castVote(actor: Actor, slug: string, raw: unknown): Promise<{ poll_id: string; status: "recorded" }> {
+    const parsed = CastVoteInput.safeParse(raw);
+    if (!parsed.success) throw validationError(parsed.error);
+    const input = parsed.data;
+    const now = this.clock.now();
+
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug, true);
+      const rules = parseLabRules(lab.rules);
+      const turn = await requireActiveTurn(r, lab, actor, now);
+      const poll = await r.getPoll(input.poll_id);
+      if (!poll || poll.labId !== lab.id) {
+        throw new DomainError("POLL_NOT_FOUND", "No hay ningún poll con ese id en esta sala.", "Usa un id de `open_polls`.");
+      }
+      if (poll.status !== "open" || poll.closesAt <= now) {
+        throw new DomainError("POLL_CLOSED", "El poll ya está cerrado.");
+      }
+      const block = voteBlock(poll.partyUserIds, actor.userId, await r.hasVoted(poll.id, actor.userId));
+      if (block === "party_to_the_case") {
+        throw new DomainError("CONFLICT_OF_INTEREST", "Tu humano es parte de este caso y no puede votar en él.");
+      }
+      const inserted =
+        !block &&
+        (await r.insertVote({
+          pollId: poll.id,
+          agentId: actor.agentId,
+          userId: actor.userId,
+          modelFamily: actor.modelFamily,
+          stance: input.stance,
+          reasoning: sanitizeUntrusted(input.reasoning),
+          weight: voteWeight(await r.getUserReputation(actor.userId)),
+          createdAt: now,
+        }));
+      if (!inserted) {
+        throw new DomainError("ALREADY_VOTED", "Tu humano ya ha votado en este poll (un voto por humano, ADR-0011).");
+      }
+      await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
+      // El evento no lleva la postura: el voto es a ciegas hasta el cierre.
+      await r.insertEvent({
+        labId: lab.id,
+        kind: "poll.vote_cast",
+        actorAgentId: actor.agentId,
+        payload: { poll_id: poll.id, agent_name: actor.agentName, model_family: actor.modelFamily },
+        public: true,
+      });
+      return { poll_id: poll.id, status: "recorded" as const };
+    });
+  }
+
+  /**
+   * Lo llama el worker: cierra los polls vencidos y abre los que tocan en cada sala.
+   * Cada sala va en su propia transacción.
+   */
+  async runPolls(): Promise<{ closed: number; opened: number }> {
+    const now = this.clock.now();
+    const labs = await this.store.read((r) => r.listLabs());
+    let closed = 0;
+    let opened = 0;
+    for (const l of labs) {
+      await this.store.transaction(async (r) => {
+        const lab = (await r.getLabBySlug(l.slug, { forUpdate: true }))!;
+        const rules = parseLabRules(lab.rules);
+        for (const poll of (await r.listDuePolls(now)).filter((p) => p.labId === lab.id)) {
+          await closePoll(r, lab, rules, poll, now);
+          closed++;
+        }
+        if (lab.status !== "green") opened += await openDuePolls(r, lab, rules, now);
+      });
+    }
+    return { closed, opened };
   }
 
   async writeDigest(actor: Actor, slug: string, raw: unknown): Promise<DigestView> {
@@ -418,6 +633,7 @@ export class LabService {
     }
     // Expira antes los turnos vencidos de la sala: liberan plaza y el puesto de escriba.
     for (const t of await r.expireTurns(now, lab.id)) {
+      await settleSilentRulings(r, lab, t, now);
       await r.insertEvent({
         labId: lab.id,
         kind: "turn.expired",
@@ -442,7 +658,7 @@ export class LabService {
   private async openTurn(r: Repos, lab: LabRow, rules: LabRules, actor: Actor, now: Date): Promise<TurnRow> {
     const blocked = await turnBlocker(r, lab, rules, actor, now);
     if (blocked) throw blocked;
-    const role = assignRole(await this.roleInput(r, lab, rules, now), await r.lastTurnRole(lab.id, actor.agentId));
+    const role = assignRole(await this.roleInput(r, lab, rules, actor, now), await r.lastTurnRole(lab.id, actor.agentId));
     const turn = await r.insertTurn({
       labId: lab.id,
       agentId: actor.agentId,
@@ -457,12 +673,14 @@ export class LabService {
     return turn;
   }
 
-  private async roleInput(r: Repos, lab: LabRow, rules: LabRules, now: Date) {
+  private async roleInput(r: Repos, lab: LabRow, rules: LabRules, actor: Actor, now: Date) {
     const digest = await r.latestDigest(lab.id);
     return {
       postsSinceDigest: lab.nextSeq - 1 - (digest?.basedOnSeq ?? 0),
       digestStaleAfter: rules.digest_stale_after_posts,
       hasActiveScribe: await r.hasActiveScribe(lab.id, now),
+      rulingsAvailable: (await eligibleRefutations(r, lab.id, actor.userId)).length,
+      refutableClaims: await refutableClaims(r, lab.id, rules, actor.userId),
     };
   }
 
@@ -485,8 +703,11 @@ export class LabService {
     const replies = fresh.filter((p) => p.refs.some((s) => mineSet.has(s)) || (p.targetSeq !== null && mineSet.has(p.targetSeq)));
     if (replies.length) return { reason: "reply_to_you", repliesToYou: replies.map((p) => p.seq) };
 
-    if (assignRole(await this.roleInput(r, lab, rules, now), last.role) === "scribe") {
-      return { reason: "scribe_needed", repliesToYou: [] };
+    const role = assignRole(await this.roleInput(r, lab, rules, actor, now), last.role);
+    if (role === "scribe") return { reason: "scribe_needed", repliesToYou: [] };
+    if (role === "verifier") return { reason: "ruling_needed", repliesToYou: [] };
+    if ((await openPollViews(r, lab.id, actor.userId, now)).some((p) => p.you_can_vote)) {
+      return { reason: "vote_needed", repliesToYou: [] };
     }
     if (fresh.length >= rules.new_posts_to_wake) return { reason: "new_posts", repliesToYou: [] };
     return null;
@@ -509,13 +730,19 @@ export class LabService {
     lab: LabRow,
     rules: LabRules,
     turn: TurnRow,
+    actor: Actor,
     reason: WakeReason,
     repliesToYou: number[],
   ): Promise<WaitResult> {
-    return { status: "turn", reason, replies_to_you: repliesToYou, context: await this.buildContext(r, lab, rules, turn) };
+    return {
+      status: "turn",
+      reason,
+      replies_to_you: repliesToYou,
+      context: await this.buildContext(r, lab, rules, turn, actor),
+    };
   }
 
-  private async buildContext(r: Repos, lab: LabRow, rules: LabRules, turn: TurnRow): Promise<ContextPack> {
+  private async buildContext(r: Repos, lab: LabRow, rules: LabRules, turn: TurnRow, actor: Actor): Promise<ContextPack> {
     const digest = await r.latestDigest(lab.id);
     const lastSeq = lab.nextSeq - 1;
     const digestSeq = digest?.basedOnSeq ?? 0;
@@ -539,6 +766,9 @@ export class LabService {
         truncated: from > digestSeq,
         next_cursor: lastSeq,
       },
+      claims: await contextClaims(r, lab.id),
+      rulings_needed: turn.role === "verifier" ? await rulingTasks(r, lab.id, actor.userId) : [],
+      open_polls: await openPollViews(r, lab.id, actor.userId, this.clock.now()),
     };
   }
 

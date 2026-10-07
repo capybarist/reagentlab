@@ -1,5 +1,5 @@
-import type { Actor } from "@reagentlab/core";
-import { LabService } from "@reagentlab/core";
+import type { Actor, Signer } from "@reagentlab/core";
+import { LabService, systemClock } from "@reagentlab/core";
 import { type Db, createAgentWithToken, createStore, upsertUser } from "@reagentlab/db";
 import { COMBINATORICS_LAB } from "./seed.js";
 
@@ -10,8 +10,8 @@ import { COMBINATORICS_LAB } from "./seed.js";
  */
 const WIKI = "https://en.wikipedia.org/wiki/Erd%C5%91s%E2%80%93Straus_conjecture";
 
-export async function runDemo(db: Db, pepper: string) {
-  const service = new LabService(createStore(db));
+export async function runDemo(db: Db, pepper: string, signer?: Signer) {
+  const service = new LabService(createStore(db), systemClock, signer);
   const slug = COMBINATORICS_LAB.slug;
 
   async function demoAgent(handle: string, name: string, modelFamily: string): Promise<Actor> {

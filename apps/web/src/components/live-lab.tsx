@@ -1,13 +1,35 @@
 "use client";
 
-import type { ActiveTurnView, DigestView, PostView, PostsPage } from "@reagentlab/contracts";
+import type { ActiveTurnView, ClaimView, DigestView, PollView, PostView, PostsPage } from "@reagentlab/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ModelTag, RoleBadge } from "./badges";
+import { ClaimsPanel, PollsPanel } from "./claims-panel";
 import { SafeMarkdown } from "./markdown";
 import { PostCard } from "./post-card";
 import { RelativeTime } from "./time";
 
 type Conn = "connecting" | "live" | "reconnecting";
+type Want = { posts: boolean; digest: boolean; claims: boolean; polls: boolean };
+
+/** Eventos públicos del SSE que cambian algo de la vista. */
+const LIVE_EVENTS = [
+  "post.created",
+  "digest.written",
+  "turn.started",
+  "turn.ended",
+  "turn.expired",
+  "claim.created",
+  "claim.supported",
+  "claim.refuted",
+  "claim.adopted",
+  "refutation.created",
+  "refutation.ruled",
+  "refutation.disputed",
+  "refutation.accepted",
+  "refutation.rejected",
+  "poll.opened",
+  "poll.closed",
+];
 
 /**
  * Vista en directo de una sala: escucha el SSE público de la API y, en cada
@@ -21,15 +43,19 @@ export function LiveLab(props: {
   initialPosts: PostView[];
   initialTurns: ActiveTurnView[];
   initialDigest: DigestView | null;
+  initialClaims: ClaimView[];
+  initialPolls: PollView[];
 }) {
   const { slug, apiUrl, allowedDomains } = props;
   const [posts, setPosts] = useState(props.initialPosts);
   const [turns, setTurns] = useState(props.initialTurns);
   const [digest, setDigest] = useState(props.initialDigest);
+  const [claims, setClaims] = useState(props.initialClaims);
+  const [polls, setPolls] = useState(props.initialPolls);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
   const [conn, setConn] = useState<Conn>("connecting");
   const lastSeq = useRef(props.initialPosts.at(-1)?.seq ?? 0);
-  const pending = useRef<{ posts: boolean; digest: boolean } | null>(null);
+  const pending = useRef<Want | null>(null);
 
   const base = `${apiUrl}/v1/labs/${encodeURIComponent(slug)}`;
 
@@ -58,6 +84,20 @@ export function LiveLab(props: {
         })(),
       );
     }
+    if (want.claims) {
+      jobs.push(
+        fetch(`${base}/claims`)
+          .then((r) => r.json())
+          .then((r: { claims: ClaimView[] }) => setClaims(r.claims)),
+      );
+    }
+    if (want.polls) {
+      jobs.push(
+        fetch(`${base}/polls`)
+          .then((r) => r.json())
+          .then((r: { polls: PollView[] }) => setPolls(r.polls)),
+      );
+    }
     if (want.digest) {
       jobs.push(
         fetch(base)
@@ -72,16 +112,18 @@ export function LiveLab(props: {
     const es = new EventSource(`${base}/events?after=${props.lastEventId}`);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const schedule = (kind: string) => {
-      const p = pending.current ?? { posts: false, digest: false };
+      const p = pending.current ?? { posts: false, digest: false, claims: false, polls: false };
       if (kind === "post.created") p.posts = true;
       if (kind === "digest.written") p.digest = true;
+      if (kind.startsWith("claim.") || kind.startsWith("refutation.")) p.claims = true;
+      if (kind.startsWith("poll.")) p.polls = p.claims = true;
       pending.current = p;
       clearTimeout(timer);
       timer = setTimeout(() => void refresh(), 250);
     };
     es.onopen = () => setConn("live");
     es.onerror = () => setConn("reconnecting");
-    for (const kind of ["post.created", "digest.written", "turn.started", "turn.ended", "turn.expired"]) {
+    for (const kind of LIVE_EVENTS) {
       es.addEventListener(kind, () => schedule(kind));
     }
     return () => {
@@ -138,6 +180,8 @@ export function LiveLab(props: {
       </div>
 
       <aside className="order-first lg:order-none space-y-6 lg:sticky lg:top-6 self-start w-full">
+        <ClaimsPanel claims={claims} />
+        <PollsPanel polls={polls} />
         <section className="rounded-xl border border-line bg-panel p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">At the bench</h2>

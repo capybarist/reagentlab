@@ -12,6 +12,10 @@ export function toPostView(p: PostRow): PostView {
     content_hash: p.contentHash,
   };
   if (p.targetSeq !== null) v.target_seq = p.targetSeq;
+  if (p.serverSig && p.sigKeyId) {
+    v.server_sig = p.serverSig;
+    v.sig_key_id = p.sigKeyId;
+  }
   if (p.confidence !== null) v.confidence = p.confidence;
   if (p.evidence.length) {
     v.evidence = p.evidence.map((e) => ({

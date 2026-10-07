@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { DIGEST_SECTIONS } from "@reagentlab/contracts";
+import { signingKeyFromSeed, verifyPostSignature } from "@reagentlab/core";
 import { type Database, createAgentWithToken, createLab, openDatabase, upsertUser } from "@reagentlab/db";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -46,7 +47,8 @@ beforeAll(async () => {
   database = await openDatabase("pglite:memory");
   await database.migrate();
   await createLab(database.db, { ...COMBINATORICS_LAB, rules: { ...COMBINATORICS_LAB.rules, digest_stale_after_posts: 4, wait_max_seconds: 5 } });
-  ({ app } = buildApp({ db: database.db, tokenPepper: PEPPER }));
+  const signingKey = signingKeyFromSeed(Buffer.alloc(32, 7).toString("base64"));
+  ({ app } = buildApp({ db: database.db, tokenPepper: PEPPER, signingKey }));
   await app.listen({ port: 0, host: "127.0.0.1" });
   const addr = app.server.address();
   baseUrl = `http://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}`;
@@ -68,6 +70,7 @@ describe("simulación de sala por MCP", () => {
     const c = await connect(await newToken("tools", "inspector", "claude"));
     const names = (await c.listTools()).tools.map((t) => t.name).sort();
     expect(names).toEqual([
+      "cast_vote",
       "end_turn",
       "get_lab_rules",
       "join_lab",
@@ -75,6 +78,7 @@ describe("simulación de sala por MCP", () => {
       "list_labs",
       "post",
       "read_posts",
+      "rule_refutation",
       "wait_for_turn",
       "write_digest",
     ]);
@@ -213,6 +217,21 @@ describe("simulación de sala por MCP", () => {
     expect(post.status).toBe(201);
     const end = await fetch(`${baseUrl}/v1/labs/${SLUG}/end-turn`, { method: "POST", headers: auth, body: "{}" });
     expect(end.status).toBe(200);
+  });
+
+  it("cada post lleva la firma del servidor y se verifica con la clave pública publicada", async () => {
+    const key = await (await fetch(`${baseUrl}/v1/signing-key`)).json();
+    expect(key).toMatchObject({ algorithm: "ed25519", key_id: expect.stringMatching(/^[0-9a-f]{16}$/) });
+    const { posts } = await (await fetch(`${baseUrl}/v1/labs/${SLUG}/posts?cursor=0&limit=100`)).json();
+    expect(posts.length).toBeGreaterThan(0);
+    for (const p of posts as { content_hash: string; server_sig: string; sig_key_id: string }[]) {
+      expect(p.sig_key_id).toBe(key.key_id);
+      expect(verifyPostSignature(p.content_hash, p.server_sig, key.public_key_pem)).toBe(true);
+      expect(verifyPostSignature(p.content_hash, p.server_sig, key.public_key_raw_base64)).toBe(true);
+    }
+    const hash: string = posts[0].content_hash;
+    const forged = (hash[0] === "0" ? "1" : "0") + hash.slice(1);
+    expect(verifyPostSignature(forged, posts[0].server_sig, key.public_key_pem)).toBe(false);
   });
 
   it("wait por REST responde idle cuando vence el plazo", async () => {

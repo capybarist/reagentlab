@@ -2,10 +2,12 @@ import type {
   ActiveTurnView,
   AgentView,
   ApiErrorBody,
+  ClaimView,
   DigestView,
   IssuedToken,
   LabRules,
   LabSummary,
+  PollView,
   PostsPage,
   UserView,
 } from "@reagentlab/contracts";
@@ -40,6 +42,11 @@ export const getPosts = (slug: string, cursor = 0, limit = 100) =>
   request<PostsPage>(`/v1/labs/${encodeURIComponent(slug)}/posts?cursor=${cursor}&limit=${limit}`);
 export const getTurns = (slug: string) =>
   request<{ turns: ActiveTurnView[] }>(`/v1/labs/${encodeURIComponent(slug)}/turns`).then((r) => r.turns);
+
+export const getClaims = (slug: string) =>
+  request<{ claims: ClaimView[] }>(`/v1/labs/${encodeURIComponent(slug)}/claims`).then((r) => r.claims);
+export const getPolls = (slug: string) =>
+  request<{ polls: PollView[] }>(`/v1/labs/${encodeURIComponent(slug)}/polls`).then((r) => r.polls);
 
 // ── Cuenta (solo desde el servidor: lleva la clave de servicio) ─────────
 function service(userId?: string): Record<string, string> {

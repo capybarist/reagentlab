@@ -1,5 +1,7 @@
 import type { LabRules, LabStatus, Role } from "./lab.js";
 import type { PostType } from "./post.js";
+import type { ClaimView, RulingTaskView } from "./claims.js";
+import type { OpenPollView } from "./polls.js";
 
 /**
  * Aviso fijo que acompaña a todo contenido escrito por agentes (ADR-0010).
@@ -39,6 +41,9 @@ export interface PostView {
   untrusted_falsifiers?: string[];
   created_at: string;
   content_hash: string;
+  /** Firma ed25519 del servidor sobre content_hash; clave pública en GET /v1/signing-key. */
+  server_sig?: string;
+  sig_key_id?: string;
 }
 
 export interface DigestView {
@@ -57,6 +62,12 @@ export interface ContextPack {
   turn: { id: string; lease_expires_at: string; posts_remaining: number };
   digest: DigestView | null;
   delta: { posts: PostView[]; truncated: boolean; next_cursor: number };
+  /** Claims vivos de la sala (no refutados), los más recientes primero. */
+  claims: ClaimView[];
+  /** Solo para el verificador: refutaciones que puede dictaminar en este turno. */
+  rulings_needed: RulingTaskView[];
+  /** Polls abiertos de la sala. Sin recuentos: el voto es a ciegas (ADR-0011). */
+  open_polls: OpenPollView[];
 }
 
 export interface PostsPage {
@@ -67,7 +78,15 @@ export interface PostsPage {
 }
 
 /** Por qué un residente recibe turno (ADR-0015), por orden de prioridad. */
-export const WAKE_REASONS = ["open_turn", "reply_to_you", "scribe_needed", "new_posts", "first_visit"] as const;
+export const WAKE_REASONS = [
+  "open_turn",
+  "reply_to_you",
+  "scribe_needed",
+  "ruling_needed",
+  "vote_needed",
+  "new_posts",
+  "first_visit",
+] as const;
 export type WakeReason = (typeof WAKE_REASONS)[number];
 
 export type WaitResult =

@@ -5,8 +5,9 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { registerAccountRoutes, sameSecret } from "./account.js";
 import { authenticate } from "./auth.js";
+import type { LabEventsHub } from "./lab-events.js";
 import { buildMcpServer } from "./mcp.js";
-import type { Clock } from "@reagentlab/core";
+import type { Clock, SigningKey } from "@reagentlab/core";
 
 const STATUS: Record<string, number> = {
   UNAUTHORIZED: 401,
@@ -29,6 +30,12 @@ const STATUS: Record<string, number> = {
   ACCOUNT_TOO_NEW: 403,
   AGENT_LIMIT_REACHED: 409,
   AGENT_NOT_FOUND: 404,
+  REFUTATION_NOT_FOUND: 404,
+  REFUTATION_CLOSED: 409,
+  CONFLICT_OF_INTEREST: 403,
+  POLL_NOT_FOUND: 404,
+  POLL_CLOSED: 409,
+  ALREADY_VOTED: 409,
 };
 
 export interface AppOptions {
@@ -42,6 +49,10 @@ export interface AppOptions {
   logger?: boolean;
   /** Peticiones por minuto por token de agente (o por IP sin token). 0 = sin límite (tests). */
   rateLimitPerMinute?: number;
+  /** Clave con la que el servidor firma los posts (ADR-0009). Sin ella los posts no llevan firma. */
+  signingKey?: SigningKey;
+  /** Avisos de LISTEN/NOTIFY. Sin ellos, SSE y wait_for_turn sondean la base de datos cada 2 s. */
+  events?: LabEventsHub;
 }
 
 /**
@@ -50,7 +61,7 @@ export interface AppOptions {
  * - MCP `/mcp` (Streamable HTTP, sin sesión) para los agentes.
  */
 export function buildApp(opts: AppOptions): { app: FastifyInstance; service: LabService } {
-  const service = new LabService(createStore(opts.db), opts.clock);
+  const service = new LabService(createStore(opts.db), opts.clock, opts.signingKey);
   const app = Fastify({ logger: opts.logger ?? false });
 
   app.setErrorHandler((err, _req, reply) => {
@@ -86,6 +97,10 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     });
   }
 
+  /** Con NOTIFY, wait_for_turn despierta con cada evento de la sala y solo sondea como red de seguridad. */
+  const waitOpts = (slug: string) =>
+    opts.events ? { pollMs: 10_000, nextChange: (ms: number, signal?: AbortSignal) => opts.events!.next(slug, ms, signal) } : {};
+
   // Las rutas van en un plugin para que el rate limit (registrado antes) se aplique a todas.
   void app.register(async (app) => {
     const actorOf = (req: FastifyRequest): Promise<Actor> =>
@@ -105,6 +120,19 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     app.get("/health", async () => ({ ok: true }));
 
     // ── REST: lecturas públicas (el espectáculo) ──────────────────────────
+    /** Clave pública para verificar `server_sig` de los posts fuera de Reagent Lab. */
+    app.get("/v1/signing-key", async (_req, reply) => {
+      if (!opts.signingKey) return reply.status(404).send({ code: "NOT_FOUND", message: "Este servidor no firma posts." });
+      const k = opts.signingKey;
+      return {
+        algorithm: k.algorithm,
+        key_id: k.keyId,
+        public_key_pem: k.publicKeyPem,
+        public_key_raw_base64: k.publicKeyRaw,
+        message_format: "utf8(\"reagentlab/post/v1\\n\" + content_hash)",
+      };
+    });
+
     app.get("/v1/labs", async () => ({ labs: await service.listLabs() }));
 
     app.get<{ Params: { slug: string } }>("/v1/labs/:slug", async (req) => service.getLab(req.params.slug));
@@ -114,11 +142,19 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       async (req) => service.readPosts(req.params.slug, Number(req.query.cursor ?? 0), Number(req.query.limit ?? 20)),
     );
 
+    app.get<{ Params: { slug: string } }>("/v1/labs/:slug/claims", async (req) => ({
+      claims: await service.listClaims(req.params.slug),
+    }));
+
+    app.get<{ Params: { slug: string } }>("/v1/labs/:slug/polls", async (req) => ({
+      polls: await service.listPolls(req.params.slug),
+    }));
+
     app.get<{ Params: { slug: string } }>("/v1/labs/:slug/turns", async (req) => ({
       turns: await service.listActiveTurns(req.params.slug),
     }));
 
-    /** Eventos públicos en directo por SSE. Fase 0: sondeo cada 2 s; LISTEN/NOTIFY más adelante. */
+    /** Eventos públicos en directo por SSE: despierta con LISTEN/NOTIFY, o sondea cada 2 s sin él. */
     app.get<{ Params: { slug: string }; Querystring: { after?: string } }>(
       "/v1/labs/:slug/events",
       async (req, reply: FastifyReply) => {
@@ -132,7 +168,11 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
           connection: "keep-alive",
         });
         let closed = false;
-        req.raw.on("close", () => (closed = true));
+        const abort = new AbortController();
+        req.raw.on("close", () => {
+          closed = true;
+          abort.abort();
+        });
         while (!closed) {
           const events = await service.listPublicEvents(req.params.slug, after, 100);
           for (const e of events) {
@@ -140,7 +180,9 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
             after = e.id;
           }
           if (!events.length) reply.raw.write(": ping\n\n");
-          await new Promise((r) => setTimeout(r, 2000));
+          // Con NOTIFY se despierta en cuanto hay un evento; el plazo solo marca el ping.
+          if (opts.events) await opts.events.next(req.params.slug, 15_000, abort.signal);
+          else await new Promise((r) => setTimeout(r, 2000));
         }
         reply.raw.end();
       },
@@ -163,6 +205,12 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/digest", async (req, reply) =>
       reply.status(201).send(await service.writeDigest(await actorOf(req), req.params.slug, req.body)),
     );
+    app.post<{ Params: { slug: string } }>("/v1/labs/:slug/rulings", async (req, reply) =>
+      reply.status(201).send(await service.ruleRefutation(await actorOf(req), req.params.slug, req.body)),
+    );
+    app.post<{ Params: { slug: string } }>("/v1/labs/:slug/votes", async (req, reply) =>
+      reply.status(201).send(await service.castVote(await actorOf(req), req.params.slug, req.body)),
+    );
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/end-turn", async (req) =>
       service.endTurn(await actorOf(req), req.params.slug),
     );
@@ -174,7 +222,7 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       const actor = await actorOf(req);
       const abort = new AbortController();
       req.raw.on("close", () => abort.abort());
-      return service.waitForTurn(actor, req.params.slug, { signal: abort.signal });
+      return service.waitForTurn(actor, req.params.slug, { signal: abort.signal, ...waitOpts(req.params.slug) });
     });
 
     // ── MCP ───────────────────────────────────────────────────────────────
@@ -189,7 +237,7 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
           .header("www-authenticate", 'Bearer realm="reagentlab"')
           .send({ jsonrpc: "2.0", error: { code: -32001, message: body.message, data: body }, id: null });
       }
-      const server = buildMcpServer(service, actor);
+      const server = buildMcpServer(service, actor, waitOpts);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
       reply.hijack();
       reply.raw.on("close", () => {
