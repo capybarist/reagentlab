@@ -164,3 +164,66 @@ describe("claims", () => {
     expect(res).toMatchObject({ status: "turn", reason: "ruling_needed", context: { role: "verifier" } });
   });
 });
+
+describe("tipos de claim (ADR-0019)", () => {
+  const steps = ["Every n >= 2 has a prime factor p.", "A solution for p scales to n = kp by multiplying x, y, z by k."];
+
+  it("guarda el tipo y los pasos, y los muestra en el claim y en el post", async () => {
+    ctx = await setup();
+    const alice = await ctx.agent("alice");
+    await ctx.service.joinLab(alice, LAB);
+    const p = await ctx.service.post(alice, LAB, hypothesis({ claim_kind: "derivation", steps }));
+    expect(p).toMatchObject({ claim_kind: "derivation", untrusted_steps: steps });
+    expect((await ctx.service.listClaims(LAB))[0]).toMatchObject({ kind: "derivation", steps: 2 });
+  });
+
+  it("refutar una derivación exige señalar un paso que exista", async () => {
+    ctx = await setup();
+    const alice = await ctx.agent("alice");
+    const carol = await ctx.agent("carol", "gemini");
+    await ctx.service.joinLab(alice, LAB);
+    await ctx.service.post(alice, LAB, hypothesis({ claim_kind: "derivation", steps }));
+    await ctx.service.joinLab(carol, LAB);
+    await expectCode(ctx.service.post(carol, LAB, refutation(1)), "STEP_REQUIRED");
+    await expectCode(ctx.service.post(carol, LAB, { ...refutation(1), target_step: 3 }), "STEP_REQUIRED");
+    const r = await ctx.service.post(carol, LAB, { ...refutation(1), target_step: 2 });
+    expect(r.target_step).toBe(2);
+    // Una conjetura no tiene pasos: target_step sobra.
+    await ctx.service.post(alice, LAB, hypothesis({ refs: [2] }));
+    await expectCode(ctx.service.post(carol, LAB, { ...refutation(3), target_step: 1 }), "VALIDATION_FAILED");
+  });
+
+  it("un claim literature no pide refutadores ni va a poll de adopción", async () => {
+    ctx = await setup({ min_failed_refutations: 0 });
+    const alice = await ctx.agent("alice");
+    const bob = await ctx.agent("bob", "gpt");
+    const carol = await ctx.agent("carol", "gemini");
+    await ctx.service.joinLab(alice, LAB);
+    await ctx.service.joinLab(bob, LAB);
+    await ctx.service.post(
+      alice,
+      LAB,
+      hypothesis({
+        claim_kind: "literature",
+        evidence: [{ kind: "citation", description: "Mordell, Diophantine Equations (1969), chapter 30, p. 287." }],
+      }),
+    );
+    await ctx.service.post(bob, LAB, evidence([1]));
+    expect((await ctx.service.listClaims(LAB))[0]).toMatchObject({ kind: "literature", status: "supported" });
+    expect((await ctx.service.joinLab(carol, LAB)).role).toBe("proposer");
+    expect(await ctx.service.runPolls()).toEqual({ closed: 0, opened: 0 });
+  });
+
+  it("los hashes de posts sin tipo no cambian: la cadena sigue verificando", async () => {
+    ctx = await setup();
+    const alice = await ctx.agent("alice");
+    await ctx.service.joinLab(alice, LAB);
+    await ctx.service.post(alice, LAB, { type: "question", body: BODY });
+    await ctx.service.post(alice, LAB, hypothesis({ refs: [1], claim_kind: "derivation", steps }));
+    const { schema } = await import("../src/index.js");
+    const { verifyChain } = await import("@reagentlab/core");
+    const rows = await ctx.db.select().from(schema.posts).orderBy(schema.posts.seq);
+    const withNames = rows.map((p) => ({ ...p, agentName: "", modelFamily: "" })) as never;
+    expect(verifyChain(withNames)).toEqual({ ok: true });
+  });
+});

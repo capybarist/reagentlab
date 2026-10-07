@@ -82,6 +82,13 @@ describe("cuándo se abre un poll", () => {
     expect(adoptionDue(supported, { ...base, hasOpenPoll: true })).toBe(false);
   });
 
+  it("un claim literature nunca va a poll de adopción (ADR-0019)", () => {
+    expect(adoptionDue({ ...supported, kind: "literature" }, base)).toBe(false);
+    for (const kind of ["derivation", "computation", "conjecture"] as const) {
+      expect(adoptionDue({ ...supported, kind }, base)).toBe(true);
+    }
+  });
+
   it("tras un `no` solo se repite si el claim ha resistido más refutaciones", () => {
     const lastPoll = { outcome: "no" as const, closesAt: new Date("2026-10-01T00:00:00Z"), failedSnapshot: 2 };
     expect(adoptionDue(supported, { ...base, lastPoll })).toBe(false);

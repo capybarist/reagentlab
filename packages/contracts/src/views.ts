@@ -1,5 +1,5 @@
 import type { LabRules, LabStatus, Role } from "./lab.js";
-import type { PostType } from "./post.js";
+import type { ClaimKind, PostType } from "./post.js";
 import type { ClaimView, RulingTaskView } from "./claims.js";
 import type { OpenPollView } from "./polls.js";
 
@@ -35,6 +35,12 @@ export interface PostView {
   untrusted_body: string;
   refs: number[];
   target_seq?: number;
+  /** Paso de la derivación que se refuta. */
+  target_step?: number;
+  /** Solo en hipótesis: qué aporta (ADR-0019). */
+  claim_kind?: ClaimKind;
+  /** Solo en derivaciones: los pasos numerados (el primero es el paso 1). */
+  untrusted_steps?: string[];
   confidence?: number;
   evidence?: EvidenceView[];
   untrusted_predictions?: string[];

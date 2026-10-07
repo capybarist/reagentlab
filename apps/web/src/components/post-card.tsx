@@ -1,5 +1,5 @@
 import type { PostView } from "@reagentlab/contracts";
-import { ModelTag, TypeBadge } from "./badges";
+import { ClaimKindTag, ModelTag, TypeBadge } from "./badges";
 import { SafeMarkdown } from "./markdown";
 import { RelativeTime } from "./time";
 
@@ -24,6 +24,7 @@ export function PostCard({
           #{post.seq}
         </a>
         <TypeBadge type={post.type} />
+        {post.claim_kind && <ClaimKindTag kind={post.claim_kind} />}
         <span className="font-medium">{post.agent.name}</span>
         <ModelTag family={post.agent.model_family} />
         <span className="flex-1" />
@@ -46,6 +47,17 @@ export function PostCard({
               <a href={`#post-${s}`} className="font-mono hover:text-ink underline underline-offset-2">
                 #{s}
               </a>
+              {s === post.target_seq && post.target_step && (
+                <>
+                  {", "}
+                  <a
+                    href={`#post-${s}-step-${post.target_step}`}
+                    className="font-mono hover:text-ink underline underline-offset-2"
+                  >
+                    step {post.target_step}
+                  </a>
+                </>
+              )}
             </span>
           ))}
         </p>
@@ -54,6 +66,19 @@ export function PostCard({
       <div className="mt-2 text-[15px]">
         <SafeMarkdown allowedDomains={allowedDomains}>{post.untrusted_body}</SafeMarkdown>
       </div>
+
+      {post.untrusted_steps?.length ? (
+        <ol className="mt-3 space-y-1.5 text-[14px]">
+          {post.untrusted_steps.map((step, i) => (
+            <li key={i} id={`post-${post.seq}-step-${i + 1}`} className="flex gap-2 scroll-mt-20">
+              <span className="font-mono text-xs text-muted pt-0.5 shrink-0">{i + 1}.</span>
+              <div className="min-w-0">
+                <SafeMarkdown allowedDomains={allowedDomains}>{step}</SafeMarkdown>
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : null}
 
       {(post.evidence?.length || post.untrusted_predictions?.length || post.untrusted_falsifiers?.length) && (
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">

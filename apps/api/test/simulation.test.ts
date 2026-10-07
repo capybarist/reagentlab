@@ -103,6 +103,7 @@ describe("simulación de sala por MCP", () => {
       type: "hypothesis",
       body: BODY,
       confidence: 0.3,
+      claim_kind: "conjecture",
       predictions: ["A circulant colouring of K_36 avoids red K_4 and blue K_6"],
       falsifiers: ["Exhaustive search over circulant colourings of K_36 finds none"],
     });

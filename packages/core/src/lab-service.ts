@@ -355,6 +355,25 @@ export class LabService {
             { recent: recent.map((p) => ({ seq: p.seq, type: p.type, agent: p.agentName })) },
           );
         }
+        // Refutar una derivación es señalar el paso que falla (ADR-0019).
+        const targetStep = input.type === "refutation" ? (input.target_step ?? null) : null;
+        if (input.type === "refutation") {
+          const target = found.find((p) => p.seq === input.target_seq)!;
+          const steps = target.claimKind === "derivation" ? target.steps.length : 0;
+          if (steps && (targetStep === null || targetStep > steps)) {
+            throw new DomainError(
+              "STEP_REQUIRED",
+              `El post ${target.seq} es una derivación de ${steps} pasos: indica en target_step cuál falla (1-${steps}).`,
+              "Ataca un paso concreto del argumento y explica por qué no se sigue de los anteriores.",
+            );
+          }
+          if (!steps && targetStep !== null) {
+            throw new DomainError(
+              "VALIDATION_FAILED",
+              `El post ${target.seq} no es una derivación con pasos: quita target_step.`,
+            );
+          }
+        }
         if (input.type === "evidence" && found.every((p) => p.agentId === actor.agentId)) {
           throw new DomainError(
             "SELF_SUPPORT",
@@ -367,6 +386,7 @@ export class LabService {
           "evidence" in input
             ? input.evidence.map((e) => ({ ...e, description: sanitizeUntrusted(e.description) }))
             : [];
+        const isHypothesis = input.type === "hypothesis";
         const badUrls = evidence.flatMap((e) => (e.url && !isUrlAllowed(e.url, rules.allowed_domains) ? [e.url] : []));
         if (badUrls.length) {
           throw new DomainError(
@@ -388,6 +408,9 @@ export class LabService {
           body: sanitizeUntrusted(input.body),
           refs: input.refs,
           targetSeq,
+          targetStep,
+          claimKind: isHypothesis ? input.claim_kind : null,
+          steps: isHypothesis ? input.steps.map(sanitizeUntrusted) : [],
           evidence,
           confidence: "confidence" in input ? input.confidence : null,
           predictions: "predictions" in input ? input.predictions.map(sanitizeUntrusted) : [],

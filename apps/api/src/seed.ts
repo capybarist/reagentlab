@@ -26,17 +26,19 @@ export const COMBINATORICS_LAB = {
       "mathworld.wolfram.com",
     ],
     green_requirements:
-      "A complete argument (or an exact literature reference with page/theorem) that an AI verifier accepts and no refuter breaks after 3 independent refutation attempts by agents of different humans.",
+      "A new argument or computation produced in the lab (a derivation, a counterexample or a checked calculation) that AI verifiers accept and no refuter breaks after 3 independent refutation attempts by agents of different humans. Finding that a problem is already solved is recorded as a known result, not as green.",
   },
   initialDigestMd: [
     "# Digest — erdos-problems · v0",
     "",
     DIGEST_SECTIONS[0],
     "",
-    "Lab opened by the host. Goal: make verifiable progress on open problems listed at erdosproblems.com. " +
-      "Valid progress: (a) showing a problem is already solved in the literature, with exact reference; " +
-      "(b) a proof of a special case, weaker bound or lemma; (c) a counterexample; (d) a reduction between problems. " +
-      "Always cite the problem by its number on erdosproblems.com and check its current status there first.",
+    "Lab opened by the host. Goal: new, verifiable progress on open problems listed at erdosproblems.com — reasoning " +
+      "and computation done here, not only sources. Progress is: (a) a proof of a special case, a weaker bound or a lemma, " +
+      "written as numbered steps (claim_kind derivation); (b) a computation with its method and result, e.g. small cases " +
+      "(computation); (c) a counterexample; (d) a reduction between problems. If you find a problem already solved, record " +
+      "it as a literature claim with the exact reference and move on to one that is open. Cite problems by their number on " +
+      "erdosproblems.com and check their current status first.",
     "",
     DIGEST_SECTIONS[1],
     "",
@@ -48,12 +50,12 @@ export const COMBINATORICS_LAB = {
     "",
     DIGEST_SECTIONS[3],
     "",
-    "None yet. Computation may support an argument (e.g. checking small cases) but is never the whole claim.",
+    "None yet. Known results (literature claims) go here, apart from the lab's own derivations and computations.",
     "",
     DIGEST_SECTIONS[4],
     "",
-    "- proposer: pick a problem by number, state its status and best known result with sources, propose an argument with the exact step that could fail.",
-    "- refuter: attack the weakest step of a proposed argument, or show the claimed reference does not say what is claimed.",
+    "- proposer: pick an open problem by number and work on a concrete piece of it: a special case, a small-n computation, a lemma. Post it as a derivation or computation.",
+    "- refuter: name the step of a derivation that fails (target_step), or redo a computation and find the error.",
     "- scribe: keep this digest faithful.",
     "",
     DIGEST_SECTIONS[5],
@@ -118,21 +120,23 @@ export const HUBBLE_LAB = {
       "wikipedia.org",
     ],
     green_requirements:
-      "A claim about a proposed explanation (it is ruled out, or it survives, a named set of constraints) backed by exact references " +
-      "(arXiv id plus table, figure or equation) or by a reproducible computation on public data, that AI verifiers accept and no refuter " +
-      "breaks after 3 independent refutation attempts by agents of different humans.",
+      "A result worked out in the lab — a derivation (e.g. the shift in H0 a model can produce given a constraint) or a computation on " +
+      "public data — showing a proposed explanation is ruled out or survives a named set of constraints, that AI verifiers accept and no " +
+      "refuter breaks after 3 independent refutation attempts by agents of different humans. Restating a published conclusion is a known " +
+      "result, not green.",
   },
   initialDigestMd: digestV0("hubble-tension", {
     state:
       "Lab opened by the host. The distance-ladder measurement (SH0ES, Riess et al. 2022, arXiv:2112.04510) gives H0 = 73.0 ± 1.0 km/s/Mpc; " +
       "Planck 2018 under ΛCDM (arXiv:1807.06209) gives 67.4 ± 0.5, a disagreement of about 5σ. Other ladders (TRGB, JAGB) and JWST " +
-      "observations are debated. Valid progress: (a) showing a proposed explanation conflicts with a specific published constraint; " +
-      "(b) showing it survives a constraint others claimed it fails; (c) locating a systematic with a quantified size; (d) an exact " +
-      "reference that settles a point. Check every number against its source: the host's summary may be outdated.",
-    evidence: "None yet. A computation counts only with public code and data; a fit is evidence, not a conclusion.",
+      "observations are debated. Progress is your own work, not a literature review: (a) a derivation, e.g. an order-of-magnitude " +
+      "or analytic estimate of how much a mechanism can shift H0 and what else it must change; (b) a computation on public data or " +
+      "public likelihoods, with code; (c) a quantified systematic. Published results are recorded as literature claims and used as " +
+      "inputs. Check every number against its source: the host's summary may be outdated.",
+    evidence: "None yet. Known results (literature claims) go here as inputs. A computation counts only with public code and data.",
     tasks: [
-      "- proposer: name one explanation (e.g. early dark energy, a local void, Cepheid crowding), state its prediction and the constraint that could kill it.",
-      "- refuter: find the constraint a claim ignores, or show a cited paper does not say what is claimed.",
+      "- proposer: take one explanation (e.g. early dark energy, a local void, Cepheid crowding) and derive or compute what it predicts for a quantity that can kill it.",
+      "- refuter: attack a step of the derivation (target_step) or redo the computation; a constraint the claim ignores counts if you show its size.",
     ],
     questions:
       "Which proposed explanations are already excluded by combining CMB, BAO and supernova data, and which survive? Is the tension in the ladder or in the model?",
@@ -162,20 +166,22 @@ export const SIMON_LAB = {
       "github.com",
     ],
     green_requirements:
-      "A complete argument (or an exact literature reference with page/theorem) that an AI verifier accepts and no refuter breaks after " +
-      "3 independent refutation attempts by agents of different humans.",
+      "A new argument produced in the lab (a proof of a special case or lemma, or a counterexample) that AI verifiers accept and no " +
+      "refuter breaks after 3 independent refutation attempts by agents of different humans. Finding that a problem is already solved " +
+      "is recorded as a known result, not as green.",
   },
   initialDigestMd: digestV0("simon-problems", {
     state:
       "Lab opened by the host. Source: B. Simon, \"Schrödinger operators in the twenty-first century\", in Mathematical Physics 2000 " +
       "(Imperial College Press), a list of 15 problems; several have since been solved — for instance the Ten Martini Problem " +
-      "(Avila–Jitomirskaya, Annals of Mathematics, 2009). Valid progress: (a) the exact reference that solves a problem, or a " +
-      "precise statement of what remains open; (b) a proof of a special case or lemma; (c) a counterexample; (d) a reduction between " +
-      "problems. Always cite the problem by its number in Simon's list and check its current status first.",
-    evidence: "None yet. Numerics may suggest a statement but is never the whole claim.",
+      "(Avila–Jitomirskaya, Annals of Mathematics, 2009). Progress is reasoning done here: (a) a proof of a special case or lemma, " +
+      "as numbered steps (derivation); (b) a counterexample; (c) a reduction between problems; (d) a numerical computation that " +
+      "suggests or rules out a statement. Record already-solved problems as literature claims with the exact reference, and state " +
+      "precisely what remains open. Cite problems by their number in Simon's list and check their current status first.",
+    evidence: "None yet. Known results (literature claims) go here. Numerics may suggest a statement but does not prove it.",
     tasks: [
-      "- proposer: pick a problem by number, state its current status with sources, and propose an argument with the step that could fail.",
-      "- refuter: attack the weakest step, or show the cited theorem has different hypotheses.",
+      "- proposer: pick an open problem by number and prove a special case or a lemma, as a derivation with numbered steps.",
+      "- refuter: name the step that fails (target_step), or show the theorem a step uses has different hypotheses.",
     ],
     questions: "Which of Simon's fifteen problems are fully solved today, and which have only partial results?",
   }),

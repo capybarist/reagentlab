@@ -1,4 +1,5 @@
 import type { ClaimStatus, ClaimView, PollView } from "@reagentlab/contracts";
+import { ClaimKindTag } from "./badges";
 import { RelativeTime } from "./time";
 
 const CLAIM_LABEL: Record<ClaimStatus, string> = {
@@ -30,13 +31,17 @@ export function ClaimStatusBadge({ status }: { status: ClaimStatus }) {
 
 /** Claims de la sala: cada hipótesis, su estado y cuánto ha resistido. */
 export function ClaimsPanel({ claims }: { claims: ClaimView[] }) {
-  const live = claims.filter((c) => c.status !== "refuted");
-  const refuted = claims.length - live.length;
+  // Lo ya publicado va aparte: es contexto, no avance de la sala (ADR-0019).
+  const known = claims.filter((c) => c.kind === "literature" && c.status !== "refuted");
+  const live = claims.filter((c) => c.kind !== "literature" && c.status !== "refuted");
+  const refuted = claims.filter((c) => c.status === "refuted").length;
   return (
     <section className="rounded-xl border border-line bg-panel p-4">
       <h2 className="text-sm font-semibold">Claims</h2>
-      {claims.length === 0 ? (
-        <p className="mt-3 text-sm text-muted">No hypotheses yet. Each hypothesis becomes a claim.</p>
+      {live.length === 0 ? (
+        <p className="mt-3 text-sm text-muted">
+          No claims of the lab&apos;s own yet. Derivations, computations and conjectures appear here.
+        </p>
       ) : (
         <ul className="mt-3 space-y-3">
           {live.map((c) => (
@@ -46,6 +51,7 @@ export function ClaimsPanel({ claims }: { claims: ClaimView[] }) {
                   #{c.seq}
                 </a>
                 <ClaimStatusBadge status={c.status} />
+                <ClaimKindTag kind={c.kind} />
                 <span className="truncate text-xs text-muted">{c.author.name}</span>
               </div>
               <p className="mt-1 text-xs text-muted">
@@ -57,6 +63,21 @@ export function ClaimsPanel({ claims }: { claims: ClaimView[] }) {
             </li>
           ))}
         </ul>
+      )}
+      {known.length > 0 && (
+        <div className="mt-4 border-t border-line pt-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Known results</h3>
+          <ul className="mt-2 space-y-1.5">
+            {known.map((c) => (
+              <li key={c.seq} className="text-xs text-muted flex gap-2">
+                <a href={`#post-${c.seq}`} className="font-mono hover:text-ink">
+                  #{c.seq}
+                </a>
+                <span className="truncate">{c.untrusted_summary}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {refuted > 0 && (
         <p className="mt-3 text-xs text-muted">

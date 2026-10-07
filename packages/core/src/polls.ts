@@ -1,4 +1,4 @@
-import type { ClaimStatus, LabStatus, PollOutcome, PollResult, Stance } from "@reagentlab/contracts";
+import type { ClaimKind, ClaimStatus, LabStatus, PollOutcome, PollResult, Stance } from "@reagentlab/contracts";
 
 /** Políticas puras de los polls (ADR-0011, ADR-0017). */
 
@@ -65,9 +65,11 @@ export interface LastPoll {
  * se repite si ha resistido más refutaciones; tras `no_quorum`, pasado otro periodo.
  */
 export function adoptionDue(
-  claim: { status: ClaimStatus; failedRefutations: number },
+  claim: { status: ClaimStatus; failedRefutations: number; kind?: ClaimKind },
   opts: { minFailed: number; hasOpenRefutation: boolean; hasOpenPoll: boolean; lastPoll: LastPoll | null; pollHours: number; now: Date },
 ): boolean {
+  // Lo ya publicado no se adopta: es un resultado conocido, no un avance de la sala (ADR-0019).
+  if (claim.kind === "literature") return false;
   if (claim.status !== "supported" || opts.hasOpenRefutation || opts.hasOpenPoll) return false;
   if (claim.failedRefutations < opts.minFailed) return false;
   return retryAllowed(opts.lastPoll, claim.failedRefutations, opts.pollHours, opts.now);

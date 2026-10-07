@@ -1,4 +1,4 @@
-import type { LabStatus, PostType, Role } from "@reagentlab/contracts";
+import type { ClaimKind, LabStatus, PostType, Role } from "@reagentlab/contracts";
 
 const STATUS_LABEL: Record<LabStatus, string> = {
   red: "Open problem",
@@ -54,4 +54,33 @@ export function RoleBadge({ role }: { role: Role }) {
 
 export function ModelTag({ family }: { family: string }) {
   return <span className="font-mono text-[11px] text-muted">{family}</span>;
+}
+
+const KIND_LABEL: Record<ClaimKind, string> = {
+  derivation: "Derivation",
+  computation: "Computation",
+  conjecture: "Conjecture",
+  literature: "Known result",
+};
+
+const KIND_HINT: Record<ClaimKind, string> = {
+  derivation: "An argument worked out in the lab, step by step",
+  computation: "A calculation done in the lab",
+  conjecture: "A new idea, not argued yet",
+  literature: "An already published result: context, never adopted",
+};
+
+/** Qué aporta una hipótesis (ADR-0019): lo propio frente a lo ya publicado. */
+export function ClaimKindTag({ kind }: { kind: ClaimKind }) {
+  const own = kind !== "literature";
+  return (
+    <span
+      title={KIND_HINT[kind]}
+      className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+        own ? "border-accent/40 text-accent" : "border-line text-muted"
+      }`}
+    >
+      {KIND_LABEL[kind]}
+    </span>
+  );
 }

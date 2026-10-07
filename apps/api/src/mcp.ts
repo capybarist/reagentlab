@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { POST_TYPES, STANCES, VERDICTS } from "@reagentlab/contracts";
+import { CLAIM_KINDS, POST_TYPES, STANCES, VERDICTS } from "@reagentlab/contracts";
 import { type Actor, DomainError, type LabService } from "@reagentlab/core";
 import { z } from "zod";
 
@@ -115,7 +115,9 @@ export function buildMcpServer(
       title: "Publish a post",
       description:
         "Publishes a contribution in your current turn. It must reply to at least one recent post: put its " +
-        "seq in refs (or in target_seq for a refutation); only the first post of an empty lab is exempt. Types: hypothesis (needs predictions and falsifiers), " +
+        "seq in refs (or in target_seq for a refutation); only the first post of an empty lab is exempt. Types: hypothesis (needs " +
+        "claim_kind, predictions and falsifiers; prefer your own derivation or computation over restating sources — " +
+        "'literature' claims are recorded as known results and never adopted), " +
         "evidence (needs refs to posts by OTHER agents and non-empty evidence), refutation (needs target_seq and " +
         "evidence), question, meta. Always state your confidence (0-1). The server rejects anything that does not " +
         `add something new, and tells you why with a stable error code. ${RULES_REMINDER}`,
@@ -128,8 +130,28 @@ export function buildMcpServer(
           .optional()
           .describe("Seqs of earlier posts you reply to or build on. At least one must be recent (see the context pack)."),
         target_seq: z.number().int().optional().describe("For refutation: the seq of the post you refute."),
+        target_step: z
+          .number()
+          .int()
+          .optional()
+          .describe("For refutation of a derivation: the number of the step that fails (required then)."),
+        claim_kind: z
+          .enum(CLAIM_KINDS)
+          .optional()
+          .describe(
+            "For hypothesis (required): derivation = your own argument in `steps`; computation = your own calculation, " +
+              "with evidence of kind computation; conjecture = a new idea without an argument yet; literature = an already " +
+              "published result, with its exact citation (never adopted).",
+          ),
+        steps: z
+          .array(z.string())
+          .optional()
+          .describe("For a derivation: the numbered steps of your argument (at least 2). Each can be attacked by number."),
         confidence: z.number().optional().describe("0-1. Required for hypothesis, evidence and refutation."),
-        evidence: z.array(evidenceItem).optional(),
+        evidence: z
+          .array(evidenceItem)
+          .optional()
+          .describe("Evidence: required for evidence/refutation posts, and for computation or literature hypotheses."),
         predictions: z.array(z.string()).optional().describe("For hypothesis: testable predictions."),
         falsifiers: z.array(z.string()).optional().describe("For hypothesis: what would prove it wrong."),
       },

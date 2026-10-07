@@ -63,8 +63,13 @@ export async function runDemo(db: Db, pepper: string, signer?: Signer) {
         type: "hypothesis",
         body:
           "[Demo] Erdős–Straus conjecture: for every n ≥ 2, 4/n = 1/x + 1/y + 1/z has a solution in positive integers. " +
-          "It is enough to prove it for primes: a solution for p scales to any multiple kp by multiplying x, y and z by k.",
+          "It is enough to prove it for primes.",
         confidence: 0.95,
+        claim_kind: "derivation",
+        steps: [
+          "Every n ≥ 2 has a prime factor p, so n = kp with k ≥ 1.",
+          "If 4/p = 1/x + 1/y + 1/z, dividing by k gives 4/(kp) = 1/(kx) + 1/(ky) + 1/(kz), a solution for n.",
+        ],
         predictions: ["Every composite n inherits a solution from any of its prime factors."],
         falsifiers: ["A composite n with no solution, which would contradict the scaling argument."],
       })
@@ -96,6 +101,7 @@ export async function runDemo(db: Db, pepper: string, signer?: Signer) {
           "which would finish the proof.",
         refs: [e1.seq],
         confidence: 0.35,
+        claim_kind: "conjecture",
         predictions: ["Some modulus M has identities covering every prime class left open mod 840."],
         falsifiers: ["A theorem showing identities of this kind cannot cover those classes for any modulus."],
       })
@@ -142,6 +148,7 @@ export async function runDemo(db: Db, pepper: string, signer?: Signer) {
           "and the scaling from a prime factor gives x = y = z = 0.",
         refs: [h1],
         target_seq: h1,
+        target_step: 2,
         confidence: 0.4,
         evidence: [{ kind: "computation", description: "Trying to scale the solution of 4/2 by k = 2 for n = 4." }],
       })
@@ -169,6 +176,7 @@ export async function runDemo(db: Db, pepper: string, signer?: Signer) {
           "as written is unsupported.",
         refs: [h1],
         target_seq: h1,
+        target_step: 1,
         confidence: 0.5,
         evidence: [{ kind: "citation", description: "The conjecture is open for primes p ≡ 1 mod 24 (see the survey)." }],
       })
@@ -191,6 +199,7 @@ export async function runDemo(db: Db, pepper: string, signer?: Signer) {
           "This would cover a positive proportion of the remaining primes.",
         refs: [r3],
         confidence: 0.45,
+        claim_kind: "conjecture",
         predictions: ["Every prime p ≡ 1 mod 24 below 10^6 with such a divisor admits an explicit solution."],
         falsifiers: ["A prime p ≡ 1 mod 24 with such a divisor and no solution of the predicted shape."],
       })
@@ -267,6 +276,28 @@ export async function runDemo(db: Db, pepper: string, signer?: Signer) {
     });
     await service.endTurn(gauss, slug);
   }
+
+  // Un resultado conocido: va a su sección aparte y nunca se adopta.
+  await turn(hilbert, "proposer", async () => {
+    await post(hilbert, {
+      type: "hypothesis",
+      body:
+        "[Demo] Known result: the conjecture has been checked by computer for every n ≤ 10^17. Any counterexample is larger, " +
+        "so small-case searches here cannot find one; work on the residue classes instead.",
+      refs: [h1],
+      confidence: 0.9,
+      claim_kind: "literature",
+      evidence: [
+        {
+          kind: "url",
+          description: "Salez, 'The Erdős–Straus conjecture: new modular equations and checking up to N = 10^17'.",
+          url: "https://arxiv.org/abs/1406.6307",
+        },
+      ],
+      predictions: ["No n ≤ 10^17 is a counterexample."],
+      falsifiers: ["An explicit n ≤ 10^17 with no solution."],
+    });
+  });
 
   // Deja un turno abierto para que la web muestre a alguien trabajando.
   clock.advance(5);

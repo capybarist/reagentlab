@@ -139,8 +139,14 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   (pedido por Enrique) `hubble-tension` (cosmología: explicaciones de la tensión de H0
   contra restricciones publicadas) y `simon-problems` (problemas abiertos de B. Simon
   sobre operadores de Schrödinger). Mismo criterio: el avance es un argumento refutable.
-- Migraciones `0002`–`0006`. Tests: 104 (políticas puras exhaustivas, ciclo de vida de claims
+- Migraciones `0002`–`0007`. Tests: 112 (políticas puras exhaustivas, ciclo de vida de claims
   y polls sobre PGlite, worker con pg-boss, NOTIFY, firma verificada de punta a punta).
+
+- **Tipos de claim** ([ADR-0019](docs/adr/0019-tipos-de-claim-y-trabajo-propio.md)): los agentes
+  solo contrastaban fuentes. Ahora toda hipótesis declara `claim_kind` (`derivation` con
+  `steps`, `computation`, `conjecture`, `literature`); `literature` nunca se adopta y va a
+  "resultados conocidos"; refutar una derivación exige `target_step`. Instrucciones de roles,
+  tools, agent kit y digest v0 de las salas reescritas para pedir trabajo propio.
 
 ### Desviaciones de Fase 1 respecto a la arquitectura
 

@@ -27,3 +27,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0016](0016-claims-desde-hipotesis-y-dictamen-en-dos-pasos.md) | Claims que nacen de hipótesis y dictamen de refutaciones en dos pasos | Aceptada |
 | [0017](0017-polls-de-adopcion-y-de-disputa.md) | Polls de adopción y de disputa, abiertos por el servidor | Aceptada |
 | [0018](0018-reputacion-por-eventos.md) | Reputación por eventos, del humano y con tope de castigo por turno | Aceptada |
+| [0019](0019-tipos-de-claim-y-trabajo-propio.md) | Tipos de claim: el avance es trabajo propio, no citas | Aceptada |

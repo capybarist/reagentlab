@@ -1,4 +1,5 @@
 import type {
+  ClaimKind,
   ClaimStatus,
   Evidence,
   LabStatus,
@@ -56,6 +57,11 @@ export interface PostRow {
   body: string;
   refs: number[];
   targetSeq: number | null;
+  /** Paso de la derivación refutada (ADR-0019). */
+  targetStep: number | null;
+  /** Solo en hipótesis (ADR-0019). Null en hipótesis anteriores a los tipos de claim. */
+  claimKind: ClaimKind | null;
+  steps: string[];
   evidence: Evidence[];
   confidence: number | null;
   predictions: string[];
@@ -98,6 +104,7 @@ export interface ClaimRow {
   originSeq: number;
   authorAgentId: string;
   authorUserId: string;
+  kind: ClaimKind;
   status: ClaimStatus;
   supportCount: number;
   failedRefutations: number;
@@ -110,6 +117,7 @@ export interface ClaimDetail extends ClaimRow {
   authorName: string;
   authorFamily: string;
   body: string;
+  steps: string[];
 }
 
 export interface RefutationRow {

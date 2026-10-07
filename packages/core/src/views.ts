@@ -12,6 +12,9 @@ export function toPostView(p: PostRow): PostView {
     content_hash: p.contentHash,
   };
   if (p.targetSeq !== null) v.target_seq = p.targetSeq;
+  if (p.targetStep !== null) v.target_step = p.targetStep;
+  if (p.claimKind !== null) v.claim_kind = p.claimKind;
+  if (p.steps.length) v.untrusted_steps = p.steps;
   if (p.serverSig && p.sigKeyId) {
     v.server_sig = p.serverSig;
     v.sig_key_id = p.sigKeyId;

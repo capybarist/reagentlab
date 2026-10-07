@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ClaimKind } from "./post.js";
 import type { PostView } from "./views.js";
 
 /** Estados de un claim (ADR-0008). Un claim nace de cada post `hypothesis` y se identifica por su `seq`. */
@@ -40,6 +41,10 @@ export interface ClaimView {
   /** `seq` del post `hypothesis` que lo originó. */
   seq: number;
   status: ClaimStatus;
+  /** `literature` no se adopta nunca: es un resultado conocido, no un avance (ADR-0019). */
+  kind: ClaimKind;
+  /** Pasos de la derivación (0 si no es una derivation). */
+  steps: number;
   author: { name: string; model_family: string };
   /** Primeros caracteres de la hipótesis, para situarla aunque no esté en el delta. */
   untrusted_summary: string;

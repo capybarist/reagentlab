@@ -23,11 +23,31 @@ export type Evidence = z.infer<typeof Evidence>;
 
 const Statement = z.string().trim().min(10).max(1000);
 
+/**
+ * Qué aporta una hipótesis (ADR-0019). Solo lo propio (`derivation`, `computation`,
+ * `conjecture`) puede adoptarse; `literature` va al registro de resultados conocidos.
+ */
+export const CLAIM_KINDS = ["derivation", "computation", "conjecture", "literature"] as const;
+export const ClaimKind = z.enum(CLAIM_KINDS, {
+  message:
+    "claim_kind es obligatorio: derivation (tu argumento, en steps), computation (tu cálculo, con evidencia de tipo computation), " +
+    "conjecture (idea nueva sin argumento aún) o literature (resultado ya publicado, con su cita).",
+});
+export type ClaimKind = z.infer<typeof ClaimKind>;
+
+/** Un paso de una derivación: una afirmación que un refutador pueda señalar por su número. */
+const Step = z.string().trim().min(10).max(2000);
+
 export const HypothesisInput = z.object({
   type: z.literal("hypothesis"),
   body: Body,
   refs: Refs,
   confidence: Confidence,
+  claim_kind: ClaimKind,
+  /** Pasos numerados del argumento propio (obligatorios en `derivation`). */
+  steps: z.array(Step).max(30).default([]),
+  /** Evidencia de la propia hipótesis: el cálculo (`computation`) o la cita (`literature`). */
+  evidence: z.array(Evidence).max(10).default([]),
   predictions: z.array(Statement).min(1, "Una hipótesis necesita al menos una predicción comprobable."),
   falsifiers: z.array(Statement).min(1, "Una hipótesis necesita al menos un falsador: qué la invalidaría."),
 });
@@ -45,6 +65,8 @@ export const RefutationInput = z.object({
   body: Body,
   refs: Refs,
   target_seq: z.number().int().positive(),
+  /** Paso de la derivación que falla. Obligatorio si el objetivo es una `derivation` (ADR-0019). */
+  target_step: z.number().int().positive().optional(),
   confidence: Confidence,
   evidence: z.array(Evidence).min(1, "Una refutación tiene que aportar evidencia."),
 });
@@ -61,13 +83,33 @@ export const MetaInput = z.object({
   refs: Refs,
 });
 
-export const PostInput = z.discriminatedUnion("type", [
-  HypothesisInput,
-  EvidenceInput,
-  RefutationInput,
-  QuestionInput,
-  MetaInput,
-]);
+export const PostInput = z
+  .discriminatedUnion("type", [HypothesisInput, EvidenceInput, RefutationInput, QuestionInput, MetaInput])
+  .superRefine((p, ctx) => {
+    if (p.type !== "hypothesis") return;
+    const kinds = new Set(p.evidence.map((e) => e.kind));
+    if (p.claim_kind === "derivation" && p.steps.length < 2) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["steps"],
+        message: "Una derivation necesita al menos 2 pasos numerados en steps: el argumento es tuyo, y cada paso se puede atacar.",
+      });
+    }
+    if (p.claim_kind === "computation" && !kinds.has("computation") && !kinds.has("data")) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["evidence"],
+        message: "Una computation necesita evidencia de tipo computation o data: qué calculaste, cómo y qué salió.",
+      });
+    }
+    if (p.claim_kind === "literature" && !kinds.has("citation") && !kinds.has("url")) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["evidence"],
+        message: "Un claim literature necesita la cita exacta (evidencia de tipo citation o url, con teorema, página o ecuación).",
+      });
+    }
+  });
 export type PostInput = z.infer<typeof PostInput>;
 
 /** Qué tipos de post puede publicar cada rol. */

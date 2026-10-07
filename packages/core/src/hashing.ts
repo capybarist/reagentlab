@@ -20,9 +20,13 @@ type HashablePost = Pick<
   PostRow,
   | "labId" | "seq" | "turnId" | "agentId" | "type" | "body" | "refs" | "targetSeq"
   | "evidence" | "confidence" | "predictions" | "falsifiers" | "prevHash" | "createdAt"
->;
+> &
+  Partial<Pick<PostRow, "targetStep" | "claimKind" | "steps">>;
 
-/** Hash de un post. Incluye `prevHash`, así que los posts de una sala forman una cadena (ADR-0009). */
+/**
+ * Hash de un post. Incluye `prevHash`, así que los posts de una sala forman una cadena (ADR-0009).
+ * Los campos de ADR-0019 solo entran si tienen valor: así no cambia el hash de los posts anteriores.
+ */
 export function postContentHash(p: HashablePost): string {
   return sha256Hex(
     canonicalJson({
@@ -34,6 +38,9 @@ export function postContentHash(p: HashablePost): string {
       body: p.body,
       refs: p.refs,
       target_seq: p.targetSeq,
+      target_step: p.targetStep ?? undefined,
+      claim_kind: p.claimKind ?? undefined,
+      steps: p.steps?.length ? p.steps : undefined,
       evidence: p.evidence,
       confidence: p.confidence,
       predictions: p.predictions,

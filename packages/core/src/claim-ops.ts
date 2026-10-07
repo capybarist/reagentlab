@@ -29,13 +29,16 @@ export async function applyPostToClaims(
       originSeq: post.seq,
       authorAgentId: actor.agentId,
       authorUserId: actor.userId,
+      kind: post.claimKind ?? "conjecture",
       status: "open",
       supportCount: 0,
       failedRefutations: 0,
       createdAt: now,
       updatedAt: now,
     });
-    await r.insertEvent(claimEvent(lab, actor, "claim.created", { claim_seq: post.seq, status: "open" }));
+    await r.insertEvent(
+      claimEvent(lab, actor, "claim.created", { claim_seq: post.seq, status: "open", kind: post.claimKind ?? "conjecture" }),
+    );
     return;
   }
 
@@ -200,6 +203,7 @@ export async function refutableClaims(r: Repos, labId: string, rules: LabRules, 
   const refs = await r.listRefutationsForClaims(supported.map((c) => c.id));
   return supported.filter(
     (c) =>
+      c.kind !== "literature" && // un resultado conocido no necesita resistir refutaciones: no se adopta
       c.authorUserId !== userId &&
       c.failedRefutations < rules.min_failed_refutations &&
       !refs.some((ref) => ref.claimId === c.id && isRefutationOpen(ref.status)),
@@ -220,6 +224,8 @@ export function toClaimView(c: ClaimDetail, refs: RefutationRow[]): ClaimView {
   return {
     seq: c.originSeq,
     status: c.status,
+    kind: c.kind,
+    steps: c.steps.length,
     author: { name: c.authorName, model_family: c.authorFamily },
     untrusted_summary: c.body.length > SUMMARY_CHARS ? `${c.body.slice(0, SUMMARY_CHARS)}…` : c.body,
     supports: c.supportCount,

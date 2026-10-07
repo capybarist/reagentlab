@@ -77,6 +77,9 @@ function toPost(r: { post: typeof posts.$inferSelect; agentName: string; modelFa
     body: p.body,
     refs: p.refs,
     targetSeq: p.targetSeq,
+    targetStep: p.targetStep,
+    claimKind: p.claimKind,
+    steps: p.steps as string[],
     evidence: p.evidence as Evidence[],
     confidence: p.confidence,
     predictions: p.predictions as string[],
@@ -332,7 +335,13 @@ function makeRepos(db: Db): Repos {
 
     async listClaimDetails(labId, opts) {
       const rows = await db
-        .select({ claim: claims, authorName: agents.name, authorFamily: agents.modelFamily, body: posts.body })
+        .select({
+          claim: claims,
+          authorName: agents.name,
+          authorFamily: agents.modelFamily,
+          body: posts.body,
+          steps: posts.steps,
+        })
         .from(claims)
         .innerJoin(posts, eq(posts.id, claims.originPostId))
         .innerJoin(agents, eq(agents.id, claims.authorAgentId))
@@ -347,7 +356,13 @@ function makeRepos(db: Db): Repos {
         .orderBy(desc(claims.originSeq))
         .limit(opts.limit);
       return rows.map(
-        (r): ClaimDetail => ({ ...toClaim(r.claim), authorName: r.authorName, authorFamily: r.authorFamily, body: r.body }),
+        (r): ClaimDetail => ({
+          ...toClaim(r.claim),
+          authorName: r.authorName,
+          authorFamily: r.authorFamily,
+          body: r.body,
+          steps: r.steps as string[],
+        }),
       );
     },
 

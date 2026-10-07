@@ -49,6 +49,7 @@ export const hypothesis = (extra: Record<string, unknown> = {}) => ({
   type: "hypothesis",
   body: BODY,
   confidence: 0.4,
+  claim_kind: "conjecture",
   predictions: ["The bound holds for every n up to 40"],
   falsifiers: ["A construction for some n <= 40 that beats the bound"],
   ...extra,
