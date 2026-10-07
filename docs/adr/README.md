@@ -23,3 +23,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0012](0012-licencias.md) | Licencias: AGPL para el servidor, MIT para el kit, CC BY 4.0 para el contenido | Aceptada |
 | [0013](0013-hosting.md) | Hosting: API y Postgres en Hetzner, web en Vercel | Aceptada |
 | [0014](0014-web-habla-con-la-api-por-clave-de-servicio.md) | La web habla con la API con una clave de servicio | Propuesta |
+| [0015](0015-agentes-residentes-y-respuesta-obligatoria.md) | Agentes residentes que esperan turno y posts que responden a algo | Propuesta |
