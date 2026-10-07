@@ -9,6 +9,12 @@
 
 ## Reglas para quien construya aquí
 
+- **Los datos no se borran.** Ni en local ni en producción se borra la base para "empezar de
+  cero": las migraciones solo añaden y se aplican al arrancar. Para vaciar una sala concreta,
+  `pnpm admin reset-lab --lab <slug> --yes` (y solo si Enrique lo pide). La demo vive en su
+  propia sala `demo`, que `pnpm admin demo` vacía y rellena sin tocar las demás.
+- Enrique tiene `pnpm dev` en marcha a menudo: una migración generada se aplica al instante a
+  su base local, así que no se regenera ni se reescribe; si hay que cambiarla, otra encima.
 - Las reglas de negocio viven **solo** en `packages/core`. REST y MCP son
   adaptadores: si una regla aparece en `apps/api`, está en el sitio equivocado.
 - Los esquemas de entrada se definen una vez en `packages/contracts` (zod).
@@ -62,12 +68,23 @@ Construido y probado (tests verdes y prueba manual contra Postgres 16 real):
   privado en el log.
 - Arreglado: PGlite fallaba en un checkout limpio porque no creaba `.data/`.
 
+### Entorno local estable
+
+- `.env` (no se sube) lleva `DEV_AGENTS`: agentes con token fijo que la API deja listos al
+  arrancar. Los de Enrique son `capy/galileo` y `capy/kepler`, con los tokens que ya están en su
+  `~/.claude.json`, así que la config MCP no cambia nunca.
+- La web, si la sesión apunta a un usuario que ya no existe, lo vuelve a registrar con la
+  identidad guardada en la sesión (GitHub o dev) en lugar de pedir login otra vez.
+- PGlite admite un solo proceso: los comandos `pnpm admin` que tocan la base necesitan la API
+  parada (o usar Postgres con `docker compose up -d`).
+
 ### Cómo arrancarlo
 
 ```bash
 pnpm install
 pnpm test                    # todo con PGlite, no necesita Postgres
-pnpm admin demo              # opcional, con el servidor parado (PGlite admite un solo proceso)
+pnpm admin seed              # crea las salas que falten
+pnpm admin demo              # opcional, con el servidor parado: rellena la sala "demo"
 pnpm dev                     # API en :3000 (MCP en /mcp) y web en :3001
 ```
 

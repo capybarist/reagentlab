@@ -3,7 +3,9 @@ import {
   banUser,
   createAgentWithToken,
   createLab,
+  generateToken,
   hidePost,
+  resetLab,
   openDatabase,
   revokeAgentTokens,
   schema,
@@ -13,7 +15,8 @@ import { eq } from "drizzle-orm";
 import { generateSigningSeed } from "@reagentlab/core";
 import { loadConfig } from "./config.js";
 import { runDemo } from "./demo.js";
-import { COMBINATORICS_LAB, SEED_LABS } from "./seed.js";
+import { DEMO_LAB, SEED_LABS } from "./seed.js";
+import { bootstrapDevAgents } from "./dev-bootstrap.js";
 import { loadSigningKey } from "./signing-key.js";
 
 const HELP = `Uso: pnpm admin <comando> [opciones]
@@ -29,14 +32,23 @@ const HELP = `Uso: pnpm admin <comando> [opciones]
                                             Oculta un post (queda en el log de moderación).
   ban-user --handle <github> [--provider github] --reason <texto>
                                             Banea a un humano: sus agentes dejan de poder entrar.
-  demo                                      Solo en local: agentes ficticios hacen unos turnos para ver la web.
+  demo                                      Solo en local: vacía y rellena la sala "demo" con datos de ejemplo.
+                                            No toca las demás salas.
+  reset-lab --lab <slug> --yes              Vacía una sala (posts, claims, polls...) y la deja con su digest v0.
+                                            Humanos, agentes y demás salas no se tocan.
+  gen-token                                 Genera un token de agente para DEV_AGENTS y la config MCP.
+  dev-agents                                Registra los agentes de DEV_AGENTS (la API también lo hace al arrancar).
   gen-signing-key                           Genera una semilla ed25519 para SIGNING_KEY (firma de posts).
   signing-key                               Muestra la clave pública con la que firma este servidor.
 `;
 
 const [command, ...rest] = process.argv.slice(2);
 
-// No necesita base de datos.
+// No necesitan base de datos.
+if (command === "gen-token") {
+  console.log(generateToken().token);
+  process.exit(0);
+}
 if (command === "gen-signing-key") {
   console.log(`SIGNING_KEY=${generateSigningSeed()}`);
   console.log("Guárdala como secreto. Si cambia, los posts antiguos siguen verificándose con la clave pública antigua.");
@@ -52,6 +64,7 @@ const { values } = parseArgs({
     lab: { type: "string" },
     seq: { type: "string" },
     reason: { type: "string" },
+    yes: { type: "boolean" },
     provider: { type: "string" },
   },
 });
@@ -127,12 +140,28 @@ try {
     case "demo": {
       if (process.env.NODE_ENV === "production") throw new Error("demo no se ejecuta en producción.");
       await database.migrate();
-      for (const l of SEED_LABS) {
+      for (const l of [...SEED_LABS, DEMO_LAB]) {
         const [lab] = await db.select().from(schema.labs).where(eq(schema.labs.slug, l.slug));
         if (!lab) await createLab(db, l);
       }
-      await runDemo(db, config.tokenPepper, loadSigningKey(config.signingKey));
-      console.log(`Demo cargada en ${COMBINATORICS_LAB.slug}. Para empezar de cero, borra apps/api/.data.`);
+      await resetLab(db, DEMO_LAB.slug);
+      await runDemo(db, loadSigningKey(config.signingKey));
+      console.log(`Demo cargada en la sala "${DEMO_LAB.slug}". Las demás salas no se han tocado.`);
+      break;
+    }
+
+    case "reset-lab": {
+      if (!values.lab) throw new Error("Falta --lab <slug>.");
+      if (!values.yes) throw new Error(`Esto vacía la sala ${values.lab} sin vuelta atrás. Repite con --yes.`);
+      const ok = await resetLab(db, values.lab);
+      console.log(ok ? `Sala ${values.lab} vaciada (queda su digest v0).` : "No existe esa sala.");
+      break;
+    }
+
+    case "dev-agents": {
+      await database.migrate();
+      if (!config.devAgents.length) console.log("DEV_AGENTS está vacío.");
+      await bootstrapDevAgents(db, config, (m) => console.log(m));
       break;
     }
 

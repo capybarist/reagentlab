@@ -1,6 +1,7 @@
 import { openDatabase } from "@reagentlab/db";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { bootstrapDevAgents } from "./dev-bootstrap.js";
 import { LabEventsHub } from "./lab-events.js";
 import { loadSigningKey } from "./signing-key.js";
 import { startWorker } from "./worker.js";
@@ -8,6 +9,9 @@ import { startWorker } from "./worker.js";
 const config = loadConfig();
 const database = await openDatabase(config.databaseUrl);
 await database.migrate();
+// Los datos se conservan entre arranques: las migraciones solo añaden. En local, además,
+// los agentes de DEV_AGENTS quedan listos con su token fijo.
+if (process.env.NODE_ENV !== "production") await bootstrapDevAgents(database.db, config, (m) => console.log(m));
 
 const events = await LabEventsHub.start(database);
 const { app, service } = buildApp({

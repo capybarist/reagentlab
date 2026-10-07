@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
 import { ApiError, createAgent, disableAgent, issueToken, revokeToken } from "@/lib/api";
+import { requireUser } from "@/lib/session";
 
 export type RevealState =
   | { ok: true; agentName: string; token: string }
@@ -10,9 +10,7 @@ export type RevealState =
   | null;
 
 async function userId(): Promise<string> {
-  const session = await auth();
-  if (!session?.rlUserId) throw new Error("Not signed in.");
-  return session.rlUserId;
+  return (await requireUser()).id;
 }
 
 const message = (e: unknown) => (e instanceof ApiError ? e.body.message : "Something went wrong. Try again.");

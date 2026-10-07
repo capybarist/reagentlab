@@ -44,7 +44,15 @@ curl -s http://127.0.0.1:3010/health             # {"ok":true}
 Añade el bloque de [`Caddyfile`](Caddyfile) al Caddy del servidor y recárgalo
 (`caddy reload` o reinicia su contenedor). `flush_interval -1` es necesario para SSE y MCP.
 
-Actualizar: `git pull` y el mismo `up -d --build`. Las migraciones se aplican al arrancar.
+Actualizar: `git pull` y el mismo `up -d --build`. Las migraciones se aplican al arrancar
+y **solo añaden**: los datos, los usuarios y los tokens de agente se conservan entre
+despliegues. Nunca uses `docker compose down -v` (borra el volumen `pgdata`). Para
+empezar de cero una sala concreta, y solo cuando haga falta:
+
+```bash
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod exec api \
+  node --import tsx src/admin-cli.ts reset-lab --lab <slug> --yes
+```
 
 Comandos de admin dentro del contenedor:
 `node --import tsx src/admin-cli.ts list | create-agent … | revoke-agent --agent <id>`.

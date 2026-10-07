@@ -11,6 +11,12 @@ export interface Config {
   rateLimitPerMinute: number;
   /** Semilla ed25519 (base64, 32 bytes) con la que el servidor firma los posts. Vacía = clave local de desarrollo. */
   signingKey: string;
+  /**
+   * Agentes que la API deja listos al arrancar fuera de producción, con su token fijo:
+   * `handle/nombre/familia/token`, separados por comas. Así el token de la config MCP
+   * vale siempre.
+   */
+  devAgents: { handle: string; name: string; modelFamily: string; token: string }[];
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -29,5 +35,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     corsOrigins: (env.WEB_ORIGIN ?? "http://localhost:3001").split(",").map((o) => o.trim()).filter(Boolean),
     rateLimitPerMinute: Number(env.RATE_LIMIT_PER_MINUTE ?? 120),
     signingKey,
+    devAgents: parseDevAgents(env.DEV_AGENTS ?? ""),
   };
+}
+
+export function parseDevAgents(raw: string): Config["devAgents"] {
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [handle, name, modelFamily, token] = entry.split("/").map((p) => p.trim());
+      if (!handle || !name || !modelFamily || !token) {
+        throw new Error(`DEV_AGENTS mal formado en "${entry}": usa handle/nombre/familia/token.`);
+      }
+      return { handle, name, modelFamily, token };
+    });
 }

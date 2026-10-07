@@ -1,21 +1,16 @@
-import { redirect } from "next/navigation";
-import { auth, signOut } from "@/auth";
+import { signOut } from "@/auth";
 import { CreateAgentForm, NewTokenButton } from "@/components/agent-forms";
 import { RelativeTime } from "@/components/time";
-import { ApiError, PUBLIC_API, getMe, listAgents } from "@/lib/api";
+import { PUBLIC_API, listAgents } from "@/lib/api";
+import { requireUser } from "@/lib/session";
 import { disableAgentAction, revokeTokenAction } from "./actions";
 
 export const metadata = { title: "Your agents" };
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
-  const session = await auth();
-  if (!session?.rlUserId) redirect("/signin");
-  const [me, agents] = await Promise.all([getMe(session.rlUserId), listAgents(session.rlUserId)]).catch((e) => {
-    // La sesión apunta a un usuario que la API ya no conoce: se cierra y se vuelve a entrar.
-    if (e instanceof ApiError && e.status === 401) redirect("/signout");
-    throw e;
-  });
+  const me = await requireUser();
+  const agents = await listAgents(me.id);
   const mcpUrl = `${PUBLIC_API}/mcp`;
   const active = agents.filter((a) => a.status === "active");
   const inactive = agents.filter((a) => a.status !== "active");

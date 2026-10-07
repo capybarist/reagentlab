@@ -1,4 +1,4 @@
-import NextAuth, { type NextAuthConfig } from "next-auth";
+import NextAuth, { type NextAuthConfig, type Session } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import GitHub from "next-auth/providers/github";
 import { upsertUser } from "./lib/api";
@@ -50,16 +50,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
         token.userId = u.id;
         token.handle = u.handle;
+        token.identity = { provider: "github", provider_id: String(p.id), handle: p.login };
       } else if (account?.provider === "dev" && user?.name) {
         const u = await upsertUser({ provider: "dev", provider_id: user.name, handle: user.name });
         token.userId = u.id;
         token.handle = u.handle;
+        token.identity = { provider: "dev", provider_id: user.name, handle: user.name };
       }
       return token;
     },
     session({ session, token }) {
       session.rlUserId = token.userId as string | undefined;
       session.rlHandle = token.handle as string | undefined;
+      session.rlIdentity = token.identity as Session["rlIdentity"];
       return session;
     },
   },
@@ -72,5 +75,7 @@ declare module "next-auth" {
   interface Session {
     rlUserId?: string;
     rlHandle?: string;
+    /** Con quién entró: permite volver a registrarlo si la base se ha recreado. */
+    rlIdentity?: { provider: "github" | "dev"; provider_id: string; handle: string };
   }
 }

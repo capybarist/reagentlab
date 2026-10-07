@@ -1,8 +1,25 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { LabRules } from "@reagentlab/contracts";
-import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "./connection.js";
-import { agentTokens, agents, digests, events, labs, posts, users } from "./schema.js";
+import {
+  agentTokens,
+  agents,
+  claimSupports,
+  claims,
+  digests,
+  events,
+  labs,
+  memberships,
+  polls,
+  posts,
+  refutations,
+  reputationEvents,
+  rulings,
+  turns,
+  users,
+  votes,
+} from "./schema.js";
 
 /**
  * Operaciones de administración: alta de humanos, agentes, tokens y salas.
@@ -120,6 +137,85 @@ export async function createAgentWithToken(
   const { token, prefix } = generateToken();
   await db.insert(agentTokens).values({ agentId: agent!.id, prefix, tokenHash: hashToken(token, pepper) });
   return { agent: agent!, token };
+}
+
+/** Formato de un token de agente: `rl_ag_<8 hex>_<secreto>`. */
+export const TOKEN_PATTERN = /^rl_ag_([0-9a-f]{8})_[A-Za-z0-9_-]{20,}$/;
+
+/** Agente de un humano por nombre; lo crea si no existe (idempotente). */
+export async function findOrCreateAgent(db: Db, a: { userId: string; name: string; modelFamily: string }) {
+  const [existing] = await db.select().from(agents).where(and(eq(agents.userId, a.userId), eq(agents.name, a.name)));
+  if (existing) return existing;
+  const [row] = await db.insert(agents).values(a).returning();
+  return row!;
+}
+
+/**
+ * Deja un humano, su agente y un token CONOCIDO listos, sin duplicar nada si ya
+ * existen. Sirve para que el token de la configuración MCP valga siempre, también
+ * tras vaciar una sala o recrear la base de desarrollo.
+ */
+export async function ensureAgentWithToken(
+  db: Db,
+  a: { provider: string; providerId: string; handle: string; name: string; modelFamily: string; token: string },
+  pepper: string,
+) {
+  const m = TOKEN_PATTERN.exec(a.token);
+  if (!m) throw new Error(`Token con formato inválido para ${a.name}: debe ser rl_ag_<8 hex>_<secreto de 20+>.`);
+  const user = await upsertUser(db, { provider: a.provider, providerId: a.providerId, handle: a.handle });
+  const agent = await findOrCreateAgent(db, { userId: user.id, name: a.name, modelFamily: a.modelFamily });
+  const tokenHash = hashToken(a.token, pepper);
+  const [existing] = await db.select().from(agentTokens).where(eq(agentTokens.tokenHash, tokenHash));
+  if (existing && existing.agentId !== agent.id) throw new Error(`El token de ${a.name} ya pertenece a otro agente.`);
+  if (!existing) await db.insert(agentTokens).values({ agentId: agent.id, prefix: m[1]!, tokenHash });
+  else if (existing.revokedAt) await db.update(agentTokens).set({ revokedAt: null }).where(eq(agentTokens.id, existing.id));
+  if (agent.status !== "active") await db.update(agents).set({ status: "active" }).where(eq(agents.id, agent.id));
+  return { user, agent, created: !existing };
+}
+
+/**
+ * Vacía una sala: posts, claims, polls, turnos, residentes, eventos y digests salvo el
+ * v0, y descuenta la reputación que se ganó en ella. La sala, sus normas, los humanos y
+ * los agentes se quedan. Es la única forma prevista de "empezar de cero" sin tocar el resto.
+ */
+export async function resetLab(db: Db, slug: string) {
+  return db.transaction(async (tx) => {
+    const [lab] = await tx.select().from(labs).where(eq(labs.slug, slug));
+    if (!lab) return false;
+    const pollIds = tx.select({ id: polls.id }).from(polls).where(eq(polls.labId, lab.id));
+    const refIds = tx.select({ id: refutations.id }).from(refutations).where(eq(refutations.labId, lab.id));
+    const claimIds = tx.select({ id: claims.id }).from(claims).where(eq(claims.labId, lab.id));
+
+    await tx.delete(votes).where(inArray(votes.pollId, pollIds));
+    await tx.delete(polls).where(eq(polls.labId, lab.id));
+    await tx.delete(rulings).where(inArray(rulings.refutationId, refIds));
+    await tx.delete(refutations).where(eq(refutations.labId, lab.id));
+    await tx.delete(claimSupports).where(inArray(claimSupports.claimId, claimIds));
+    await tx.delete(claims).where(eq(claims.labId, lab.id));
+
+    // La reputación ganada o perdida en la sala se descuenta antes de borrar sus eventos.
+    const gained = await tx
+      .select({ userId: reputationEvents.userId, total: sql<number>`sum(${reputationEvents.delta})` })
+      .from(reputationEvents)
+      .where(eq(reputationEvents.labId, lab.id))
+      .groupBy(reputationEvents.userId);
+    for (const g of gained) {
+      await tx
+        .update(users)
+        .set({ reputation: sql`${users.reputation} - ${Number(g.total)}` })
+        .where(eq(users.id, g.userId));
+    }
+    await tx.delete(reputationEvents).where(eq(reputationEvents.labId, lab.id));
+
+    await tx.delete(posts).where(eq(posts.labId, lab.id));
+    await tx.delete(digests).where(and(eq(digests.labId, lab.id), gt(digests.version, 0)));
+    await tx.delete(turns).where(eq(turns.labId, lab.id));
+    await tx.delete(memberships).where(eq(memberships.labId, lab.id));
+    await tx.delete(events).where(eq(events.labId, lab.id));
+    await tx.update(labs).set({ nextSeq: 1, status: "red" }).where(eq(labs.id, lab.id));
+    await tx.insert(events).values({ kind: "moderation.lab_reset", payload: { slug }, public: false });
+    return true;
+  });
 }
 
 /** Busca el agente de un token válido: no revocado, agente activo y humano sin banear. */

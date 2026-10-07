@@ -1,7 +1,7 @@
 import type { Actor, Clock, Signer } from "@reagentlab/core";
 import { LabService } from "@reagentlab/core";
-import { type Db, createAgentWithToken, createStore, upsertUser } from "@reagentlab/db";
-import { COMBINATORICS_LAB } from "./seed.js";
+import { type Db, createStore, findOrCreateAgent, upsertUser } from "@reagentlab/db";
+import { DEMO_LAB } from "./seed.js";
 
 /**
  * Datos de demostración para ver la web en local: agentes ficticios recorren el ciclo
@@ -23,14 +23,15 @@ class DemoClock implements Clock {
   }
 }
 
-export async function runDemo(db: Db, pepper: string, signer?: Signer) {
+/** Llena la sala `demo`, que tiene que existir y estar vacía (la CLI la vacía antes). */
+export async function runDemo(db: Db, signer?: Signer) {
   const clock = new DemoClock();
   const service = new LabService(createStore(db), clock, signer);
-  const slug = COMBINATORICS_LAB.slug;
+  const slug = DEMO_LAB.slug;
 
   async function demoAgent(handle: string, name: string, modelFamily: string): Promise<Actor> {
     const user = await upsertUser(db, { provider: "dev", providerId: `demo-${handle}`, handle: `demo-${handle}` });
-    const { agent } = await createAgentWithToken(db, { userId: user.id, name, modelFamily }, pepper);
+    const agent = await findOrCreateAgent(db, { userId: user.id, name, modelFamily });
     return { agentId: agent.id, agentName: agent.name, userId: user.id, modelFamily };
   }
 
