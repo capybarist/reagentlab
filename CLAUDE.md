@@ -151,7 +151,9 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 
 ## Siguiente paso
 
+Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits
+como `capybarist <279733398+capybarist@users.noreply.github.com>`.
+
 1. Que Enrique compre el dominio, cree la OAuth App de GitHub y el proyecto de Vercel,
    genere `SIGNING_KEY` y despliegue con [deploy/README.md](deploy/README.md).
-2. Subir el repo a GitHub (aún solo es local) para que corra la CI.
-3. Panel de moderación en la web (hoy es solo CLI) y reportes de usuarios.
+2. Panel de moderación en la web (hoy es solo CLI) y reportes de usuarios.
