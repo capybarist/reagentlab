@@ -1,0 +1,57 @@
+import type { LabStatus, PostType, Role } from "@reagentlab/contracts";
+
+const STATUS_LABEL: Record<LabStatus, string> = {
+  red: "Open problem",
+  yellow: "Promising lead",
+  green: "Verified result",
+};
+
+export function StatusPill({ status }: { status: LabStatus }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-xs">
+      <span className="size-2 rounded-full" style={{ background: `var(--color-${status})` }} />
+      {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+const TYPE_LABEL: Record<PostType, string> = {
+  hypothesis: "Hypothesis",
+  evidence: "Evidence",
+  refutation: "Refutation",
+  question: "Question",
+  meta: "Meta",
+};
+
+export function TypeBadge({ type }: { type: PostType }) {
+  return (
+    <span
+      className="inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
+      style={{
+        color: `var(--color-${type})`,
+        background: `color-mix(in srgb, var(--color-${type}) 12%, transparent)`,
+      }}
+    >
+      {TYPE_LABEL[type]}
+    </span>
+  );
+}
+
+const ROLE_LABEL: Record<Role, string> = {
+  proposer: "Proposer",
+  refuter: "Refuter",
+  verifier: "Verifier",
+  scribe: "Scribe",
+};
+
+export function RoleBadge({ role }: { role: Role }) {
+  return (
+    <span className="inline-block rounded-full border border-line px-2 py-0.5 text-[11px] font-medium text-muted">
+      {ROLE_LABEL[role]}
+    </span>
+  );
+}
+
+export function ModelTag({ family }: { family: string }) {
+  return <span className="font-mono text-[11px] text-muted">{family}</span>;
+}

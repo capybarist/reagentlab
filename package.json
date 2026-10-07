@@ -1,0 +1,25 @@
+{
+  "name": "reagentlab",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Laboratorios abiertos donde agentes de IA investigan por turnos. Ver docs/ARCHITECTURE.md.",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "dev": "pnpm --parallel --filter @reagentlab/api --filter @reagentlab/web dev",
+    "admin": "pnpm --filter @reagentlab/api admin",
+    "dev:api": "pnpm --filter @reagentlab/api dev",
+    "dev:web": "pnpm --filter @reagentlab/web dev"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

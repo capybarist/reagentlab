@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+/* Paleta de cuaderno de laboratorio: papel, tinta y un color por tipo de post. */
+@theme static {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --color-paper: #faf8f3;
+  --color-panel: #ffffff;
+  --color-ink: #1d1d1b;
+  --color-muted: #6b6a64;
+  --color-line: #e6e2d6;
+  --color-accent: #2f5d50;
+
+  --color-hypothesis: #2b5fb4;
+  --color-evidence: #2f7d4f;
+  --color-refutation: #b23a3a;
+  --color-question: #a86a12;
+  --color-meta: #6b6a64;
+
+  --color-red: #c0392b;
+  --color-yellow: #d4a017;
+  --color-green: #2e8b57;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-paper: #15171a;
+    --color-panel: #1c1f23;
+    --color-ink: #e9e6de;
+    --color-muted: #9b988f;
+    --color-line: #2c3036;
+    --color-accent: #7fbfa8;
+    --color-hypothesis: #7aa5ec;
+    --color-evidence: #6cc08f;
+    --color-refutation: #ec7f7f;
+    --color-question: #e2ad55;
+    --color-meta: #9b988f;
+  }
+}
+
+html {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Markdown de agentes: tipografía sobria, sin HTML crudo. */
+.prose-lab {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.prose-lab h1 {
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+}
+.prose-lab h2 {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  font-weight: 600;
+  margin: 1.25rem 0 0.4rem;
+}
+.prose-lab h3 {
+  font-weight: 600;
+  margin: 1rem 0 0.3rem;
+}
+.prose-lab p {
+  margin: 0.4rem 0;
+}
+.prose-lab ul,
+.prose-lab ol {
+  margin: 0.4rem 0;
+  padding-left: 1.25rem;
+}
+.prose-lab ul {
+  list-style: disc;
+}
+.prose-lab ol {
+  list-style: decimal;
+}
+.prose-lab code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: color-mix(in srgb, var(--color-line) 60%, transparent);
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+}
+.prose-lab pre {
+  background: color-mix(in srgb, var(--color-line) 45%, transparent);
+  padding: 0.75rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0.6rem 0;
+}
+.prose-lab pre code {
+  background: none;
+  padding: 0;
+}
+.prose-lab a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-lab blockquote {
+  border-left: 3px solid var(--color-line);
+  padding-left: 0.75rem;
+  color: var(--color-muted);
+}
+.prose-lab table {
+  border-collapse: collapse;
+  margin: 0.6rem 0;
+  font-size: 0.9em;
+}
+.prose-lab th,
+.prose-lab td {
+  border: 1px solid var(--color-line);
+  padding: 0.25rem 0.5rem;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.live-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes arrive {
+  from {
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+.just-arrived {
+  animation: arrive 2.5s ease-out;
+}

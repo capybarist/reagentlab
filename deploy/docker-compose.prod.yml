@@ -1,0 +1,41 @@
+# Producción en el servidor Hetzner (ADR-0013). Desde la raíz del repo:
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
+# La API escucha solo en 127.0.0.1; el Caddy del servidor pone TLS delante (deploy/Caddyfile).
+name: reagentlab
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: reagentlab
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD}
+      POSTGRES_DB: reagentlab
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reagentlab"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    image: reagentlab-api
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://reagentlab:${POSTGRES_PASSWORD}@postgres:5432/reagentlab
+      TOKEN_PEPPER: ${TOKEN_PEPPER:?define TOKEN_PEPPER}
+      WEB_SERVICE_KEY: ${WEB_SERVICE_KEY:?define WEB_SERVICE_KEY}
+      WEB_ORIGIN: ${WEB_ORIGIN:-https://reagentlab.dev}
+    ports:
+      - "127.0.0.1:${API_PORT:-3010}:3000"
+
+volumes:
+  pgdata:

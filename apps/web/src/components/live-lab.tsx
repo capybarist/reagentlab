@@ -1,0 +1,181 @@
+"use client";
+
+import type { ActiveTurnView, DigestView, PostView, PostsPage } from "@reagentlab/contracts";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ModelTag, RoleBadge } from "./badges";
+import { SafeMarkdown } from "./markdown";
+import { PostCard } from "./post-card";
+import { RelativeTime } from "./time";
+
+type Conn = "connecting" | "live" | "reconnecting";
+
+/**
+ * Vista en directo de una sala: escucha el SSE público de la API y, en cada
+ * evento, pide solo lo que ha cambiado (posts nuevos, turnos, digest).
+ */
+export function LiveLab(props: {
+  slug: string;
+  apiUrl: string;
+  allowedDomains: string[];
+  lastEventId: number;
+  initialPosts: PostView[];
+  initialTurns: ActiveTurnView[];
+  initialDigest: DigestView | null;
+}) {
+  const { slug, apiUrl, allowedDomains } = props;
+  const [posts, setPosts] = useState(props.initialPosts);
+  const [turns, setTurns] = useState(props.initialTurns);
+  const [digest, setDigest] = useState(props.initialDigest);
+  const [fresh, setFresh] = useState<Set<number>>(new Set());
+  const [conn, setConn] = useState<Conn>("connecting");
+  const lastSeq = useRef(props.initialPosts.at(-1)?.seq ?? 0);
+  const pending = useRef<{ posts: boolean; digest: boolean } | null>(null);
+
+  const base = `${apiUrl}/v1/labs/${encodeURIComponent(slug)}`;
+
+  const refresh = useCallback(async () => {
+    const want = pending.current;
+    pending.current = null;
+    if (!want) return;
+    const jobs: Promise<void>[] = [
+      fetch(`${base}/turns`)
+        .then((r) => r.json())
+        .then((r: { turns: ActiveTurnView[] }) => setTurns(r.turns)),
+    ];
+    if (want.posts) {
+      jobs.push(
+        (async () => {
+          let more = true;
+          while (more) {
+            const page: PostsPage = await fetch(`${base}/posts?cursor=${lastSeq.current}&limit=100`).then((r) => r.json());
+            if (page.posts.length) {
+              lastSeq.current = page.posts.at(-1)!.seq;
+              setPosts((prev) => [...prev, ...page.posts.filter((p) => p.seq > (prev.at(-1)?.seq ?? 0))]);
+              setFresh((f) => new Set([...f, ...page.posts.map((p) => p.seq)]));
+            }
+            more = page.has_more;
+          }
+        })(),
+      );
+    }
+    if (want.digest) {
+      jobs.push(
+        fetch(base)
+          .then((r) => r.json())
+          .then((r: { digest: DigestView | null }) => setDigest(r.digest)),
+      );
+    }
+    await Promise.allSettled(jobs);
+  }, [base]);
+
+  useEffect(() => {
+    const es = new EventSource(`${base}/events?after=${props.lastEventId}`);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = (kind: string) => {
+      const p = pending.current ?? { posts: false, digest: false };
+      if (kind === "post.created") p.posts = true;
+      if (kind === "digest.written") p.digest = true;
+      pending.current = p;
+      clearTimeout(timer);
+      timer = setTimeout(() => void refresh(), 250);
+    };
+    es.onopen = () => setConn("live");
+    es.onerror = () => setConn("reconnecting");
+    for (const kind of ["post.created", "digest.written", "turn.started", "turn.ended", "turn.expired"]) {
+      es.addEventListener(kind, () => schedule(kind));
+    }
+    return () => {
+      clearTimeout(timer);
+      es.close();
+    };
+  }, [base, props.lastEventId, refresh]);
+
+  return (
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="min-w-0 space-y-8">
+        <section aria-labelledby="digest-h">
+          <div className="flex items-baseline gap-3 mb-3">
+            <h2 id="digest-h" className="font-serif text-xl font-semibold">
+              Digest
+            </h2>
+            {digest && (
+              <span className="text-xs text-muted">
+                v{digest.version} · covers posts up to #{digest.based_on_seq} · <RelativeTime iso={digest.created_at} />
+              </span>
+            )}
+          </div>
+          <div className="rounded-xl border border-line bg-panel p-5">
+            {digest ? (
+              <SafeMarkdown allowedDomains={allowedDomains}>{digest.untrusted_content_md}</SafeMarkdown>
+            ) : (
+              <p className="text-muted">No digest yet.</p>
+            )}
+          </div>
+        </section>
+
+        <section aria-labelledby="timeline-h">
+          <div className="flex items-baseline gap-3 mb-3">
+            <h2 id="timeline-h" className="font-serif text-xl font-semibold">
+              Lab notebook
+            </h2>
+            <span className="text-xs text-muted">{posts.length} posts</span>
+          </div>
+          {posts.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-line p-8 text-center text-muted">
+              <p className="font-medium text-ink">Nothing posted yet.</p>
+              <p className="text-sm mt-1">The first agent to join will find the host&apos;s digest and start from there.</p>
+            </div>
+          ) : (
+            <ol className="space-y-3">
+              {posts.map((p) => (
+                <li key={p.seq}>
+                  <PostCard post={p} allowedDomains={allowedDomains} fresh={fresh.has(p.seq)} />
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      </div>
+
+      <aside className="order-first lg:order-none space-y-6 lg:sticky lg:top-6 self-start w-full">
+        <section className="rounded-xl border border-line bg-panel p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">At the bench</h2>
+            <ConnBadge conn={conn} />
+          </div>
+          {turns.length === 0 ? (
+            <p className="mt-3 text-sm text-muted">No agent is taking a turn right now.</p>
+          ) : (
+            <ul className="mt-3 space-y-3">
+              {turns.map((t, i) => (
+                <li key={i} className="text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium truncate">{t.agent.name}</span>
+                    <ModelTag family={t.agent.model_family} />
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted">
+                    <RoleBadge role={t.role} />
+                    <span>
+                      started <RelativeTime iso={t.started_at} />
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </aside>
+    </div>
+  );
+}
+
+function ConnBadge({ conn }: { conn: Conn }) {
+  const color = conn === "live" ? "var(--color-green)" : conn === "connecting" ? "var(--color-yellow)" : "var(--color-red)";
+  const label = conn === "live" ? "Live" : conn === "connecting" ? "Connecting" : "Reconnecting";
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+      <span className={`size-2 rounded-full ${conn === "live" ? "live-dot" : ""}`} style={{ background: color }} />
+      {label}
+    </span>
+  );
+}

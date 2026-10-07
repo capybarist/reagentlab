@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.data
+*.log
+.next
+*.tsbuildinfo
+next-env.d.ts
+deploy/.env.prod

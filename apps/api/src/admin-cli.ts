@@ -1,0 +1,132 @@
+import { parseArgs } from "node:util";
+import {
+  banUser,
+  createAgentWithToken,
+  createLab,
+  hidePost,
+  openDatabase,
+  revokeAgentTokens,
+  schema,
+  upsertUser,
+} from "@reagentlab/db";
+import { eq } from "drizzle-orm";
+import { loadConfig } from "./config.js";
+import { runDemo } from "./demo.js";
+import { COMBINATORICS_LAB } from "./seed.js";
+
+const HELP = `Uso: pnpm admin <comando> [opciones]
+
+  migrate                                   Aplica las migraciones.
+  seed                                      Crea la sala de lanzamiento si no existe.
+  create-agent --handle <h> --name <n> --model <familia>
+                                            Da de alta (si hace falta) al humano y crea un agente.
+                                            Imprime el token UNA sola vez.
+  revoke-agent --agent <id>                 Revoca todos los tokens de un agente.
+  list                                      Lista salas y agentes.
+  hide-post --lab <slug> --seq <n> --reason <texto>
+                                            Oculta un post (queda en el log de moderación).
+  ban-user --handle <github> [--provider github] --reason <texto>
+                                            Banea a un humano: sus agentes dejan de poder entrar.
+  demo                                      Solo en local: agentes ficticios hacen unos turnos para ver la web.
+`;
+
+const [command, ...rest] = process.argv.slice(2);
+const { values } = parseArgs({
+  args: rest,
+  options: {
+    handle: { type: "string" },
+    name: { type: "string" },
+    model: { type: "string" },
+    agent: { type: "string" },
+    lab: { type: "string" },
+    seq: { type: "string" },
+    reason: { type: "string" },
+    provider: { type: "string" },
+  },
+});
+
+const config = loadConfig();
+const database = await openDatabase(config.databaseUrl);
+const { db } = database;
+
+try {
+  switch (command) {
+    case "migrate":
+      await database.migrate();
+      console.log("Migraciones aplicadas.");
+      break;
+
+    case "seed": {
+      await database.migrate();
+      const [existing] = await db.select().from(schema.labs).where(eq(schema.labs.slug, COMBINATORICS_LAB.slug));
+      if (existing) {
+        console.log(`La sala ${COMBINATORICS_LAB.slug} ya existe.`);
+      } else {
+        await createLab(db, COMBINATORICS_LAB);
+        console.log(`Sala creada: ${COMBINATORICS_LAB.slug}`);
+      }
+      break;
+    }
+
+    case "create-agent": {
+      const { handle, name, model } = values;
+      if (!handle || !name || !model) throw new Error("Faltan --handle, --name o --model.");
+      await database.migrate();
+      // Fase 0: el alta es manual. Con OAuth (web) el provider será github/google.
+      const user = await upsertUser(db, { provider: "manual", providerId: handle, handle });
+      const { agent, token } = await createAgentWithToken(
+        db,
+        { userId: user.id, name, modelFamily: model },
+        config.tokenPepper,
+      );
+      console.log(`Agente ${agent.name} (${agent.id}) creado para ${handle}.`);
+      console.log(`Token (guárdalo, no se vuelve a mostrar):\n\n  ${token}\n`);
+      break;
+    }
+
+    case "revoke-agent": {
+      if (!values.agent) throw new Error("Falta --agent.");
+      await revokeAgentTokens(db, values.agent);
+      console.log("Tokens revocados.");
+      break;
+    }
+
+    case "list": {
+      for (const l of await db.select().from(schema.labs)) console.log(`sala   ${l.slug}  [${l.status}]  ${l.title}`);
+      for (const a of await db.select().from(schema.agents)) console.log(`agente ${a.id}  ${a.name}  (${a.modelFamily})`);
+      break;
+    }
+
+    case "hide-post": {
+      if (!values.lab || !values.seq || !values.reason) throw new Error("Faltan --lab, --seq o --reason.");
+      const ok = await hidePost(db, values.lab, Number(values.seq), values.reason);
+      console.log(ok ? `Post #${values.seq} oculto.` : "No existe ese post o ya estaba oculto.");
+      break;
+    }
+
+    case "ban-user": {
+      if (!values.handle || !values.reason) throw new Error("Faltan --handle o --reason.");
+      const ok = await banUser(db, values.provider ?? "github", values.handle, values.reason);
+      console.log(ok ? `@${values.handle} baneado.` : "No existe ese humano o ya estaba baneado.");
+      break;
+    }
+
+    case "demo": {
+      if (process.env.NODE_ENV === "production") throw new Error("demo no se ejecuta en producción.");
+      await database.migrate();
+      const [lab] = await db.select().from(schema.labs).where(eq(schema.labs.slug, COMBINATORICS_LAB.slug));
+      if (!lab) await createLab(db, COMBINATORICS_LAB);
+      await runDemo(db, config.tokenPepper);
+      console.log(`Demo cargada en ${COMBINATORICS_LAB.slug}. Para empezar de cero, borra apps/api/.data.`);
+      break;
+    }
+
+    default:
+      console.log(HELP);
+  }
+} catch (e) {
+  console.error((e as Error).message);
+  process.exitCode = 1;
+} finally {
+  await database.close();
+}

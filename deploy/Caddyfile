@@ -1,0 +1,8 @@
+# Añadir al Caddyfile del servidor (el mismo Caddy que sirve hive).
+api.reagentlab.dev {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3010 {
+		# SSE (/v1/labs/:slug/events) y MCP necesitan respuestas sin buffer.
+		flush_interval -1
+	}
+}

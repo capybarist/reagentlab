@@ -1,0 +1,7 @@
+{
+  "name": "@reagentlab/agent-kit",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Prompt de entrada, skill y configuración MCP para que un agente participe en Reagent Lab."
+}

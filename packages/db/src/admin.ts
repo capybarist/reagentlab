@@ -1,0 +1,203 @@
+import { createHash, randomBytes } from "node:crypto";
+import type { LabRules } from "@reagentlab/contracts";
+import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
+import type { Db } from "./connection.js";
+import { agentTokens, agents, digests, events, labs, posts, users } from "./schema.js";
+
+/**
+ * Operaciones de administración: alta de humanos, agentes, tokens y salas.
+ * No son reglas del juego, así que viven aquí y no en core.
+ */
+
+export const TOKEN_PREFIX = "rl_ag_";
+
+export function hashToken(token: string, pepper: string): string {
+  return createHash("sha256").update(`${pepper}:${token}`).digest("hex");
+}
+
+/** Genera un token opaco `rl_ag_<prefijo>_<secreto>` (ADR-0005). Solo se muestra una vez. */
+export function generateToken(): { token: string; prefix: string } {
+  const prefix = randomBytes(4).toString("hex");
+  const secret = randomBytes(24).toString("base64url");
+  return { token: `${TOKEN_PREFIX}${prefix}_${secret}`, prefix };
+}
+
+export async function upsertUser(
+  db: Db,
+  u: { provider: string; providerId: string; handle: string; accountCreatedAt?: Date },
+) {
+  const [existing] = await db
+    .select()
+    .from(users)
+    .where(and(eq(users.provider, u.provider), eq(users.providerId, u.providerId)));
+  if (existing) {
+    // El handle puede cambiar en el proveedor; el id no.
+    if (existing.handle === u.handle) return existing;
+    const [row] = await db.update(users).set({ handle: u.handle }).where(eq(users.id, existing.id)).returning();
+    return row!;
+  }
+  const [row] = await db.insert(users).values(u).returning();
+  return row!;
+}
+
+export async function getUser(db: Db, id: string) {
+  const [row] = await db.select().from(users).where(eq(users.id, id));
+  return row ?? null;
+}
+
+export async function countActiveAgents(db: Db, userId: string) {
+  const [r] = await db
+    .select({ n: count() })
+    .from(agents)
+    .where(and(eq(agents.userId, userId), eq(agents.status, "active")));
+  return Number(r!.n);
+}
+
+/** Agentes de un humano con sus tokens vigentes (nunca el secreto, solo el prefijo). */
+export async function listAgentsWithTokens(db: Db, userId: string) {
+  const rows = await db.select().from(agents).where(eq(agents.userId, userId)).orderBy(asc(agents.createdAt));
+  if (!rows.length) return [];
+  const tokens = await db
+    .select()
+    .from(agentTokens)
+    .where(
+      and(
+        inArray(
+          agentTokens.agentId,
+          rows.map((a) => a.id),
+        ),
+        isNull(agentTokens.revokedAt),
+      ),
+    )
+    .orderBy(asc(agentTokens.createdAt));
+  return rows.map((a) => ({ ...a, tokens: tokens.filter((t) => t.agentId === a.id) }));
+}
+
+export async function getAgentOfUser(db: Db, userId: string, agentId: string) {
+  const [row] = await db
+    .select()
+    .from(agents)
+    .where(and(eq(agents.id, agentId), eq(agents.userId, userId)));
+  return row ?? null;
+}
+
+export async function issueToken(db: Db, agentId: string, pepper: string) {
+  const { token, prefix } = generateToken();
+  const [row] = await db
+    .insert(agentTokens)
+    .values({ agentId, prefix, tokenHash: hashToken(token, pepper) })
+    .returning();
+  return { token, row: row! };
+}
+
+/** Revoca un token concreto de un agente. Devuelve `false` si no existía o ya estaba revocado. */
+export async function revokeToken(db: Db, agentId: string, tokenId: string) {
+  const rows = await db
+    .update(agentTokens)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(agentTokens.id, tokenId), eq(agentTokens.agentId, agentId), isNull(agentTokens.revokedAt)))
+    .returning({ id: agentTokens.id });
+  return rows.length > 0;
+}
+
+/** Desactiva un agente y revoca todos sus tokens: deja de contar para el tope de agentes. */
+export async function disableAgent(db: Db, agentId: string) {
+  await db.transaction(async (tx) => {
+    await tx.update(agents).set({ status: "disabled" }).where(eq(agents.id, agentId));
+    await tx
+      .update(agentTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(agentTokens.agentId, agentId), isNull(agentTokens.revokedAt)));
+  });
+}
+
+export async function createAgentWithToken(
+  db: Db,
+  a: { userId: string; name: string; modelFamily: string },
+  pepper: string,
+) {
+  const [agent] = await db.insert(agents).values(a).returning();
+  const { token, prefix } = generateToken();
+  await db.insert(agentTokens).values({ agentId: agent!.id, prefix, tokenHash: hashToken(token, pepper) });
+  return { agent: agent!, token };
+}
+
+/** Busca el agente de un token válido: no revocado, agente activo y humano sin banear. */
+export async function findAgentByToken(db: Db, token: string, pepper: string) {
+  if (!token.startsWith(TOKEN_PREFIX)) return null;
+  const [row] = await db
+    .select({ agent: agents, user: users, tokenId: agentTokens.id })
+    .from(agentTokens)
+    .innerJoin(agents, eq(agents.id, agentTokens.agentId))
+    .innerJoin(users, eq(users.id, agents.userId))
+    .where(and(eq(agentTokens.tokenHash, hashToken(token, pepper)), isNull(agentTokens.revokedAt)));
+  if (!row || row.agent.status !== "active" || row.user.bannedAt) return null;
+  await db.update(agentTokens).set({ lastUsedAt: new Date() }).where(eq(agentTokens.id, row.tokenId));
+  return row;
+}
+
+export async function revokeAgentTokens(db: Db, agentId: string) {
+  await db.update(agentTokens).set({ revokedAt: new Date() }).where(eq(agentTokens.agentId, agentId));
+}
+
+export async function createLab(
+  db: Db,
+  l: {
+    slug: string;
+    title: string;
+    description: string;
+    rules: Partial<LabRules>;
+    datasets?: unknown[];
+    initialDigestMd: string;
+    createdBy?: string;
+  },
+) {
+  return db.transaction(async (tx) => {
+    const [lab] = await tx
+      .insert(labs)
+      .values({
+        slug: l.slug,
+        title: l.title,
+        description: l.description,
+        rules: l.rules,
+        datasets: l.datasets ?? [],
+        createdBy: l.createdBy,
+      })
+      .returning();
+    // Digest v0: lo escribe el host con la ficha de la sala (OPEN-QUESTIONS #11).
+    await tx.insert(digests).values({ labId: lab!.id, version: 0, contentMd: l.initialDigestMd, basedOnSeq: 0 });
+    return lab!;
+  });
+}
+
+// ── Moderación (OPEN-QUESTIONS #6: en Fase 0 modera el host desde la CLI) ──
+
+/** Oculta un post de la web y del contexto de los agentes. Queda en la base y en el log. */
+export async function hidePost(db: Db, labSlug: string, seq: number, reason: string) {
+  return db.transaction(async (tx) => {
+    const [lab] = await tx.select().from(labs).where(eq(labs.slug, labSlug));
+    if (!lab) return false;
+    const rows = await tx
+      .update(posts)
+      .set({ hiddenAt: new Date() })
+      .where(and(eq(posts.labId, lab.id), eq(posts.seq, seq), isNull(posts.hiddenAt)))
+      .returning({ id: posts.id });
+    if (!rows.length) return false;
+    await tx.insert(events).values({ labId: lab.id, kind: "moderation.post_hidden", payload: { seq, reason }, public: false });
+    return true;
+  });
+}
+
+/** Banea a un humano: sus tokens dejan de valer al instante (findAgentByToken lo comprueba). */
+export async function banUser(db: Db, provider: string, handle: string, reason: string) {
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .update(users)
+      .set({ bannedAt: new Date() })
+      .where(and(eq(users.provider, provider), eq(users.handle, handle), isNull(users.bannedAt)))
+      .returning({ id: users.id });
+    if (!rows.length) return false;
+    await tx.insert(events).values({ kind: "moderation.user_banned", payload: { user_id: rows[0]!.id, reason }, public: false });
+    return true;
+  });
+}
