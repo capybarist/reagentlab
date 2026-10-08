@@ -202,6 +202,8 @@ export const claims = pgTable(
     originSeq: integer("origin_seq").notNull(),
     authorAgentId: uuid("author_agent_id").notNull().references(() => agents.id),
     authorUserId: uuid("author_user_id").notNull().references(() => users.id),
+    /** Parte independiente del autor (ADR-0023): el id del humano, o `family:<familia>`. */
+    authorParty: text("author_party").notNull(),
     kind: text("kind", { enum: ["derivation", "computation", "conjecture", "literature"] }).notNull().default("conjecture"),
     status: text("status", { enum: ["open", "supported", "adopted", "verified", "refuted"] }).notNull().default("open"),
     supportCount: integer("support_count").notNull().default(0),
@@ -218,10 +220,11 @@ export const claimSupports = pgTable(
   {
     claimId: uuid("claim_id").notNull().references(() => claims.id),
     userId: uuid("user_id").notNull().references(() => users.id),
+    party: text("party").notNull(),
     postId: uuid("post_id").notNull().references(() => posts.id),
     createdAt: ts("created_at").notNull(),
   },
-  (t) => [uniqueIndex("claim_supports_claim_user_uq").on(t.claimId, t.userId)],
+  (t) => [uniqueIndex("claim_supports_claim_party_uq").on(t.claimId, t.party)],
 );
 
 /** Refutaciones dirigidas a un claim y su dictamen (ADR-0016). */
@@ -236,10 +239,12 @@ export const refutations = pgTable(
     postSeq: integer("post_seq").notNull(),
     refuterAgentId: uuid("refuter_agent_id").notNull().references(() => agents.id),
     refuterUserId: uuid("refuter_user_id").notNull().references(() => users.id),
+    refuterParty: text("refuter_party").notNull(),
     status: text("status", { enum: ["pending", "ruled", "disputed", "accepted", "rejected"] }).notNull().default("pending"),
     provisionalVerdict: text("provisional_verdict", { enum: ["valid", "invalid"] }),
     provisionalAgentId: uuid("provisional_agent_id").references(() => agents.id),
     provisionalUserId: uuid("provisional_user_id").references(() => users.id),
+    provisionalParty: text("provisional_party"),
     provisionalReasoning: text("provisional_reasoning"),
     ruledAt: ts("ruled_at"),
     settledAt: ts("settled_at"),
@@ -261,13 +266,14 @@ export const rulings = pgTable(
     turnId: uuid("turn_id").notNull().references(() => turns.id),
     agentId: uuid("agent_id").notNull().references(() => agents.id),
     userId: uuid("user_id").notNull().references(() => users.id),
+    party: text("party").notNull(),
     verdict: text("verdict", { enum: ["valid", "invalid"] }).notNull(),
     reasoning: text("reasoning").notNull(),
     createdAt: ts("created_at").notNull(),
   },
   (t) => [
     // Un humano dictamina cada refutación como mucho una vez.
-    uniqueIndex("rulings_refutation_user_uq").on(t.refutationId, t.userId),
+    uniqueIndex("rulings_refutation_party_uq").on(t.refutationId, t.party),
     index("rulings_turn_idx").on(t.turnId),
   ],
 );
@@ -287,6 +293,8 @@ export const polls = pgTable(
     question: text("question").notNull(),
     /** Humanos que son parte del caso y no votan. */
     partyUserIds: uuid("party_user_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
+    /** Partes del caso, que no votan (ADR-0023). */
+    caseParties: text("case_parties").array().notNull().default(sql`ARRAY[]::text[]`),
     /** `failed_refutations` del claim al abrir el poll. */
     failedSnapshot: integer("failed_snapshot").notNull().default(0),
     status: text("status", { enum: ["open", "closed"] }).notNull().default("open"),
@@ -313,13 +321,14 @@ export const votes = pgTable(
     pollId: uuid("poll_id").notNull().references(() => polls.id),
     agentId: uuid("agent_id").notNull().references(() => agents.id),
     userId: uuid("user_id").notNull().references(() => users.id),
+    party: text("party").notNull(),
     modelFamily: text("model_family").notNull(),
     stance: text("stance", { enum: ["yes", "no"] }).notNull(),
     reasoning: text("reasoning").notNull(),
     weight: doublePrecision("weight").notNull(),
     createdAt: ts("created_at").notNull(),
   },
-  (t) => [uniqueIndex("votes_poll_user_uq").on(t.pollId, t.userId)],
+  (t) => [uniqueIndex("votes_poll_party_uq").on(t.pollId, t.party)],
 );
 
 /** Eventos de reputación (VISION §16, ADR-0018). `users.reputation` es su suma. */

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { type TallyVote, adoptionDue, disputeDue, labStatusFor, tallyPoll, voteBlock, voteWeight } from "../src/index.js";
 
 const opts = { familyCap: 0.3, minFamilies: 3 };
-const v = (userId: string, modelFamily: string, stance: "yes" | "no", weight = 1): TallyVote => ({
-  userId,
+const v = (party: string, modelFamily: string, stance: "yes" | "no", weight = 1): TallyVote => ({
+  party,
   modelFamily,
   stance,
   weight,
@@ -82,8 +82,8 @@ describe("cuándo se abre un poll", () => {
     expect(adoptionDue(supported, { ...base, hasOpenPoll: true })).toBe(false);
   });
 
-  it("un claim literature nunca va a poll de adopción (ADR-0019)", () => {
-    expect(adoptionDue({ ...supported, kind: "literature" }, base)).toBe(false);
+  it("un claim que la plantilla no adopta (literature) nunca va a poll (ADR-0019)", () => {
+    expect(adoptionDue({ ...supported, adoptable: false }, base)).toBe(false);
     for (const kind of ["derivation", "computation", "conjecture"] as const) {
       expect(adoptionDue({ ...supported, kind }, base)).toBe(true);
     }

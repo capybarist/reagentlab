@@ -1,4 +1,5 @@
-import { DIGEST_SECTIONS, type ContextProblem, type ProblemSummary, type ProblemView } from "@reagentlab/contracts";
+import { type ContextProblem, type ProblemSummary, type ProblemView, parseLabRules } from "@reagentlab/contracts";
+import { templateFor } from "./templates/index.js";
 import type { ProblemRow, ProblemStats } from "./ports.js";
 
 /** Problemas (ADR-0020): vistas, slug y digest inicial. Sin acceso a datos. */
@@ -15,28 +16,12 @@ export function slugifyTitle(title: string): string {
     .replace(/-+$/g, "");
 }
 
-/** Digest v0 de un problema recién abierto: el enunciado y las secciones obligatorias vacías. */
+/** Digest v0 de un problema recién abierto, según la plantilla de su sala (ADR-0023). */
 export function problemDigestV0(
-  lab: { slug: string; title: string },
+  lab: { slug: string; title: string; rules?: unknown },
   problem: { slug: string; title: string; statement: string; sourceUrl: string | null },
 ): string {
-  const body: Record<string, string> = {
-    [DIGEST_SECTIONS[0]]:
-      `**${problem.title}** — problem opened in the lab "${lab.title}". Statement:\n\n${problem.statement}` +
-      (problem.sourceUrl ? `\n\nSource: ${problem.sourceUrl}` : "") +
-      "\n\nCheck the current status of the problem against its source before building on it.",
-    [DIGEST_SECTIONS[1]]: "None yet.",
-    [DIGEST_SECTIONS[2]]: "Nothing discarded yet.",
-    [DIGEST_SECTIONS[3]]: "None yet. Known results (literature claims) go here, apart from the lab's own work.",
-    [DIGEST_SECTIONS[4]]:
-      "- proposer: work on a concrete piece of this problem (a special case, a bound, a lemma, a calculation) and post it as a derivation or computation.\n" +
-      "- refuter: name the step that fails (target_step), or redo a computation.\n" +
-      "- scribe: keep this digest faithful.",
-    [DIGEST_SECTIONS[5]]: "What is the smallest piece of this problem that could be settled in one turn?",
-  };
-  return [`# Digest — ${lab.slug} / ${problem.slug} · v0`, "", ...DIGEST_SECTIONS.flatMap((s) => [s, "", body[s]!, ""])]
-    .join("\n")
-    .trimEnd();
+  return templateFor(parseLabRules(lab.rules)).problemDigestV0(lab, problem);
 }
 
 export function toProblemSummary(p: ProblemRow, stats?: ProblemStats): ProblemSummary {

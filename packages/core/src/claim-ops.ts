@@ -1,8 +1,10 @@
-import type { ClaimView, LabRules, RulingTaskView, Verdict } from "@reagentlab/contracts";
+import { type ClaimView, type LabRules, type RulingTaskView, type Verdict, parseLabRules } from "@reagentlab/contracts";
 import { claimTransition, isRefutationOpen, rulingBlock, settleBySilence, type RefutationState } from "./claims.js";
+import { partyOf } from "./party.js";
 import { labStatusFor } from "./polls.js";
 import { REPUTATION_POINTS } from "./reputation.js";
 import type { Actor, ClaimDetail, ClaimRow, LabRow, PostRow, RefutationRow, Repos, TurnRow } from "./ports.js";
+import { templateFor } from "./templates/index.js";
 import { toPostView } from "./views.js";
 
 /**
@@ -22,6 +24,7 @@ export async function applyPostToClaims(
   referenced: PostRow[],
   now: Date,
 ): Promise<void> {
+  const party = partyOf(actor, parseLabRules(lab.rules).independence);
   if (post.type === "hypothesis") {
     await r.insertClaim({
       labId: lab.id,
@@ -30,6 +33,7 @@ export async function applyPostToClaims(
       originSeq: post.seq,
       authorAgentId: actor.agentId,
       authorUserId: actor.userId,
+      authorParty: party,
       kind: post.claimKind ?? "conjecture",
       status: "open",
       supportCount: 0,
@@ -47,12 +51,12 @@ export async function applyPostToClaims(
   if (!hypothesisSeqs.length) return;
 
   if (post.type === "evidence") {
-    // Solo apoya quien no es el humano autor, y cada humano cuenta una vez.
+    // Solo apoya otra parte distinta de la del autor, y cada parte cuenta una vez (ADR-0023).
     const targets = (await r.getClaimsBySeq(lab.id, post.refs.filter((s) => hypothesisSeqs.includes(s)))).filter(
-      (c) => c.authorUserId !== actor.userId && c.status !== "refuted",
+      (c) => c.authorParty !== party && c.status !== "refuted",
     );
     for (const claim of targets) {
-      if (!(await r.addClaimSupport({ claimId: claim.id, userId: actor.userId, postId: post.id, createdAt: now }))) continue;
+      if (!(await r.addClaimSupport({ claimId: claim.id, userId: actor.userId, party, postId: post.id, createdAt: now }))) continue;
       const next = claimTransition(claim.status, { kind: "support" });
       await r.updateClaim(claim.id, { status: next.status, supportCount: claim.supportCount + 1, updatedAt: now });
       if (next.status !== claim.status) {
@@ -75,10 +79,12 @@ export async function applyPostToClaims(
       postSeq: post.seq,
       refuterAgentId: actor.agentId,
       refuterUserId: actor.userId,
+      refuterParty: party,
       status: "pending",
       provisionalVerdict: null,
       provisionalAgentId: null,
       provisionalUserId: null,
+      provisionalParty: null,
       provisionalReasoning: null,
       ruledAt: null,
       settledAt: null,
@@ -90,13 +96,13 @@ export async function applyPostToClaims(
   }
 }
 
-export function refutationState(ref: RefutationRow, claim: Pick<ClaimRow, "authorUserId">): RefutationState {
+export function refutationState(ref: RefutationRow, claim: Pick<ClaimRow, "authorParty">): RefutationState {
   return {
     status: ref.status,
-    refuterUserId: ref.refuterUserId,
-    claimAuthorUserId: claim.authorUserId,
+    refuterParty: ref.refuterParty,
+    claimAuthorParty: claim.authorParty,
     provisionalVerdict: ref.provisionalVerdict,
-    provisionalUserId: ref.provisionalUserId,
+    provisionalParty: ref.provisionalParty,
   };
 }
 
@@ -187,10 +193,11 @@ export async function refreshStatus(r: Repos, labId: string, problemId: string |
  * Al cerrarse un turno de verificador: los dictámenes provisionales que tenía
  * delante desde el principio del turno y que no contradijo quedan firmes (ADR-0008).
  */
-export async function settleSilentRulings(r: Repos, lab: Pick<LabRow, "id">, turn: TurnRow, now: Date): Promise<number> {
+export async function settleSilentRulings(r: Repos, lab: Pick<LabRow, "id" | "rules">, turn: TurnRow, now: Date): Promise<number> {
   if (turn.role !== "verifier") return 0;
-  const userId = (await r.getAgent(turn.agentId))?.userId;
-  if (!userId) return 0;
+  const agent = await r.getAgent(turn.agentId);
+  if (!agent) return 0;
+  const party = partyOf(agent, parseLabRules(lab.rules).independence);
   const touched = new Set(await r.listRuledInTurn(turn.id));
   const candidates = (await r.listRefutations(lab.id, ["ruled"])).filter(
     (ref) => ref.ruledAt !== null && ref.ruledAt < turn.startedAt && !touched.has(ref.id),
@@ -203,7 +210,7 @@ export async function settleSilentRulings(r: Repos, lab: Pick<LabRow, "id">, tur
     const claim = claims.get(ref.claimId);
     if (!claim) continue;
     const state = refutationState(ref, claim);
-    if (rulingBlock(state, userId)) continue;
+    if (rulingBlock(state, party)) continue;
     const settled = settleBySilence(state);
     if (!settled) continue;
     await settleRefutation(r, lab, ref, settled.status, settled.verdict, now, turn.agentId, "silence");
@@ -212,11 +219,11 @@ export async function settleSilentRulings(r: Repos, lab: Pick<LabRow, "id">, tur
   return n;
 }
 
-/** Refutaciones que este humano puede dictaminar ahora, las más antiguas primero. */
+/** Refutaciones que esta parte puede dictaminar ahora, las más antiguas primero. */
 export async function eligibleRefutations(
   r: Repos,
   labId: string,
-  userId: string,
+  party: string,
   problemId?: string,
 ): Promise<RefutationRow[]> {
   const open = await r.listRefutations(labId, ["pending", "ruled"]);
@@ -224,24 +231,25 @@ export async function eligibleRefutations(
   return open.filter((ref) => {
     const claim = claims.get(ref.claimId);
     if (!claim || (problemId && claim.problemId !== problemId)) return false;
-    return claim.status !== "refuted" && !rulingBlock(refutationState(ref, claim), userId);
+    return claim.status !== "refuted" && !rulingBlock(refutationState(ref, claim), party);
   });
 }
 
-/** Claims apoyados de otros humanos, sin refutación abierta y que aún no han resistido bastante. */
+/** Claims apoyados de otras partes, sin refutación abierta y que aún no han resistido bastante. */
 export async function refutableClaims(
   r: Repos,
   labId: string,
   rules: LabRules,
-  userId: string,
+  party: string,
   problemId?: string,
 ): Promise<number> {
   const supported = await r.listClaimDetails(labId, { statuses: ["supported"], problemId, limit: 200 });
   const refs = await r.listRefutationsForClaims(supported.map((c) => c.id));
   return supported.filter(
     (c) =>
-      c.kind !== "literature" && // un resultado conocido no necesita resistir refutaciones: no se adopta
-      c.authorUserId !== userId &&
+      // Lo que la plantilla nunca adopta (en ciencia, un resultado conocido) no necesita resistir refutaciones.
+      templateFor(rules).isAdoptable(c.kind) &&
+      c.authorParty !== party &&
       c.failedRefutations < rules.min_failed_refutations &&
       !refs.some((ref) => ref.claimId === c.id && isRefutationOpen(ref.status)),
   ).length;
@@ -279,10 +287,10 @@ export function toClaimView(c: ClaimDetail, refs: RefutationRow[]): ClaimView {
 export async function rulingTasks(
   r: Repos,
   labId: string,
-  userId: string,
+  party: string,
   problemId?: string,
 ): Promise<RulingTaskView[]> {
-  const refs = (await eligibleRefutations(r, labId, userId, problemId)).slice(0, 10);
+  const refs = (await eligibleRefutations(r, labId, party, problemId)).slice(0, 10);
   if (!refs.length) return [];
   const posts = await r.getPostsBySeq(labId, refs.map((ref) => ref.postSeq));
   const claims = await r.listClaimDetails(labId, { seqs: refs.map((ref) => ref.claimSeq), limit: refs.length });

@@ -182,6 +182,16 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   `hubble-tension`), `physics-anomalies` y `computation`. `pnpm admin seed` crea y pone al día las salas del host
   (`ensureLab`, renombra con `formerSlugs`) y los textos de sus problemas, sin tocar los propuestos.
 
+- **Motor genérico** ([ADR-0023](docs/adr/0023-motor-generico-plantillas-e-independencia.md), 2026-10-08):
+  `rules.independence` (`human` por defecto, o `model_family` para instalaciones privadas) y
+  `partyOf` en core: apoyos, refutaciones, dictámenes, partes de poll y votos comparan **partes**,
+  guardadas en la base (migración `0009_independence_party`, rellena con el id del humano).
+  `rules.template` (solo `science`) elige `core/templates/science.ts`: secciones del digest,
+  instrucciones de rol, tipos de claim y validaciones de dominio. Lo que falta está en el ADR.
+- **Rama `feat/google-email-login`** (ADR-0022, sin integrar ni desplegar): login con Google y
+  email. Su migración también se llama `0009`: al integrarla, regenerarla como `0010` y con
+  `CREATE TABLE IF NOT EXISTS` (la base local de Enrique ya tiene esas tablas).
+
 ### Desviaciones de Fase 1 respecto a la arquitectura
 
 - Polls abiertos cuando hay algo que decidir, no "cada 20 turnos o 24 h" (ADR-0017).

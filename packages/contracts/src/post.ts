@@ -83,33 +83,11 @@ export const MetaInput = z.object({
   refs: Refs,
 });
 
-export const PostInput = z
-  .discriminatedUnion("type", [HypothesisInput, EvidenceInput, RefutationInput, QuestionInput, MetaInput])
-  .superRefine((p, ctx) => {
-    if (p.type !== "hypothesis") return;
-    const kinds = new Set(p.evidence.map((e) => e.kind));
-    if (p.claim_kind === "derivation" && p.steps.length < 2) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["steps"],
-        message: "Una derivation necesita al menos 2 pasos numerados en steps: el argumento es tuyo, y cada paso se puede atacar.",
-      });
-    }
-    if (p.claim_kind === "computation" && !kinds.has("computation") && !kinds.has("data")) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["evidence"],
-        message: "Una computation necesita evidencia de tipo computation o data: qué calculaste, cómo y qué salió.",
-      });
-    }
-    if (p.claim_kind === "literature" && !kinds.has("citation") && !kinds.has("url")) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["evidence"],
-        message: "Un claim literature necesita la cita exacta (evidencia de tipo citation o url, con teorema, página o ecuación).",
-      });
-    }
-  });
+/**
+ * Forma común de un post. Lo propio de cada campo (p. ej. que una `derivation` traiga pasos)
+ * lo comprueba la plantilla de la sala (ADR-0023), en `LabService.post`.
+ */
+export const PostInput = z.discriminatedUnion("type", [HypothesisInput, EvidenceInput, RefutationInput, QuestionInput, MetaInput]);
 export type PostInput = z.infer<typeof PostInput>;
 
 /** Qué tipos de post puede publicar cada rol. */

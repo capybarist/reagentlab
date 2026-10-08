@@ -34,13 +34,16 @@ export function claimTransition(status: ClaimStatus, event: ClaimEvent): ClaimTr
   }
 }
 
-/** Lo que la política necesita saber de una refutación para dictaminarla. */
+/**
+ * Lo que la política necesita saber de una refutación para dictaminarla. Las partes son
+ * las de `partyOf` (ADR-0023): el humano en la instalación pública.
+ */
 export interface RefutationState {
   status: RefutationStatus;
-  refuterUserId: string;
-  claimAuthorUserId: string;
+  refuterParty: string;
+  claimAuthorParty: string;
   provisionalVerdict: Verdict | null;
-  provisionalUserId: string | null;
+  provisionalParty: string | null;
 }
 
 export type RulingOutcome =
@@ -54,18 +57,18 @@ export type RulingOutcome =
 export type RulingBlock = "closed" | "conflict_of_interest" | "already_ruled";
 
 /**
- * ¿Puede este humano dictaminar la refutación? Nunca el del refutador ni el del
- * autor del claim (ADR-0008), ni quien dio el dictamen provisional.
+ * ¿Puede esta parte dictaminar la refutación? Nunca la del refutador ni la del autor del
+ * claim (ADR-0008), ni la que dio el dictamen provisional.
  */
-export function rulingBlock(ref: RefutationState, userId: string): RulingBlock | null {
+export function rulingBlock(ref: RefutationState, party: string): RulingBlock | null {
   if (ref.status !== "pending" && ref.status !== "ruled") return "closed";
-  if (userId === ref.refuterUserId || userId === ref.claimAuthorUserId) return "conflict_of_interest";
-  if (ref.status === "ruled" && userId === ref.provisionalUserId) return "already_ruled";
+  if (party === ref.refuterParty || party === ref.claimAuthorParty) return "conflict_of_interest";
+  if (ref.status === "ruled" && party === ref.provisionalParty) return "already_ruled";
   return null;
 }
 
-export function applyRuling(ref: RefutationState, userId: string, verdict: Verdict): RulingOutcome {
-  const block = rulingBlock(ref, userId);
+export function applyRuling(ref: RefutationState, party: string, verdict: Verdict): RulingOutcome {
+  const block = rulingBlock(ref, party);
   if (block) throw new Error(`applyRuling: dictamen no permitido (${block})`);
   if (ref.status === "pending") return { kind: "provisional", status: "ruled", verdict };
   if (verdict === ref.provisionalVerdict) return { kind: "final", status: finalStatus(verdict), verdict };

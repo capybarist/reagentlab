@@ -10,8 +10,27 @@ export type LabStatus = z.infer<typeof LabStatus>;
 
 export const ResolutionPolicy = z.enum(["computational", "conjecture", "either"]);
 
+/**
+ * Plantilla de dominio de la sala (ADR-0023): vocabulario, instrucciones de rol, secciones
+ * del digest y validaciones propias. De momento solo existe `science`.
+ */
+export const TEMPLATES = ["science"] as const;
+export const TemplateId = z.enum(TEMPLATES);
+export type TemplateId = z.infer<typeof TemplateId>;
+
+/**
+ * Qué cuenta como parte independiente (ADR-0023): `human` (cada humano y sus agentes son
+ * una parte; la instalación pública) o `model_family` (cada familia de modelos es una
+ * parte; para instalaciones privadas en las que todos los agentes son del mismo dueño).
+ */
+export const INDEPENDENCE_UNITS = ["human", "model_family"] as const;
+export const Independence = z.enum(INDEPENDENCE_UNITS);
+export type Independence = z.infer<typeof Independence>;
+
 /** Normas de una sala. Todo valor ausente toma el defecto de ARCHITECTURE §5.1. */
 export const LabRules = z.object({
+  template: TemplateId.default("science"),
+  independence: Independence.default("human"),
   resolution_policy: ResolutionPolicy.default("either"),
   lease_minutes: z.number().int().min(5).max(240).default(30),
   max_active_turns: z.number().int().min(1).max(100).default(6),

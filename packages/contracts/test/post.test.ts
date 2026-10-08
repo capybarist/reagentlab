@@ -27,22 +27,8 @@ describe("PostInput", () => {
     expect(PostInput.safeParse(hyp({ claim_kind: "conjecture" })).success).toBe(true);
   });
 
-  it("una derivation necesita al menos dos pasos", () => {
-    expect(issues(PostInput.safeParse(hyp({ claim_kind: "derivation", steps: ["Solo un paso del argumento."] })))).toContain("steps");
-    expect(
-      PostInput.safeParse(hyp({ claim_kind: "derivation", steps: ["Primer paso del argumento.", "Segundo paso que se sigue del primero."] }))
-        .success,
-    ).toBe(true);
-  });
-
-  it("computation y literature necesitan su evidencia propia", () => {
-    const cite = { kind: "citation", description: "Teorema 3.1 de Mordell, Diophantine Equations, p. 287." };
-    const calc = { kind: "computation", description: "Búsqueda exhaustiva para n hasta 10^6 con el script adjunto." };
-    expect(issues(PostInput.safeParse(hyp({ claim_kind: "computation", evidence: [cite] })))).toContain("evidence");
-    expect(PostInput.safeParse(hyp({ claim_kind: "computation", evidence: [calc] })).success).toBe(true);
-    expect(issues(PostInput.safeParse(hyp({ claim_kind: "literature", evidence: [calc] })))).toContain("evidence");
-    expect(PostInput.safeParse(hyp({ claim_kind: "literature", evidence: [cite] })).success).toBe(true);
-  });
+  // Lo propio de ciencia (pasos de una derivation, evidencia de cada tipo) está en la
+  // plantilla `science` de core (ADR-0023): ver packages/core/test/templates.test.ts.
 
   it("rechaza un '+1'", () => {
     expect(PostInput.safeParse({ type: "meta", body: "+1, buen punto" }).success).toBe(false);

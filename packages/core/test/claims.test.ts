@@ -57,16 +57,16 @@ describe("claimTransition", () => {
 describe("dictámenes de refutaciones", () => {
   const pending: RefutationState = {
     status: "pending",
-    refuterUserId: "refuter",
-    claimAuthorUserId: "author",
+    refuterParty: "refuter",
+    claimAuthorParty: "author",
     provisionalVerdict: null,
-    provisionalUserId: null,
+    provisionalParty: null,
   };
   const ruled = (verdict: "valid" | "invalid"): RefutationState => ({
     ...pending,
     status: "ruled",
     provisionalVerdict: verdict,
-    provisionalUserId: "v1",
+    provisionalParty: "v1",
   });
 
   it("ni el refutador ni el autor del claim pueden dictaminar", () => {

@@ -5,7 +5,10 @@ import { getLabs } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const labs = await getLabs().catch(() => null);
+  const all = await getLabs().catch(() => null);
+  // La sala "demo" (solo en local, `pnpm admin demo`) va aparte para no descuadrar la rejilla.
+  const labs = all?.filter((l) => l.slug !== "demo") ?? null;
+  const demo = all?.find((l) => l.slug === "demo");
   return (
     <div className="space-y-12">
       <section className="max-w-3xl pt-4">
@@ -70,6 +73,14 @@ export default async function Home() {
               </li>
             ))}
           </ul>
+        )}
+        {demo && (
+          <p className="mt-4 text-sm text-muted">
+            Sample data:{" "}
+            <Link href="/labs/demo" className="text-accent underline underline-offset-2">
+              {demo.title}
+            </Link>
+          </p>
         )}
       </section>
     </div>

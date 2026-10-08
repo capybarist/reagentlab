@@ -54,7 +54,9 @@ import { postContentHash } from "./hashing.js";
 import { postSigningMessage, type Signer } from "./signing.js";
 import type { Actor, Clock, EventRow, LabRow, PostRow, ProblemRow, Repos, Store, TurnRow } from "./ports.js";
 import { systemClock } from "./ports.js";
-import { ROLE_INSTRUCTIONS, assignRole } from "./roles.js";
+import { partyOf } from "./party.js";
+import { assignRole } from "./roles.js";
+import { templateFor } from "./templates/index.js";
 import { isUrlAllowed, sanitizeUntrusted } from "./sanitize.js";
 import { toDigestView, toPostView } from "./views.js";
 
@@ -465,8 +467,10 @@ export class LabService {
     const now = this.clock.now();
     return this.store.transaction(async (r) => {
       const expired = await r.expireTurns(now);
+      const labs = expired.length ? await r.listLabs() : [];
       for (const t of expired) {
-        await settleSilentRulings(r, { id: t.labId }, t, now);
+        const lab = labs.find((l) => l.id === t.labId);
+        if (lab) await settleSilentRulings(r, lab, t, now);
         await r.insertEvent({
           labId: t.labId,
           kind: "turn.expired",
@@ -496,6 +500,17 @@ export class LabService {
         const lab = await requireLab(r, slug, true);
         const rules = parseLabRules(lab.rules);
         const { turn, problem } = await requireProblemTurn(r, lab, actor, now);
+
+        // Lo propio del campo (p. ej. que una derivation traiga pasos) lo valida la plantilla (ADR-0023).
+        const domainIssues = templateFor(rules).checkPost(input);
+        if (domainIssues.length) {
+          throw new DomainError(
+            "VALIDATION_FAILED",
+            "La entrada no cumple el formato exigido.",
+            "Corrige los campos indicados en `details` y vuelve a intentarlo.",
+            domainIssues,
+          );
+        }
 
         if (!ROLE_POST_TYPES[turn.role].includes(input.type)) {
           throw new DomainError(
@@ -537,7 +552,8 @@ export class LabService {
         const targetStep = input.type === "refutation" ? (input.target_step ?? null) : null;
         if (input.type === "refutation") {
           const target = found.find((p) => p.seq === input.target_seq)!;
-          const steps = target.claimKind === "derivation" ? target.steps.length : 0;
+          const steppedKinds = templateFor(rules).steppedKinds;
+          const steps = target.claimKind && steppedKinds.includes(target.claimKind) ? target.steps.length : 0;
           if (steps && (targetStep === null || targetStep > steps)) {
             throw new DomainError(
               "STEP_REQUIRED",
@@ -659,8 +675,9 @@ export class LabService {
           "Usa el seq de un post de `rulings_needed` en tu paquete de contexto.",
         );
       }
+      const party = partyOf(actor, rules.independence);
       const state = refutationState(ref, claim);
-      const block = claim.status === "refuted" ? "closed" : rulingBlock(state, actor.userId);
+      const block = claim.status === "refuted" ? "closed" : rulingBlock(state, party);
       if (block === "closed") {
         throw new DomainError("REFUTATION_CLOSED", `La refutación ${ref.postSeq} ya no admite dictámenes (${ref.status}).`);
       }
@@ -668,18 +685,19 @@ export class LabService {
         throw new DomainError(
           "CONFLICT_OF_INTEREST",
           block === "already_ruled"
-            ? "Tu humano ya dio el dictamen provisional de esta refutación."
-            : "No puedes dictaminar una refutación en la que tu humano es el refutador o el autor del claim.",
+            ? "Tu parte (tu humano, o tu familia de modelos según la sala) ya dio el dictamen provisional de esta refutación."
+            : "No puedes dictaminar una refutación en la que tu parte (tu humano, o tu familia de modelos según la sala) es el refutador o el autor del claim.",
         );
       }
 
       const reasoning = sanitizeUntrusted(input.reasoning);
-      const outcome = applyRuling(state, actor.userId, input.verdict);
+      const outcome = applyRuling(state, party, input.verdict);
       await r.insertRuling({
         refutationId: ref.id,
         turnId: turn.id,
         agentId: actor.agentId,
         userId: actor.userId,
+        party,
         verdict: input.verdict,
         reasoning,
         createdAt: now,
@@ -697,6 +715,7 @@ export class LabService {
           provisionalVerdict: outcome.verdict,
           provisionalAgentId: actor.agentId,
           provisionalUserId: actor.userId,
+          provisionalParty: party,
           provisionalReasoning: reasoning,
           ruledAt: now,
         });
@@ -743,9 +762,10 @@ export class LabService {
       if (poll.status !== "open" || poll.closesAt <= now) {
         throw new DomainError("POLL_CLOSED", "El poll ya está cerrado.");
       }
-      const block = voteBlock(poll.partyUserIds, actor.userId, await r.hasVoted(poll.id, actor.userId));
+      const party = partyOf(actor, rules.independence);
+      const block = voteBlock(poll.caseParties, party, await r.hasVoted(poll.id, party));
       if (block === "party_to_the_case") {
-        throw new DomainError("CONFLICT_OF_INTEREST", "Tu humano es parte de este caso y no puede votar en él.");
+        throw new DomainError("CONFLICT_OF_INTEREST", "Tu parte (tu humano, o tu familia de modelos según la sala) es parte de este caso y no puede votar en él.");
       }
       const inserted =
         !block &&
@@ -753,6 +773,7 @@ export class LabService {
           pollId: poll.id,
           agentId: actor.agentId,
           userId: actor.userId,
+          party,
           modelFamily: actor.modelFamily,
           stance: input.stance,
           reasoning: sanitizeUntrusted(input.reasoning),
@@ -760,7 +781,7 @@ export class LabService {
           createdAt: now,
         }));
       if (!inserted) {
-        throw new DomainError("ALREADY_VOTED", "Tu humano ya ha votado en este poll (un voto por humano, ADR-0011).");
+        throw new DomainError("ALREADY_VOTED", "Tu parte ya ha votado en este poll (un voto por parte, ADR-0011 y ADR-0023).");
       }
       await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
       // El evento no lleva la postura: el voto es a ciegas hasta el cierre.
@@ -812,7 +833,7 @@ export class LabService {
       if (turn.role !== "scribe") {
         throw new DomainError("ROLE_FORBIDS_ACTION", "Solo el escriba del turno puede escribir el digest.");
       }
-      const missing = missingDigestSections(input.content_md);
+      const missing = missingDigestSections(input.content_md, templateFor(rules).digestSections);
       if (missing.length) {
         throw new DomainError("DIGEST_INVALID", "Al digest le faltan secciones obligatorias.", undefined, { missing });
       }
@@ -916,8 +937,8 @@ export class LabService {
       postsSinceDigest: await r.countProblemPostsAfter(problem.id, digest?.basedOnSeq ?? 0),
       digestStaleAfter: rules.digest_stale_after_posts,
       hasActiveScribe: await r.hasActiveScribe(problem.id, now),
-      rulingsAvailable: (await eligibleRefutations(r, lab.id, actor.userId, problem.id)).length,
-      refutableClaims: await refutableClaims(r, lab.id, rules, actor.userId, problem.id),
+      rulingsAvailable: (await eligibleRefutations(r, lab.id, partyOf(actor, rules.independence), problem.id)).length,
+      refutableClaims: await refutableClaims(r, lab.id, rules, partyOf(actor, rules.independence), problem.id),
     };
   }
 
@@ -972,7 +993,7 @@ export class LabService {
       const role = assignRole(await this.roleInput(r, lab, rules, actor, now, problem), lastInLab.role);
       if (role === "scribe") candidates.push({ problem, reason: "scribe_needed", repliesToYou: [] });
       else if (role === "verifier") candidates.push({ problem, reason: "ruling_needed", repliesToYou: [] });
-      else if ((await openPollViews(r, lab.id, actor.userId, now, problem.id)).some((p) => p.you_can_vote)) {
+      else if ((await openPollViews(r, lab.id, partyOf(actor, rules.independence), now, problem.id)).some((p) => p.you_can_vote)) {
         candidates.push({ problem, reason: "vote_needed", repliesToYou: [] });
       } else if (fresh.length >= rules.new_posts_to_wake) {
         candidates.push({ problem, reason: "new_posts", repliesToYou: [] });
@@ -1032,7 +1053,7 @@ export class LabService {
       rules,
       problem: toContextProblem(problem),
       role: turn.role,
-      role_instructions: ROLE_INSTRUCTIONS[turn.role],
+      role_instructions: templateFor(rules).roleInstructions[turn.role],
       turn: {
         id: turn.id,
         lease_expires_at: turn.leaseExpiresAt.toISOString(),
@@ -1045,8 +1066,8 @@ export class LabService {
         next_cursor: lab.nextSeq - 1,
       },
       claims: await contextClaims(r, lab.id, problem.id),
-      rulings_needed: turn.role === "verifier" ? await rulingTasks(r, lab.id, actor.userId, problem.id) : [],
-      open_polls: await openPollViews(r, lab.id, actor.userId, now, problem.id),
+      rulings_needed: turn.role === "verifier" ? await rulingTasks(r, lab.id, partyOf(actor, rules.independence), problem.id) : [],
+      open_polls: await openPollViews(r, lab.id, partyOf(actor, rules.independence), now, problem.id),
       other_problems: others,
     };
   }

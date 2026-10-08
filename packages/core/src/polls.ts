@@ -1,9 +1,10 @@
-import type { ClaimKind, ClaimStatus, LabStatus, PollOutcome, PollResult, Stance } from "@reagentlab/contracts";
+import type { ClaimStatus, LabStatus, PollOutcome, PollResult, Stance } from "@reagentlab/contracts";
 
 /** Políticas puras de los polls (ADR-0011, ADR-0017). */
 
 export interface TallyVote {
-  userId: string;
+  /** Parte que vota (ADR-0023): un voto por parte. */
+  party: string;
   modelFamily: string;
   stance: Stance;
   weight: number;
@@ -16,9 +17,9 @@ export interface TallyVote {
  * se tumba nada por la mínima).
  */
 export function tallyPoll(votes: readonly TallyVote[], opts: { familyCap: number; minFamilies: number }): PollResult {
-  const byUser = new Map<string, TallyVote>();
-  for (const v of votes) if (!byUser.has(v.userId)) byUser.set(v.userId, v); // un voto por humano
-  const unique = [...byUser.values()];
+  const byParty = new Map<string, TallyVote>();
+  for (const v of votes) if (!byParty.has(v.party)) byParty.set(v.party, v); // un voto por parte
+  const unique = [...byParty.values()];
 
   const total = unique.reduce((s, v) => s + v.weight, 0);
   const familyWeight = new Map<string, number>();
@@ -47,8 +48,8 @@ export function voteWeight(reputation: number): number {
 export type VoteBlock = "already_voted" | "party_to_the_case";
 
 /** Las partes del caso (autor del claim; en disputas también refutador y verificadores) no votan. */
-export function voteBlock(partyUserIds: readonly string[], userId: string, alreadyVoted: boolean): VoteBlock | null {
-  if (partyUserIds.includes(userId)) return "party_to_the_case";
+export function voteBlock(caseParties: readonly string[], party: string, alreadyVoted: boolean): VoteBlock | null {
+  if (caseParties.includes(party)) return "party_to_the_case";
   if (alreadyVoted) return "already_voted";
   return null;
 }
@@ -65,11 +66,11 @@ export interface LastPoll {
  * se repite si ha resistido más refutaciones; tras `no_quorum`, pasado otro periodo.
  */
 export function adoptionDue(
-  claim: { status: ClaimStatus; failedRefutations: number; kind?: ClaimKind },
+  claim: { status: ClaimStatus; failedRefutations: number; adoptable?: boolean },
   opts: { minFailed: number; hasOpenRefutation: boolean; hasOpenPoll: boolean; lastPoll: LastPoll | null; pollHours: number; now: Date },
 ): boolean {
-  // Lo ya publicado no se adopta: es un resultado conocido, no un avance de la sala (ADR-0019).
-  if (claim.kind === "literature") return false;
+  // Hay tipos de claim que la plantilla nunca adopta, como `literature` en ciencia (ADR-0019).
+  if (claim.adoptable === false) return false;
   if (claim.status !== "supported" || opts.hasOpenRefutation || opts.hasOpenPoll) return false;
   if (claim.failedRefutations < opts.minFailed) return false;
   return retryAllowed(opts.lastPoll, claim.failedRefutations, opts.pollHours, opts.now);

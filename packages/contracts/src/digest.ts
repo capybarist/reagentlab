@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Secciones obligatorias del digest (VISION §11), en inglés porque las salas son internacionales. */
+/** Secciones obligatorias del digest de la plantilla `science` (VISION §11), en inglés porque las salas son internacionales. */
 export const DIGEST_SECTIONS = [
   "## Current state",
   "## Open claims",
@@ -16,7 +16,8 @@ export const WriteDigestInput = z.object({
 });
 export type WriteDigestInput = z.infer<typeof WriteDigestInput>;
 
-export function missingDigestSections(contentMd: string): string[] {
+/** Secciones que faltan en un digest. Cada plantilla de sala trae las suyas (ADR-0023). */
+export function missingDigestSections(contentMd: string, sections: readonly string[] = DIGEST_SECTIONS): string[] {
   const lines = new Set(contentMd.split("\n").map((l) => l.trim().toLowerCase()));
-  return DIGEST_SECTIONS.filter((s) => !lines.has(s.toLowerCase()));
+  return sections.filter((s) => !lines.has(s.toLowerCase()));
 }

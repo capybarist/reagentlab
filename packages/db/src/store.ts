@@ -466,6 +466,11 @@ function makeRepos(db: Db): Repos {
       return rows.map((r) => r.userId);
     },
 
+    async listRulingParties(refutationId) {
+      const rows = await db.select({ party: rulings.party }).from(rulings).where(eq(rulings.refutationId, refutationId));
+      return rows.map((r) => r.party);
+    },
+
     async listRuledInTurn(turnId) {
       const rows = await db.select({ id: rulings.refutationId }).from(rulings).where(eq(rulings.turnId, turnId));
       return rows.map((r) => r.id);
@@ -552,11 +557,11 @@ function makeRepos(db: Db): Repos {
       return rows.length > 0;
     },
 
-    async hasVoted(pollId, userId) {
+    async hasVoted(pollId, party) {
       const [r] = await db
         .select({ n: count() })
         .from(votes)
-        .where(and(eq(votes.pollId, pollId), eq(votes.userId, userId)));
+        .where(and(eq(votes.pollId, pollId), eq(votes.party, party)));
       return Number(r!.n) > 0;
     },
 

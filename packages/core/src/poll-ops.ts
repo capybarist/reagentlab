@@ -4,6 +4,7 @@ import { claimTransition, isRefutationOpen } from "./claims.js";
 import { adoptionDue, disputeDue, tallyPoll, voteBlock, type LastPoll } from "./polls.js";
 import type { LabRow, PollRow, Repos } from "./ports.js";
 import { REPUTATION_POINTS } from "./reputation.js";
+import { templateFor } from "./templates/index.js";
 
 /**
  * Apertura, cierre y vista de los polls (ADR-0011, ADR-0017). Internos de
@@ -27,6 +28,7 @@ export async function openDuePolls(r: Repos, lab: LabRow, rules: LabRules, now: 
     const [claim] = await r.getClaimsBySeq(lab.id, [ref.claimSeq]);
     if (!claim || claim.status === "refuted") continue;
     const rulers = await r.listRulingUsers(ref.id);
+    const rulerParties = await r.listRulingParties(ref.id);
     const poll = await r.insertPoll({
       labId: lab.id,
       problemId: claim.problemId,
@@ -37,6 +39,7 @@ export async function openDuePolls(r: Repos, lab: LabRow, rules: LabRules, now: 
       refutationSeq: ref.postSeq,
       question: `Two verifiers disagree. Is refutation #${ref.postSeq} of claim #${claim.originSeq} valid? yes = the claim is refuted.`,
       partyUserIds: [...new Set([claim.authorUserId, ref.refuterUserId, ...rulers])],
+      caseParties: [...new Set([claim.authorParty, ref.refuterParty, ...rulerParties])],
       failedSnapshot: claim.failedRefutations,
       status: "open",
       opensAt: now,
@@ -57,7 +60,7 @@ export async function openDuePolls(r: Repos, lab: LabRow, rules: LabRules, now: 
     if (free <= 0) return opened;
     const previous = await r.listPolls(lab.id, { claimIds: [claim.id], limit: 20 });
     const lastAdoption = previous.find((p) => p.kind === "adopt_claim");
-    const due = adoptionDue(claim, {
+    const due = adoptionDue({ ...claim, adoptable: templateFor(rules).isAdoptable(claim.kind) }, {
       minFailed: rules.min_failed_refutations,
       hasOpenRefutation: refs.some((ref) => ref.claimId === claim.id && isRefutationOpen(ref.status)),
       hasOpenPoll: previous.some((p) => p.status === "open"),
@@ -76,8 +79,10 @@ export async function openDuePolls(r: Repos, lab: LabRow, rules: LabRules, now: 
       refutationSeq: null,
       question:
         `Should claim #${claim.originSeq} be adopted as the lab's working conjecture? It has support from ` +
-        `${claim.supportCount} other human(s) and survived ${claim.failedRefutations} refutation(s).`,
+        `${claim.supportCount} other ${rules.independence === "human" ? "human(s)" : "model family(ies)"} and survived ` +
+        `${claim.failedRefutations} refutation(s).`,
       partyUserIds: [claim.authorUserId],
+      caseParties: [claim.authorParty],
       failedSnapshot: claim.failedRefutations,
       status: "open",
       opensAt: now,
@@ -174,11 +179,11 @@ export async function pollViews(r: Repos, labId: string, rows: PollRow[], withVo
   return out;
 }
 
-/** Polls abiertos tal como los ve un agente: sin recuentos y con si su humano puede votar. */
+/** Polls abiertos tal como los ve un agente: sin recuentos y con si su parte puede votar. */
 export async function openPollViews(
   r: Repos,
   labId: string,
-  userId: string,
+  party: string,
   now: Date,
   problemId?: string,
 ): Promise<OpenPollView[]> {
@@ -187,7 +192,7 @@ export async function openPollViews(
   const out: OpenPollView[] = [];
   for (const v of views) {
     const row = rows.find((p) => p.id === v.id)!;
-    const block = voteBlock(row.partyUserIds, userId, await r.hasVoted(row.id, userId));
+    const block = voteBlock(row.caseParties, party, await r.hasVoted(row.id, party));
     out.push(block ? { ...v, you_can_vote: false, cannot_vote_reason: block } : { ...v, you_can_vote: true });
   }
   return out;

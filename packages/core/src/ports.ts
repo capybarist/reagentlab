@@ -139,6 +139,8 @@ export interface ClaimRow {
   originSeq: number;
   authorAgentId: string;
   authorUserId: string;
+  /** Parte independiente del autor (ADR-0023). */
+  authorParty: string;
   kind: ClaimKind;
   status: ClaimStatus;
   supportCount: number;
@@ -164,10 +166,12 @@ export interface RefutationRow {
   postSeq: number;
   refuterAgentId: string;
   refuterUserId: string;
+  refuterParty: string;
   status: RefutationStatus;
   provisionalVerdict: Verdict | null;
   provisionalAgentId: string | null;
   provisionalUserId: string | null;
+  provisionalParty: string | null;
   provisionalReasoning: string | null;
   ruledAt: Date | null;
   settledAt: Date | null;
@@ -180,6 +184,7 @@ export interface RulingRow {
   turnId: string;
   agentId: string;
   userId: string;
+  party: string;
   verdict: Verdict;
   reasoning: string;
   createdAt: Date;
@@ -244,8 +249,8 @@ export interface Repos {
     labId: string,
     opts: { statuses?: ClaimStatus[]; seqs?: number[]; problemId?: string; limit: number },
   ): Promise<ClaimDetail[]>;
-  /** Apunta el apoyo de un humano a un claim. Devuelve false si ese humano ya lo apoyaba. */
-  addClaimSupport(support: { claimId: string; userId: string; postId: string; createdAt: Date }): Promise<boolean>;
+  /** Apunta el apoyo de una parte a un claim. Devuelve false si esa parte ya lo apoyaba. */
+  addClaimSupport(support: { claimId: string; userId: string; party: string; postId: string; createdAt: Date }): Promise<boolean>;
 
   insertRefutation(ref: Omit<RefutationRow, "id">): Promise<RefutationRow>;
   getRefutationBySeq(labId: string, postSeq: number): Promise<RefutationRow | null>;
@@ -254,7 +259,14 @@ export interface Repos {
     patch: Partial<
       Pick<
         RefutationRow,
-        "status" | "provisionalVerdict" | "provisionalAgentId" | "provisionalUserId" | "provisionalReasoning" | "ruledAt" | "settledAt"
+        | "status"
+        | "provisionalVerdict"
+        | "provisionalAgentId"
+        | "provisionalUserId"
+        | "provisionalParty"
+        | "provisionalReasoning"
+        | "ruledAt"
+        | "settledAt"
       >
     >,
   ): Promise<void>;
@@ -265,6 +277,8 @@ export interface Repos {
   insertRuling(ruling: Omit<RulingRow, "id">): Promise<RulingRow>;
   /** Humanos que han dictaminado una refutación. */
   listRulingUsers(refutationId: string): Promise<string[]>;
+  /** Partes que han dictaminado una refutación (ADR-0023). */
+  listRulingParties(refutationId: string): Promise<string[]>;
   /** Refutaciones que este turno ya ha dictaminado. */
   listRuledInTurn(turnId: string): Promise<string[]>;
 
@@ -299,9 +313,9 @@ export interface Repos {
   /** Polls abiertos con el plazo vencido, de todas las salas. */
   listDuePolls(now: Date): Promise<PollRow[]>;
   updatePoll(id: string, patch: Partial<Pick<PollRow, "status" | "result" | "closedAt">>): Promise<void>;
-  /** Guarda el voto. Devuelve false si ese humano ya había votado en el poll. */
+  /** Guarda el voto. Devuelve false si esa parte ya había votado en el poll. */
   insertVote(vote: Omit<VoteRow, "id">): Promise<boolean>;
-  hasVoted(pollId: string, userId: string): Promise<boolean>;
+  hasVoted(pollId: string, party: string): Promise<boolean>;
   /**
    * Votos de un poll CERRADO, con el nombre del agente. Para un poll abierto devuelve
    * siempre [] (ADR-0011): es la única vía de lectura de votos.
@@ -343,6 +357,8 @@ export interface PollRow {
   refutationSeq: number | null;
   question: string;
   partyUserIds: string[];
+  /** Partes del caso, que no votan (ADR-0023). */
+  caseParties: string[];
   failedSnapshot: number;
   status: PollStatus;
   opensAt: Date;
@@ -356,6 +372,7 @@ export interface VoteRow {
   pollId: string;
   agentId: string;
   userId: string;
+  party: string;
   modelFamily: string;
   stance: Stance;
   reasoning: string;
