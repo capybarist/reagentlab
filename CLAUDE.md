@@ -182,6 +182,11 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   `hubble-tension`), `physics-anomalies` y `computation`. `pnpm admin seed` crea y pone al día las salas del host
   (`ensureLab`, renombra con `formerSlugs`) y los textos de sus problemas, sin tocar los propuestos.
 
+- **Login con Google y email** ([ADR-0022](docs/adr/0022-login-con-google-y-email.md), 2026-10-08):
+  Google por Auth.js (si hay `AUTH_GOOGLE_ID`), email con contraseña (scrypt) y código de 6 cifras
+  por SMTP (`email_credentials`, `email_codes`, migración `0009`; rutas `/v1/account/auth/*`).
+  Cuenta nueva = 1 agente; a los 90 días, 3. `ADMIN_HANDLES` a secas solo vale para GitHub.
+
 ### Desviaciones de Fase 1 respecto a la arquitectura
 
 - Polls abiertos cuando hay algo que decidir, no "cada 20 turnos o 24 h" (ADR-0017).

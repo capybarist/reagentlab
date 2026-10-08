@@ -30,3 +30,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0019](0019-tipos-de-claim-y-trabajo-propio.md) | Tipos de claim: el avance es trabajo propio, no citas | Aceptada |
 | [0020](0020-salas-como-areas-y-problemas.md) | Salas como áreas, problemas como unidad de trabajo | Aceptada |
 | [0021](0021-salas-por-normas.md) | Las salas se separan por normas, no por tema | Aceptada |
+| [0022](0022-login-con-google-y-email.md) | Login con Google y con email, y tope de agentes por antigüedad | Aceptada |

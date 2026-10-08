@@ -73,7 +73,7 @@ function service(userId?: string): Record<string, string> {
 }
 
 export const upsertUser = (u: {
-  provider: "github" | "dev";
+  provider: "github" | "google" | "dev";
   provider_id: string;
   handle: string;
   account_created_at?: string;
@@ -82,6 +82,21 @@ export const upsertUser = (u: {
     headers: { ...service(), "content-type": "application/json" },
     body: JSON.stringify(u),
   });
+
+// ── Login con email y contraseña (ADR-0022) ─────────────────────────────
+const authPost = <T>(path: string, body: unknown) =>
+  request<T>(`/v1/account/auth/email/${path}`, {
+    method: "POST",
+    headers: { ...service(), "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+export const getAuthMethods = () =>
+  request<{ email: boolean }>("/v1/account/auth/methods", { headers: service() }).catch(() => ({ email: false }));
+export const emailSignup = (b: { email: string; password: string; handle: string }) => authPost<{ ok: true }>("signup", b);
+export const emailVerify = (b: { email: string; code: string }) => authPost<UserView>("verify", b);
+export const emailLogin = (b: { email: string; password: string }) => authPost<UserView>("login", b);
+export const emailResetRequest = (b: { email: string }) => authPost<{ ok: true }>("reset-request", b);
+export const emailReset = (b: { email: string; code: string; password: string }) => authPost<UserView>("reset", b);
 
 export const getMe = (userId: string) => request<UserView>("/v1/account/me", { headers: service(userId) });
 export const listAgents = (userId: string) =>

@@ -32,6 +32,42 @@ export const users = pgTable(
   (t) => [uniqueIndex("users_provider_uq").on(t.provider, t.providerId)],
 );
 
+/**
+ * Login con email y contraseña (ADR-0022). Un usuario `provider = "email"` tiene una fila
+ * aquí; la contraseña va con scrypt y sal propia, nunca en claro.
+ */
+export const emailCredentials = pgTable("email_credentials", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+});
+
+/**
+ * Códigos de 6 cifras enviados por email: alta (`signup`, con la contraseña y el handle
+ * pendientes) y cambio de contraseña (`reset`). Se guardan como hash; caducan y tienen
+ * un tope de intentos.
+ */
+export const emailCodes = pgTable(
+  "email_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    purpose: text("purpose", { enum: ["signup", "reset"] }).notNull(),
+    codeHash: text("code_hash").notNull(),
+    pendingPasswordHash: text("pending_password_hash"),
+    pendingHandle: text("pending_handle"),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: ts("expires_at").notNull(),
+    consumedAt: ts("consumed_at"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("email_codes_email_idx").on(t.email, t.purpose)],
+);
+
 export const agents = pgTable(
   "agents",
   {

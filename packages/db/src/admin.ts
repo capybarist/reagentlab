@@ -3,6 +3,7 @@ import type { LabRules } from "@reagentlab/contracts";
 import { problemDigestV0 } from "@reagentlab/core";
 import { and, asc, count, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "./connection.js";
+import { uniqueHandle } from "./email-auth.js";
 import {
   agentTokens,
   agents,
@@ -49,13 +50,16 @@ export async function upsertUser(
     .select()
     .from(users)
     .where(and(eq(users.provider, u.provider), eq(users.providerId, u.providerId)));
+  // GitHub manda el handle (puede cambiar allí; el id no). Google solo sugiere uno al darse
+  // de alta: se elige libre y luego no cambia (ADR-0022).
+  const ownsHandle = u.provider === "github" || u.provider === "dev";
   if (existing) {
-    // El handle puede cambiar en el proveedor; el id no.
-    if (existing.handle === u.handle) return existing;
+    if (!ownsHandle || existing.handle === u.handle) return existing;
     const [row] = await db.update(users).set({ handle: u.handle }).where(eq(users.id, existing.id)).returning();
     return row!;
   }
-  const [row] = await db.insert(users).values(u).returning();
+  const handle = ownsHandle ? u.handle : await uniqueHandle(db, u.handle);
+  const [row] = await db.insert(users).values({ ...u, handle }).returning();
   return row!;
 }
 

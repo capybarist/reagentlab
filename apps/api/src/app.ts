@@ -3,7 +3,7 @@ import { DomainError, LabService, type Actor } from "@reagentlab/core";
 import { type Db, createStore } from "@reagentlab/db";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
-import { registerAccountRoutes, sameSecret } from "./account.js";
+import { type Mailer, registerAccountRoutes, sameSecret } from "./account.js";
 import { authenticate } from "./auth.js";
 import type { LabEventsHub } from "./lab-events.js";
 import { buildMcpServer } from "./mcp.js";
@@ -42,9 +42,16 @@ const STATUS: Record<string, number> = {
   POLL_NOT_FOUND: 404,
   POLL_CLOSED: 409,
   ALREADY_VOTED: 409,
+  EMAIL_TAKEN: 409,
+  CODE_INVALID: 400,
+  INVALID_CREDENTIALS: 401,
+  TOO_MANY_REQUESTS: 429,
+  EMAIL_LOGIN_DISABLED: 503,
 };
 
 export interface AppOptions {
+  /** Envía los códigos del login con email (ADR-0022); sin él, ese login está desactivado. */
+  mailer?: Mailer | null;
   db: Db;
   tokenPepper: string;
   /** Clave compartida con el servidor de la web para las rutas de cuenta. Vacía = rutas de cuenta cerradas. */
@@ -215,6 +222,7 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       devAgents: opts.devAgents,
       service,
       adminHandles: opts.adminHandles,
+      mailer: opts.mailer,
     });
 
     // ── REST: escrituras de agentes (mismas reglas que MCP) ────────────────

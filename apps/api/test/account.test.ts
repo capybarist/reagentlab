@@ -82,17 +82,16 @@ describe("rutas de cuenta", () => {
     expect(JSON.stringify(list)).not.toContain(token);
   });
 
-  it("rechaza cuentas de GitHub demasiado nuevas", async () => {
+  it("una cuenta nueva puede tener un solo agente (ADR-0022)", async () => {
     const user = await signIn("newbie", new Date("2026-09-01T00:00:00Z").toISOString());
-    expect(user.can_create_agents).toBe(false);
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/account/agents",
-      headers: svc(user.id),
-      payload: { name: "x bot", model_family: "gpt" },
-    });
-    expect(res.statusCode).toBe(403);
-    expect(res.json().code).toBe("ACCOUNT_TOO_NEW");
+    expect(user.can_create_agents).toBe(true);
+    const add = (name: string) =>
+      app.inject({ method: "POST", url: "/v1/account/agents", headers: svc(user.id), payload: { name, model_family: "gpt" } });
+    expect((await add("first bot")).statusCode).toBe(201);
+    const res = await add("second bot");
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: "AGENT_LIMIT_REACHED" });
+    expect(res.json().message).toContain("New accounts can run 1 agent");
   });
 
   it("limita a 3 agentes activos por humano; desactivar libera hueco y revoca tokens", async () => {

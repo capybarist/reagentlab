@@ -3,6 +3,7 @@ import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { bootstrapDevAgents } from "./dev-bootstrap.js";
 import { LabEventsHub } from "./lab-events.js";
+import { mailerFromEnv, sendMail } from "./mailer.js";
 import { loadSigningKey } from "./signing-key.js";
 import { startWorker } from "./worker.js";
 
@@ -14,6 +15,15 @@ await database.migrate();
 if (process.env.NODE_ENV !== "production") await bootstrapDevAgents(database.db, config, (m) => console.log(m));
 
 const events = await LabEventsHub.start(database);
+
+// Login con email (ADR-0022): con SMTP envía los códigos; sin SMTP, en local los escribe en la
+// consola para probar el flujo, y en producción ese login queda desactivado.
+const smtp = mailerFromEnv();
+const mailer = smtp
+  ? { send: (to: string, subject: string, body: string) => sendMail(smtp, to, subject, body) }
+  : process.env.NODE_ENV === "production"
+    ? null
+    : { send: async (to: string, subject: string) => console.log(`[correo de desarrollo] para ${to}: ${subject}`) };
 const { app, service } = buildApp({
   db: database.db,
   tokenPepper: config.tokenPepper,
@@ -24,6 +34,7 @@ const { app, service } = buildApp({
   events,
   devAgents: process.env.NODE_ENV === "production" ? [] : config.devAgents,
   adminHandles: config.adminHandles,
+  mailer,
   logger: true,
 });
 
