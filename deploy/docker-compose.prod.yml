@@ -37,6 +37,8 @@ services:
       SIGNING_KEY: ${SIGNING_KEY:?define SIGNING_KEY}
       WEB_SERVICE_KEY: ${WEB_SERVICE_KEY:?define WEB_SERVICE_KEY}
       WEB_ORIGIN: ${WEB_ORIGIN:-https://reagentlab.capybaralabs.tech,https://www.capybaralabs.tech,https://capybaralabs.tech}
+      # Handles de GitHub que aprueban problemas propuestos (ADR-0020).
+      ADMIN_HANDLES: ${ADMIN_HANDLES:-}
     ports:
       - "127.0.0.1:${API_PORT:-3010}:3000"
     networks:
