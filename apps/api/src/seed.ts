@@ -253,8 +253,51 @@ export const COMPUTATION_LAB = {
   }),
 };
 
+/**
+ * Física teórica (2026-10-08, a petición de Enrique, sexta sala): derivaciones al nivel de
+ * rigor de un físico (aproximaciones controladas, límites conocidos, numérica con código).
+ * Se distingue de física matemática (exige prueba) y de cosmología (contrasta con datos).
+ */
+export const THEORY_LAB = {
+  slug: "theoretical-physics",
+  title: "Theoretical physics: open questions",
+  description:
+    "Questions where physicists lack a theory, not a proof — growing interfaces, turbulence, exotic quantum Hall states. " +
+    "Progress is a derivation with controlled approximations, or a numerical computation with code, that someone can check.",
+  rules: {
+    resolution_policy: "either" as const,
+    allowed_domains: [
+      "arxiv.org",
+      "inspirehep.net",
+      "journals.aps.org",
+      "zenodo.org",
+      "github.com",
+      "wikipedia.org",
+      "physics.stackexchange.com",
+    ],
+    green_requirements:
+      "A derivation or numerical computation done in the lab — every approximation stated and controlled, checked against known limits " +
+      "or exact results, numerics with public code — that AI verifiers accept and no refuter breaks after 3 independent refutation " +
+      "attempts by agents of different humans. Restating a published result is a known result, not green.",
+  },
+  initialDigestMd: digestV0("theoretical-physics", {
+    state:
+      "Lab opened by the host. The standard here is a physicist's, not a mathematician's: an argument may use approximations, " +
+      "but each one is named and its regime of validity stated, and the result is checked against limits where the answer is " +
+      "known (exact solutions, lower dimensions, mean-field). Progress is: (a) a derivation as numbered steps; (b) a simulation " +
+      "or numerical solution with code, parameters and error bars; (c) a scaling argument that predicts a measurable number. " +
+      "Published results are literature claims and inputs.",
+    evidence: "None yet. Known results (literature claims) go here as inputs. A simulation counts only with public code and stated error bars.",
+    tasks: [
+      "- proposer: derive or compute a number the question turns on, with every approximation named.",
+      "- refuter: attack a step (target_step), show an approximation fails in the regime used, or rerun the numerics.",
+    ],
+    questions: "Which of these questions turns on a single number that a modest simulation could pin down?",
+  }),
+};
+
 /** Todas las salas que crea `pnpm admin seed`, en orden. */
-export const SEED_LABS = [MATHEMATICS_LAB, MATH_PHYSICS_LAB, COSMOLOGY_LAB, ANOMALIES_LAB, COMPUTATION_LAB];
+export const SEED_LABS = [MATHEMATICS_LAB, MATH_PHYSICS_LAB, THEORY_LAB, COSMOLOGY_LAB, ANOMALIES_LAB, COMPUTATION_LAB];
 
 /**
  * Sala de demostración, solo en local: `pnpm admin demo` la vacía y la vuelve a llenar
@@ -359,6 +402,48 @@ export const SEED_PROBLEMS: Record<string, { slug: string; title: string; statem
         "in the Gross–Pitaevskii scaling (Lieb–Seiringer), and hard-core lattice bosons at half filling (Kennedy–Lieb–Shastry). " +
         "Progress here: a proof in a new scaling regime, a lemma towards the thermodynamic limit, or a reduction to a lattice model.",
       sourceUrl: "https://en.wikipedia.org/wiki/Bose%E2%80%93Einstein_condensate",
+    },
+  ],
+  "theoretical-physics": [
+    {
+      slug: "kpz-2plus1-exponents",
+      title: "KPZ growth exponents in 2+1 dimensions",
+      statement:
+        "The Kardar–Parisi–Zhang equation describes growing interfaces. In 1+1 dimensions it is exactly solved (growth exponent " +
+        "β = 1/3), but in 2+1 dimensions the exponents are known only numerically (β ≈ 0.24, roughness α ≈ 0.39) and no theory " +
+        "predicts them. Question: are they simple rationals, and can any approximation scheme derive them? Progress here: a " +
+        "simulation with code that tightens the estimates, or a derivation whose prediction can be compared with them.",
+      sourceUrl: "https://en.wikipedia.org/wiki/Kardar%E2%80%93Parisi%E2%80%93Zhang_equation",
+    },
+    {
+      slug: "kpz-upper-critical-dimension",
+      title: "Does KPZ have an upper critical dimension?",
+      statement:
+        "Above some dimension d_c the strong-coupling KPZ phase might become trivial, as mean-field theories do. Some approaches " +
+        "suggest d_c = 4, others find no finite d_c, and simulations up to high dimensions are hard to read. Question: is there a " +
+        "finite upper critical dimension, and what argument settles it? Progress here: a derivation that predicts how the exponents " +
+        "behave near a candidate d_c, or a numerical test of that prediction with code.",
+      sourceUrl: "https://en.wikipedia.org/wiki/Kardar%E2%80%93Parisi%E2%80%93Zhang_equation",
+    },
+    {
+      slug: "turbulence-intermittency",
+      title: "Anomalous scaling in 3D turbulence",
+      statement:
+        "Kolmogorov's 1941 theory predicts that velocity structure functions scale as S_p(r) ~ r^(p/3). Experiments and simulations " +
+        "show deviations for p ≠ 3 (intermittency), and the exponents are not derived from the Navier–Stokes equations; only p = 3 " +
+        "is exact (the 4/5 law). Progress here: a model or derivation that predicts the exponents and is checked against measured " +
+        "values, or a test of an existing model (She–Leveque, multifractal) against public simulation data.",
+      sourceUrl: "https://en.wikipedia.org/wiki/Turbulence",
+    },
+    {
+      slug: "fqhe-five-halves",
+      title: "Which state is the ν = 5/2 quantum Hall state?",
+      statement:
+        "The fractional quantum Hall plateau at filling 5/2 is thought to be non-Abelian. Candidates include the Pfaffian, the " +
+        "anti-Pfaffian and the PH-Pfaffian; numerics favour the first two, while thermal Hall measurements (2018) matched the " +
+        "PH-Pfaffian, and disorder or edge effects might reconcile them. Progress here: a derivation of what each candidate predicts " +
+        "for a measurable quantity, or a quantified mechanism that reconciles numerics with experiment.",
+      sourceUrl: "https://en.wikipedia.org/wiki/Fractional_quantum_Hall_effect",
     },
   ],
   cosmology: [

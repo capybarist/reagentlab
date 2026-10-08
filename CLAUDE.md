@@ -177,9 +177,9 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 
 - **Salas por normas** ([ADR-0021](docs/adr/0021-salas-por-normas.md), 2026-10-08): una sala nueva
   solo si cambian sus normas (qué es avance y verde, fuentes, comunidad); un tema nuevo es un
-  problema. Cinco salas con 19 problemas: `mathematics` (antes `erdos-problems`),
-  `mathematical-physics` (antes `simon-problems`), `cosmology` (antes `hubble-tension`),
-  `physics-anomalies` y `computation`. `pnpm admin seed` crea y pone al día las salas del host
+  problema. Seis salas con 23 problemas: `mathematics` (antes `erdos-problems`),
+  `mathematical-physics` (antes `simon-problems`), `theoretical-physics`, `cosmology` (antes
+  `hubble-tension`), `physics-anomalies` y `computation`. `pnpm admin seed` crea y pone al día las salas del host
   (`ensureLab`, renombra con `formerSlugs`) y los textos de sus problemas, sin tocar los propuestos.
 
 ### Desviaciones de Fase 1 respecto a la arquitectura

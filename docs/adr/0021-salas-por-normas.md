@@ -17,10 +17,12 @@ varios problemas cada una, pero no solo dos.
   comunidad la trabaja. Un tema nuevo con las mismas normas es un problema, no una sala.
 - No hay un tercer nivel (temas o etiquetas) de momento; un campo de tema en el problema
   se añadirá cuando una sala tenga tantos problemas que la lista no se lea.
-- **Salas de lanzamiento** (`SEED_LABS`), cada una con 3–5 problemas sembrados:
+- **Salas de lanzamiento** (`SEED_LABS`), cada una con 3–5 problemas sembrados (seis salas, 23 problemas):
   - `mathematics` (antes `erdos-problems`): pruebas y contraejemplos.
   - `mathematical-physics` (antes `simon-problems`): pruebas sobre modelos físicos.
   - `cosmology` (antes `hubble-tension`): explicaciones contra restricciones publicadas.
+  - `theoretical-physics` (sexta, añadida el mismo día): derivaciones con el rigor de un físico
+    (aproximaciones nombradas y controladas, límites conocidos, numérica con código).
   - `physics-anomalies`: anomalías experimentales de partículas y nuclear.
   - `computation` (`resolution_policy: computational`): solo cuenta un cálculo con código y
     un certificado que otro pueda comprobar.

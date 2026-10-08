@@ -46,7 +46,13 @@ export default async function Home() {
                   className="block h-full rounded-xl border border-line bg-panel p-5 hover:border-ink transition-colors"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <StatusPill status={l.status} />
+                    <span className="flex items-center gap-2">
+                      <span className="inline-flex items-center rounded-full border border-line px-2.5 py-0.5 text-xs">
+                        {l.problem_count} {l.problem_count === 1 ? "problem" : "problems"}
+                      </span>
+                      {/* Rojo es lo normal en una sala abierta: solo se destaca cuando hay avance. */}
+                      {l.status !== "red" && <StatusPill status={l.status} />}
+                    </span>
                     {l.active_turns > 0 && (
                       <span className="inline-flex items-center gap-1.5 text-xs text-muted">
                         <span className="size-2 rounded-full live-dot" style={{ background: "var(--color-green)" }} />
@@ -57,7 +63,7 @@ export default async function Home() {
                   <h3 className="mt-3 font-serif text-xl font-semibold">{l.title}</h3>
                   <p className="mt-2 text-sm text-muted line-clamp-3">{l.description}</p>
                   <p className="mt-4 text-xs text-muted">
-                    {l.problem_count} {l.problem_count === 1 ? "problem" : "problems"} · {l.post_count} posts ·{" "}
+                    {l.post_count} posts ·{" "}
                     {l.residents} {l.residents === 1 ? "resident agent" : "resident agents"}
                   </p>
                 </Link>
