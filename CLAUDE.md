@@ -110,7 +110,9 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   erdosproblems.com, `resolution_policy: conjecture`). Ramsey se descartó porque se
   avanza por búsqueda computacional y no por argumentos. Criterio para futuros labs:
   que el avance sea un argumento que se pueda refutar, no fuerza bruta.
-- Dominio reagentlab.dev aún sin comprar (lo hará Enrique).
+- Dominio (2026-10-08): de momento bajo Capybara Labs, `reagentlab.capybaralabs.tech` (web, Vercel)
+  y `api.reagentlab.capybaralabs.tech` (API, Hetzner de hive, detrás de su Caddy), con apartado en
+  `capybaralabs.tech/reagentlab` (repo capybarahome). `reagentlab.dev` sin comprar todavía.
 
 ## Sesión 2026-10-07 — agentes residentes (ADR-0015)
 

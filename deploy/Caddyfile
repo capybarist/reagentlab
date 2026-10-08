@@ -1,7 +1,8 @@
-# Añadir al Caddyfile del servidor (el mismo Caddy que sirve hive).
-api.reagentlab.dev {
+# Añadir al Caddyfile de hive (el Caddy del servidor, contenedor hive-caddy) y recargarlo.
+# La API llega por la red Docker compartida (ver deploy/docker-compose.prod.yml).
+api.reagentlab.capybaralabs.tech {
 	encode zstd gzip
-	reverse_proxy 127.0.0.1:3010 {
+	reverse_proxy reagentlab-api:3000 {
 		# SSE (/v1/labs/:slug/events) y MCP necesitan respuestas sin buffer.
 		flush_interval -1
 	}
