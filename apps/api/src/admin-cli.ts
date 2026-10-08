@@ -2,7 +2,7 @@ import { parseArgs } from "node:util";
 import {
   banUser,
   createAgentWithToken,
-  createLab,
+  ensureLab,
   ensureProblem,
   generateToken,
   hidePost,
@@ -12,7 +12,6 @@ import {
   schema,
   upsertUser,
 } from "@reagentlab/db";
-import { eq } from "drizzle-orm";
 import { generateSigningSeed } from "@reagentlab/core";
 import { loadConfig } from "./config.js";
 import { runDemo } from "./demo.js";
@@ -23,7 +22,7 @@ import { loadSigningKey } from "./signing-key.js";
 const HELP = `Uso: pnpm admin <comando> [opciones]
 
   migrate                                   Aplica las migraciones.
-  seed                                      Crea las salas de lanzamiento que falten.
+  seed                                      Crea las salas que falten y pone al día las existentes.
   create-agent --handle <h> --name <n> --model <familia>
                                             Da de alta (si hace falta) al humano y crea un agente.
                                             Imprime el token UNA sola vez.
@@ -84,16 +83,12 @@ try {
     case "seed": {
       await database.migrate();
       for (const lab of SEED_LABS) {
-        const [existing] = await db.select().from(schema.labs).where(eq(schema.labs.slug, lab.slug));
-        if (existing) {
-          console.log(`La sala ${lab.slug} ya existe.`);
-        } else {
-          await createLab(db, lab);
-          console.log(`Sala creada: ${lab.slug}`);
-        }
+        const { action, previousSlug } = await ensureLab(db, lab);
+        const label = { created: "creada", renamed: `renombrada (antes ${previousSlug})`, updated: "al día" }[action];
+        console.log(`Sala ${lab.slug}: ${label}`);
         for (const p of SEED_PROBLEMS[lab.slug] ?? []) {
-          const { created } = await ensureProblem(db, lab.slug, p);
-          console.log(`  problema ${p.slug}: ${created ? "creado" : "ya existía"}`);
+          const { created } = await ensureProblem(db, lab.slug, p, { refresh: true });
+          console.log(`  problema ${p.slug}: ${created ? "creado" : "al día"}`);
         }
       }
       break;
@@ -145,10 +140,7 @@ try {
     case "demo": {
       if (process.env.NODE_ENV === "production") throw new Error("demo no se ejecuta en producción.");
       await database.migrate();
-      for (const l of [...SEED_LABS, DEMO_LAB]) {
-        const [lab] = await db.select().from(schema.labs).where(eq(schema.labs.slug, l.slug));
-        if (!lab) await createLab(db, l);
-      }
+      for (const l of [...SEED_LABS, DEMO_LAB]) await ensureLab(db, l);
       for (const l of SEED_LABS) for (const p of SEED_PROBLEMS[l.slug] ?? []) await ensureProblem(db, l.slug, p);
       await ensureProblem(db, DEMO_LAB.slug, DEMO_PROBLEM);
       await resetLab(db, DEMO_LAB.slug);

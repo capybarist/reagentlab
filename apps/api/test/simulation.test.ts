@@ -6,7 +6,7 @@ import { type Database, createAgentWithToken, createLab, ensureProblem, openData
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { COMBINATORICS_LAB, SEED_PROBLEMS } from "../src/seed.js";
+import { MATHEMATICS_LAB, SEED_PROBLEMS } from "../src/seed.js";
 
 /**
  * Simulación de sala (ARCHITECTURE §11): varios agentes falsos, con conductas
@@ -15,7 +15,7 @@ import { COMBINATORICS_LAB, SEED_PROBLEMS } from "../src/seed.js";
  */
 
 const PEPPER = "sim-pepper";
-const SLUG = COMBINATORICS_LAB.slug;
+const SLUG = MATHEMATICS_LAB.slug;
 const BODY =
   "For R(4,6) the best known lower bound is 36; a circulant colouring on 36 vertices is a natural search space.";
 
@@ -46,8 +46,8 @@ async function call(client: Client, name: string, args: Record<string, unknown> 
 beforeAll(async () => {
   database = await openDatabase("pglite:memory");
   await database.migrate();
-  await createLab(database.db, { ...COMBINATORICS_LAB, rules: { ...COMBINATORICS_LAB.rules, digest_stale_after_posts: 4, wait_max_seconds: 5 } });
-  await ensureProblem(database.db, COMBINATORICS_LAB.slug, SEED_PROBLEMS["erdos-problems"]![0]!);
+  await createLab(database.db, { ...MATHEMATICS_LAB, rules: { ...MATHEMATICS_LAB.rules, digest_stale_after_posts: 4, wait_max_seconds: 5 } });
+  await ensureProblem(database.db, MATHEMATICS_LAB.slug, SEED_PROBLEMS.mathematics![0]!);
   const signingKey = signingKeyFromSeed(Buffer.alloc(32, 7).toString("base64"));
   ({ app } = buildApp({ db: database.db, tokenPepper: PEPPER, signingKey }));
   await app.listen({ port: 0, host: "127.0.0.1" });

@@ -2,7 +2,7 @@ import { type Database, createLab, ensureProblem, openDatabase } from "@reagentl
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { COMBINATORICS_LAB, SEED_PROBLEMS } from "../src/seed.js";
+import { MATHEMATICS_LAB, SEED_PROBLEMS } from "../src/seed.js";
 
 const KEY = "test-service-key";
 const NOW = new Date("2026-10-07T10:00:00Z");
@@ -30,8 +30,8 @@ async function signIn(handle: string, createdAt = OLD) {
 beforeAll(async () => {
   database = await openDatabase("pglite:memory");
   await database.migrate();
-  await createLab(database.db, COMBINATORICS_LAB);
-  await ensureProblem(database.db, COMBINATORICS_LAB.slug, SEED_PROBLEMS["erdos-problems"]![0]!);
+  await createLab(database.db, MATHEMATICS_LAB);
+  await ensureProblem(database.db, MATHEMATICS_LAB.slug, SEED_PROBLEMS.mathematics![0]!);
   ({ app } = buildApp({
     db: database.db,
     tokenPepper: "p",
@@ -67,12 +67,12 @@ describe("rutas de cuenta", () => {
 
     const join = await app.inject({
       method: "POST",
-      url: `/v1/labs/${COMBINATORICS_LAB.slug}/join`,
+      url: `/v1/labs/${MATHEMATICS_LAB.slug}/join`,
       headers: { authorization: `Bearer ${token}` },
     });
     expect(join.statusCode).toBe(200);
 
-    const turns = await app.inject({ method: "GET", url: `/v1/labs/${COMBINATORICS_LAB.slug}/turns` });
+    const turns = await app.inject({ method: "GET", url: `/v1/labs/${MATHEMATICS_LAB.slug}/turns` });
     expect(turns.json().turns).toEqual([
       expect.objectContaining({ agent: { name: "Ada's Claude", model_family: "claude" }, role: expect.any(String) }),
     ]);
@@ -120,7 +120,7 @@ describe("rutas de cuenta", () => {
     await app.inject({ method: "POST", url: `/v1/account/agents/${ids[0]}/disable`, headers: svc(user.id) });
     const denied = await app.inject({
       method: "POST",
-      url: `/v1/labs/${COMBINATORICS_LAB.slug}/join`,
+      url: `/v1/labs/${MATHEMATICS_LAB.slug}/join`,
       headers: { authorization: `Bearer ${tokens[0]}` },
     });
     expect(denied.statusCode).toBe(401);
@@ -162,7 +162,7 @@ describe("rutas de cuenta", () => {
     expect(revoke.statusCode).toBe(200);
     const res = await app.inject({
       method: "POST",
-      url: `/v1/labs/${COMBINATORICS_LAB.slug}/join`,
+      url: `/v1/labs/${MATHEMATICS_LAB.slug}/join`,
       headers: { authorization: `Bearer ${second.token}` },
     });
     expect(res.statusCode).toBe(401);

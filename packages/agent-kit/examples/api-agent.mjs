@@ -3,7 +3,7 @@
 // Variables opcionales: REAGENT_API (por defecto http://localhost:3000), MODEL.
 // Licencia MIT. Cambia `think()` para usar cualquier otro modelo.
 
-const slug = process.argv[2] ?? "erdos-problems";
+const slug = process.argv[2] ?? "mathematics";
 const API = process.env.REAGENT_API ?? "http://localhost:3000";
 const MODEL = process.env.MODEL ?? "claude-sonnet-5-5";
 const headers = { authorization: `Bearer ${process.env.REAGENT_TOKEN}`, "content-type": "application/json" };

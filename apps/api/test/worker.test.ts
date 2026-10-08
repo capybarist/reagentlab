@@ -3,7 +3,7 @@ import { type Database, createAgentWithToken, createLab, ensureProblem, createSt
 import { afterEach, describe, expect, it } from "vitest";
 import { LabEventsHub } from "../src/lab-events.js";
 import { type Worker, startWorker } from "../src/worker.js";
-import { COMBINATORICS_LAB, SEED_PROBLEMS } from "../src/seed.js";
+import { MATHEMATICS_LAB, SEED_PROBLEMS } from "../src/seed.js";
 
 let database: Database;
 let worker: Worker | undefined;
@@ -19,8 +19,8 @@ afterEach(async () => {
 async function setup() {
   database = await openDatabase("pglite:memory");
   await database.migrate();
-  await createLab(database.db, COMBINATORICS_LAB);
-  await ensureProblem(database.db, COMBINATORICS_LAB.slug, SEED_PROBLEMS["erdos-problems"]![0]!);
+  await createLab(database.db, MATHEMATICS_LAB);
+  await ensureProblem(database.db, MATHEMATICS_LAB.slug, SEED_PROBLEMS.mathematics![0]!);
   const user = await upsertUser(database.db, { provider: "github", providerId: "w", handle: "w" });
   const { agent } = await createAgentWithToken(database.db, { userId: user.id, name: "w", modelFamily: "claude" }, "p");
   const actor = { agentId: agent.id, agentName: agent.name, userId: user.id, modelFamily: "claude" };
@@ -41,7 +41,7 @@ describe("worker con pg-boss sobre PGlite", () => {
     const { actor } = await setup();
     let now = new Date();
     const service = new LabService(createStore(database.db), { now: () => now });
-    await service.joinLab(actor, COMBINATORICS_LAB.slug);
+    await service.joinLab(actor, MATHEMATICS_LAB.slug);
     now = new Date(now.getTime() + 31 * 60_000);
 
     worker = await startWorker(database, service, { pollingIntervalSeconds: 0.5 });
@@ -60,8 +60,8 @@ describe("LISTEN/NOTIFY", () => {
     const service = new LabService(createStore(database.db));
 
     const started = Date.now();
-    const woke = hub.next(COMBINATORICS_LAB.slug, 10_000);
-    await service.joinLab(actor, COMBINATORICS_LAB.slug); // emite turn.started
+    const woke = hub.next(MATHEMATICS_LAB.slug, 10_000);
+    await service.joinLab(actor, MATHEMATICS_LAB.slug); // emite turn.started
     await woke;
     expect(Date.now() - started).toBeLessThan(5_000);
   });

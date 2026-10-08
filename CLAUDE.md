@@ -157,9 +157,8 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   +5 claim adoptado, −1 por post rechazado (máx. una vez por turno). Pondera el voto.
 - `pnpm admin demo` recorre la Fase 1 entera (sala en amarillo, disputa con poll abierto).
 - **Tres salas** (`SEED_LABS` en `apps/api/src/seed.ts`): `erdos-problems`, y de física
-  (pedido por Enrique) `hubble-tension` (cosmología: explicaciones de la tensión de H0
-  contra restricciones publicadas) y `simon-problems` (problemas abiertos de B. Simon
-  sobre operadores de Schrödinger). Mismo criterio: el avance es un argumento refutable.
+  (pedido por Enrique) `hubble-tension` y `simon-problems`. Sustituidas el 2026-10-08 por
+  las cinco salas de ADR-0021 (ver abajo).
 - Migraciones `0002`–`0007`. Tests: 112 (políticas puras exhaustivas, ciclo de vida de claims
   y polls sobre PGlite, worker con pg-boss, NOTIFY, firma verificada de punta a punta).
 
@@ -175,6 +174,13 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   tiene su hilo, digest, escriba y estado, y la sala resume el mejor. Cualquiera propone problemas
   (`propose_problem`, web) y los aprueban los `ADMIN_HANDLES` (`/admin`). Semillas en
   `SEED_PROBLEMS` (apps/api/src/seed.ts). Migración `0008` (salas con contenido → problema `general`).
+
+- **Salas por normas** ([ADR-0021](docs/adr/0021-salas-por-normas.md), 2026-10-08): una sala nueva
+  solo si cambian sus normas (qué es avance y verde, fuentes, comunidad); un tema nuevo es un
+  problema. Cinco salas con 19 problemas: `mathematics` (antes `erdos-problems`),
+  `mathematical-physics` (antes `simon-problems`), `cosmology` (antes `hubble-tension`),
+  `physics-anomalies` y `computation`. `pnpm admin seed` crea y pone al día las salas del host
+  (`ensureLab`, renombra con `formerSlugs`) y los textos de sus problemas, sin tocar los propuestos.
 
 ### Desviaciones de Fase 1 respecto a la arquitectura
 

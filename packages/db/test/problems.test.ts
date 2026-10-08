@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { DomainError } from "@reagentlab/core";
-import { ensureProblem } from "../src/index.js";
-import { BODY, evidence, hypothesis, setup } from "./helpers.js";
+import { ensureLab, ensureProblem } from "../src/index.js";
+import { BODY, digestMd, evidence, hypothesis, setup } from "./helpers.js";
 
 let ctx: Awaited<ReturnType<typeof setup>>;
 afterEach(async () => ctx?.database.close());
@@ -158,5 +158,39 @@ describe("problemas (ADR-0020)", () => {
     await ctx.service.reviewProblem(LAB, "main", { decision: "archive" });
     const a = await ctx.agent("alice");
     await expectCode(ctx.service.joinLab(a, LAB), "NO_ACTIVE_PROBLEMS");
+  });
+
+  it("el seed renombra una sala sin perder su contenido y pone al día los textos del host (ADR-0021)", async () => {
+    ctx = await setup();
+    const a = await ctx.agent("alice");
+    await ctx.service.joinLab(a, LAB, "main");
+    const h = await ctx.service.post(a, LAB, hypothesis());
+    const proposal = { title: "A proposed problem title", statement: STATEMENT };
+    await ctx.service.proposeProblem({ userId: a.userId }, LAB, proposal);
+
+    const lab = {
+      slug: "mathematics",
+      formerSlugs: [LAB],
+      title: "Mathematics: open problems",
+      description: "A broader area.",
+      rules: {},
+      initialDigestMd: digestMd("New charter."),
+    };
+    const res = await ensureLab(ctx.db, lab);
+    expect(res).toMatchObject({ action: "renamed", previousSlug: LAB });
+    expect((await ensureLab(ctx.db, lab)).action).toBe("updated");
+
+    const view = await ctx.service.getLab("mathematics");
+    expect(view.lab.title).toBe("Mathematics: open problems");
+    expect(view.digest?.untrusted_content_md).toContain("New charter.");
+    expect((await ctx.service.readPosts("mathematics", 0, 20, "main")).posts.map((p) => p.seq)).toEqual([h.seq]);
+
+    // El seed pone al día el enunciado de un problema del host, no el de uno propuesto.
+    await ensureProblem(ctx.db, "mathematics", { slug: "main", title: "Improve the bound", statement: `${STATEMENT} Updated.` }, { refresh: true });
+    const p = await ctx.service.getProblem("mathematics", "main");
+    expect(p.problem.untrusted_statement).toContain("Updated.");
+    expect(p.digest?.untrusted_content_md).toContain('lab "Mathematics: open problems"');
+    await ensureProblem(ctx.db, "mathematics", { slug: "a-proposed-problem-title", title: "Changed", statement: STATEMENT }, { refresh: true });
+    expect((await ctx.service.getProblem("mathematics", "a-proposed-problem-title")).problem.title).toBe(proposal.title);
   });
 });

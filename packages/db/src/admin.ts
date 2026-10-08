@@ -272,19 +272,66 @@ export async function createLab(
 }
 
 /**
+ * Sala del host (seed, ADR-0021): la crea si falta; si existe (o existe con un slug antiguo
+ * de `formerSlugs`), la renombra y pone al día título, descripción, normas y los textos v0
+ * que escribe el host (la ficha y el v0 de cada problema). No toca posts ni digests v1+.
+ */
+export async function ensureLab(
+  db: Db,
+  l: Parameters<typeof createLab>[1] & { formerSlugs?: string[] },
+): Promise<{ lab: typeof labs.$inferSelect; action: "created" | "renamed" | "updated"; previousSlug?: string }> {
+  const found = await db.select().from(labs).where(inArray(labs.slug, [l.slug, ...(l.formerSlugs ?? [])]));
+  const current = found.find((x) => x.slug === l.slug) ?? found[0];
+  if (!current) return { lab: await createLab(db, l), action: "created" };
+  return db.transaction(async (tx) => {
+    const [lab] = await tx
+      .update(labs)
+      .set({ slug: l.slug, title: l.title, description: l.description, rules: l.rules })
+      .where(eq(labs.id, current.id))
+      .returning();
+    await tx
+      .update(digests)
+      .set({ contentMd: l.initialDigestMd })
+      .where(and(eq(digests.labId, lab!.id), isNull(digests.problemId), eq(digests.version, 0)));
+    for (const p of await tx.select().from(problems).where(eq(problems.labId, lab!.id))) {
+      await tx
+        .update(digests)
+        .set({ contentMd: problemDigestV0(lab!, p) })
+        .where(and(eq(digests.problemId, p.id), eq(digests.version, 0)));
+    }
+    if (current.slug === l.slug) return { lab: lab!, action: "updated" as const };
+    return { lab: lab!, action: "renamed" as const, previousSlug: current.slug };
+  });
+}
+
+/**
  * Deja un problema activo en una sala, con su digest v0, si no existe (ADR-0020).
- * Idempotente: si ya existe, no lo toca. Lo usan el seed y los tests.
+ * Idempotente: si ya existe, no lo toca, salvo `refresh` (seed) en problemas del host.
  */
 export async function ensureProblem(
   db: Db,
   labSlug: string,
   p: { slug: string; title: string; statement: string; sourceUrl?: string },
+  opts: { refresh?: boolean } = {},
 ) {
   return db.transaction(async (tx) => {
     const [lab] = await tx.select().from(labs).where(eq(labs.slug, labSlug));
     if (!lab) throw new Error(`No existe la sala ${labSlug}.`);
     const [existing] = await tx.select().from(problems).where(and(eq(problems.labId, lab.id), eq(problems.slug, p.slug)));
-    if (existing) return { problem: existing, created: false };
+    if (existing) {
+      // Solo se ponen al día los textos de problemas del host, nunca los propuestos por alguien.
+      if (!opts.refresh || existing.proposedByUserId) return { problem: existing, created: false };
+      const [problem] = await tx
+        .update(problems)
+        .set({ title: p.title, statement: p.statement, sourceUrl: p.sourceUrl ?? null })
+        .where(eq(problems.id, existing.id))
+        .returning();
+      await tx
+        .update(digests)
+        .set({ contentMd: problemDigestV0(lab, problem!) })
+        .where(and(eq(digests.problemId, problem!.id), eq(digests.version, 0)));
+      return { problem: problem!, created: false };
+    }
     const [problem] = await tx
       .insert(problems)
       .values({ labId: lab.id, slug: p.slug, title: p.title, statement: p.statement, sourceUrl: p.sourceUrl ?? null })
