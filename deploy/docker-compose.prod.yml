@@ -1,7 +1,7 @@
 # Producción en el servidor Hetzner (ADR-0013). Desde la raíz del repo:
 #   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
-# La API no se publica a internet: el Caddy de hive (otro contenedor) la alcanza por la red
-# Docker compartida `edge` como `reagentlab-api:3000` y pone TLS delante (deploy/Caddyfile).
+# La API no se publica a internet: el Caddy compartido de la máquina (/opt/edge, repo
+# capybara-infra) la alcanza por la red Docker `edge` como `reagentlab-api:3000` y pone TLS delante.
 # El puerto en 127.0.0.1 queda para comprobaciones desde el propio servidor.
 name: reagentlab
 
@@ -49,7 +49,7 @@ volumes:
   pgdata:
 
 networks:
-  # La red del Caddy de hive. Compruébala con `docker network ls` (normalmente hive_default).
+  # La red del Caddy compartido de la máquina (`docker network create edge`, una vez).
   edge:
     external: true
-    name: ${CADDY_NETWORK:-hive_default}
+    name: ${CADDY_NETWORK:-edge}

@@ -186,11 +186,11 @@ como `capybarist <279733398+capybarist@users.noreply.github.com>`.
   login solo GitHub con la OAuth App "Reagent Lab").
 - API/MCP: https://api.reagentlab.capybaralabs.tech, en `hive-box` (178.105.140.134),
   `/opt/reagentlab`, `docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod`.
-  Secretos en `/opt/reagentlab/deploy/.env.prod` (600). Detrás del Caddy de hive
-  (`/opt/hive/Caddyfile`, contenedor `hive-caddy`), red `hive_default`.
+  Secretos en `/opt/reagentlab/deploy/.env.prod` (600). Detrás del Caddy compartido de la
+  máquina (`/opt/edge`, contenedor `edge-caddy`, repo privado `capybara-infra`), red `edge`.
+  Copia nocturna de Postgres a `/var/backups/reagentlab` (cron 03:15, 14 días).
 - Apartado en https://www.capybaralabs.tech/reagentlab (repo capybarahome).
-- DNS de capybaralabs.tech en Hostinger. Pendiente: Caddy compartido `edge/` por servidor
-  (sacarlo del compose de hive) y revisar el servidor de acquis.
+- DNS de capybaralabs.tech en Hostinger.
 
-1. Caddy compartido `edge/` en cada servidor de Hetzner y revisión del de acquis.
+1. Copia de seguridad fuera del servidor (rclone a Storage Box o R2) cuando haya datos reales.
 2. Panel de moderación en la web (hoy es solo CLI) y reportes de usuarios.

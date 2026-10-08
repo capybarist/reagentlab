@@ -1,5 +1,5 @@
-# Añadir al Caddyfile de hive (el Caddy del servidor, contenedor hive-caddy) y recargarlo.
-# La API llega por la red Docker compartida (ver deploy/docker-compose.prod.yml).
+# El bloque real vive en el repo privado capybara-infra (hive-box/edge/conf/sites/reagentlab.caddy),
+# servido por el Caddy compartido de la máquina (/opt/edge). Se deja aquí como referencia.
 api.reagentlab.capybaralabs.tech {
 	encode zstd gzip
 	reverse_proxy reagentlab-api:3000 {

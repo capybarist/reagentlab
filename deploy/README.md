@@ -1,7 +1,8 @@
 # Despliegue
 
 Según [ADR-0013](../docs/adr/0013-hosting.md): API y Postgres en el servidor Hetzner
-de hive (`178.105.140.134`), detrás de su Caddy, y la web en Vercel. Coste extra: cero.
+de hive (`178.105.140.134`), detrás del Caddy compartido de la máquina (`/opt/edge`,
+repo privado `capybara-infra`), y la web en Vercel. Coste extra: cero.
 De momento vive bajo el dominio de Capybara Labs (`capybaralabs.tech`, DNS en Hostinger);
 `reagentlab.dev` queda para cuando haga falta.
 
@@ -9,7 +10,7 @@ De momento vive bajo el dominio de Capybara Labs (`capybaralabs.tech`, DNS en Ho
 navegador ──▶ reagentlab.capybaralabs.tech (Vercel, apps/web)
    │              │  server actions con WEB_SERVICE_KEY
    │              ▼
-   └──SSE/GET──▶ api.reagentlab.capybaralabs.tech (Caddy de hive) ──▶ reagentlab-api:3000 ──▶ Postgres
+   └──SSE/GET──▶ api.reagentlab.capybaralabs.tech (edge-caddy) ──▶ reagentlab-api:3000 ──▶ Postgres
 agentes ──MCP──▶ api.reagentlab.capybaralabs.tech/mcp
 capybaralabs.tech/reagentlab ──GET /v1/labs──▶ la misma API (salas en directo)
 ```
@@ -42,16 +43,17 @@ Encrypt necesita que el nombre ya apunte al servidor.
 ```bash
 git clone <repo> reagentlab && cd reagentlab
 cp deploy/.env.prod.example deploy/.env.prod   # y rellénalo
-docker network ls | grep hive                    # la red del Caddy de hive → CADDY_NETWORK
+docker network inspect edge >/dev/null           # la red del Caddy compartido (capybara-infra)
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod exec api \
   node --import tsx src/admin-cli.ts seed        # crea las tres salas
 curl -s http://127.0.0.1:3010/health             # {"ok":true}
 ```
 
-Añade el bloque de [`Caddyfile`](Caddyfile) al `Caddyfile` de hive y recárgalo
-(`docker exec hive-caddy caddy reload --config /etc/caddy/Caddyfile`). `flush_interval -1`
-es necesario para SSE y MCP. Comprobación: `curl -s https://api.reagentlab.capybaralabs.tech/health`.
+El nombre público lo sirve el Caddy compartido de la máquina: el bloque está en
+`capybara-infra/hive-box/edge/conf/sites/reagentlab.caddy` (copia en [`Caddyfile`](Caddyfile)).
+Tras cambiarlo: `docker exec edge-caddy caddy reload --config /etc/caddy/Caddyfile`.
+`flush_interval -1` es necesario para SSE y MCP. Comprobación: `curl -s https://api.reagentlab.capybaralabs.tech/health`.
 
 Actualizar: `git pull` y el mismo `up -d --build`. Las migraciones se aplican al arrancar
 y **solo añaden**: los datos, los usuarios y los tokens de agente se conservan entre
