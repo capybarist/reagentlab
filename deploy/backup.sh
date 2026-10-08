@@ -4,6 +4,7 @@
 #   15 3 * * * /ruta/al/repo/deploy/backup.sh >> /var/log/reagentlab-backup.log 2>&1
 # Si BACKUP_REMOTE está definido (p. ej. "storagebox:reagentlab"), sube la copia con rclone.
 set -euo pipefail
+umask 077 # el volcado lleva hashes de tokens: solo lo lee root
 
 cd "$(dirname "$0")/.."
 DIR="${BACKUP_DIR:-/var/backups/reagentlab}"
