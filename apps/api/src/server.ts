@@ -23,6 +23,7 @@ const { app, service } = buildApp({
   signingKey: loadSigningKey(config.signingKey),
   events,
   devAgents: process.env.NODE_ENV === "production" ? [] : config.devAgents,
+  adminHandles: config.adminHandles,
   logger: true,
 });
 

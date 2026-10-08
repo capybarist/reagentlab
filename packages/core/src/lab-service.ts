@@ -7,10 +7,15 @@ import {
   type LabSummary,
   type PostView,
   type PostsPage,
+  type ProblemReview,
+  type ProblemSummary,
+  type ProblemView,
   type WaitResult,
   type WakeReason,
   PostInput,
+  ProposeProblemInput,
   ROLE_POST_TYPES,
+  ReviewProblemInput,
   RuleRefutationInput,
   type RulingResultView,
   CastVoteInput,
@@ -36,17 +41,38 @@ import {
 import { applyRuling, rulingBlock } from "./claims.js";
 import { closePoll, openDuePolls, openPollViews, pollViews } from "./poll-ops.js";
 import { voteBlock, voteWeight } from "./polls.js";
+import {
+  problemDigestV0,
+  slugifyTitle,
+  toContextProblem,
+  toProblemSummary,
+  toProblemView,
+} from "./problem-ops.js";
 import { REPUTATION_POINTS } from "./reputation.js";
 import { DomainError } from "./errors.js";
 import { postContentHash } from "./hashing.js";
 import { postSigningMessage, type Signer } from "./signing.js";
-import type { Actor, Clock, EventRow, LabRow, PostRow, Repos, Store, TurnRow } from "./ports.js";
+import type { Actor, Clock, EventRow, LabRow, PostRow, ProblemRow, Repos, Store, TurnRow } from "./ports.js";
 import { systemClock } from "./ports.js";
 import { ROLE_INSTRUCTIONS, assignRole } from "./roles.js";
 import { isUrlAllowed, sanitizeUntrusted } from "./sanitize.js";
 import { toDigestView, toPostView } from "./views.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Propuestas de problema pendientes por humano (ADR-0020). */
+const MAX_PENDING_PROPOSALS = 3;
+const CONTEXT_OTHER_PROBLEMS = 20;
+
+/** Prioridad de los motivos para dar turno en un problema (menor = antes). */
+const REASON_RANK: Record<WakeReason, number> = {
+  open_turn: 0,
+  reply_to_you: 1,
+  scribe_needed: 2,
+  ruling_needed: 3,
+  vote_needed: 4,
+  new_posts: 5,
+  first_visit: 6,
+};
 
 function validationError(error: z.ZodError): DomainError {
   const issues = error.issues.map((i) => ({ path: i.path.join("."), message: i.message }));
@@ -58,9 +84,16 @@ function validationError(error: z.ZodError): DomainError {
   );
 }
 
+interface Pick {
+  problem: ProblemRow;
+  reason: WakeReason;
+  repliesToYou: number[];
+}
+
 /**
  * Casos de uso de una sala. Es el ÚNICO sitio donde viven las reglas: REST y MCP
- * solo llaman aquí (ADR-0002).
+ * solo llaman aquí (ADR-0002). Desde ADR-0020, una sala es un área y el trabajo
+ * (turnos, posts, digests, claims, polls) es siempre de un problema concreto.
  */
 export class LabService {
   constructor(
@@ -74,55 +107,74 @@ export class LabService {
 
   async listLabs(): Promise<LabSummary[]> {
     const now = this.clock.now();
-    return this.store.read(async (r) => {
-      const labs = await r.listLabs();
-      return Promise.all(
-        labs.map(async (l) => ({
-          slug: l.slug,
-          title: l.title,
-          description: l.description,
-          status: l.status,
-          post_count: await r.countPosts(l.id),
-          active_turns: await r.countActiveTurns(l.id, now),
-          residents: await r.countResidents(l.id, residentSince(now, parseLabRules(l.rules))),
-        })),
-      );
-    });
+    return this.store.read(async (r) => Promise.all((await r.listLabs()).map((l) => labSummary(r, l, now))));
   }
 
-  async getLab(
-    slug: string,
-  ): Promise<{ lab: LabSummary; rules: LabRules; digest: DigestView | null; last_event_id: number }> {
+  async getLab(slug: string): Promise<{
+    lab: LabSummary;
+    rules: LabRules;
+    /** Ficha de la sala (digest v0 sin problema). */
+    digest: DigestView | null;
+    problems: ProblemSummary[];
+    last_event_id: number;
+  }> {
     const now = this.clock.now();
     return this.store.read(async (r) => {
       const lab = await requireLab(r, slug);
-      const digest = await r.latestDigest(lab.id);
+      const charter = await r.latestDigest(lab.id, null);
       return {
-        lab: {
-          slug: lab.slug,
-          title: lab.title,
-          description: lab.description,
-          status: lab.status,
-          post_count: await r.countPosts(lab.id),
-          active_turns: await r.countActiveTurns(lab.id, now),
-          residents: await r.countResidents(lab.id, residentSince(now, parseLabRules(lab.rules))),
-        },
+        lab: await labSummary(r, lab, now),
         rules: parseLabRules(lab.rules),
-        digest: digest ? toDigestView(digest) : null,
+        digest: charter ? toDigestView(charter) : null,
+        problems: await problemSummaries(r, lab.id, ["active"]),
         last_event_id: await r.latestPublicEventId(lab.id),
       };
     });
   }
 
   async getLabRules(slug: string): Promise<LabRules> {
-    return (await this.getLab(slug)).rules;
+    return this.store.read(async (r) => parseLabRules((await requireLab(r, slug)).rules));
   }
 
-  async readPosts(slug: string, cursor = 0, limit = 20): Promise<PostsPage> {
+  /** Problemas de la sala. Por defecto solo los activos; los propuestos los ven los administradores. */
+  async listProblems(slug: string, reviews: ProblemReview[] = ["active"]): Promise<ProblemView[]> {
+    return this.store.read(async (r) => {
+      const lab = await requireLab(r, slug);
+      const rows = await r.listProblems(lab.id, reviews);
+      const stats = await r.problemStats(lab.id);
+      return Promise.all(
+        rows.map(async (p) =>
+          toProblemView(
+            p,
+            lab.slug,
+            stats.find((s) => s.problemId === p.id),
+            p.proposedByUserId ? await r.getUserHandle(p.proposedByUserId) : null,
+          ),
+        ),
+      );
+    });
+  }
+
+  async getProblem(slug: string, problemSlug: string): Promise<{ problem: ProblemView; digest: DigestView | null }> {
+    return this.store.read(async (r) => {
+      const lab = await requireLab(r, slug);
+      const p = await requireProblem(r, lab, problemSlug);
+      const stats = (await r.problemStats(lab.id)).find((s) => s.problemId === p.id);
+      const digest = await r.latestDigest(lab.id, p.id);
+      return {
+        problem: toProblemView(p, lab.slug, stats, p.proposedByUserId ? await r.getUserHandle(p.proposedByUserId) : null),
+        digest: digest ? toDigestView(digest) : null,
+      };
+    });
+  }
+
+  /** Posts de la sala (o de un problema), en orden, a partir de `cursor`. */
+  async readPosts(slug: string, cursor = 0, limit = 20, problemSlug?: string): Promise<PostsPage> {
     const lim = Math.min(Math.max(limit, 1), 100);
     return this.store.read(async (r) => {
       const lab = await requireLab(r, slug);
-      const rows = await r.listPosts(lab.id, cursor, lim + 1);
+      const problem = problemSlug ? await requireProblem(r, lab, problemSlug) : null;
+      const rows = await r.listPosts(lab.id, cursor, lim + 1, problem?.id);
       const page = rows.slice(0, lim);
       return {
         notice: UNTRUSTED_NOTICE,
@@ -133,35 +185,46 @@ export class LabService {
     });
   }
 
-  /** Todos los claims de la sala, refutados incluidos, los más recientes primero. */
-  async listClaims(slug: string, limit = 100): Promise<ClaimView[]> {
+  /** Claims de la sala (o de un problema), refutados incluidos, los más recientes primero. */
+  async listClaims(slug: string, problemSlug?: string, limit = 100): Promise<ClaimView[]> {
     return this.store.read(async (r) => {
       const lab = await requireLab(r, slug);
-      return claimViews(r, await r.listClaimDetails(lab.id, { limit: Math.min(Math.max(limit, 1), 500) }));
+      const problem = problemSlug ? await requireProblem(r, lab, problemSlug) : null;
+      return claimViews(
+        r,
+        await r.listClaimDetails(lab.id, { problemId: problem?.id, limit: Math.min(Math.max(limit, 1), 500) }),
+      );
     });
   }
 
-  /** Polls de la sala. Los votos y el recuento solo aparecen cuando el poll está cerrado (ADR-0011). */
-  async listPolls(slug: string, limit = 50): Promise<PollView[]> {
+  /** Polls de la sala (o de un problema). Votos y recuento solo cuando el poll está cerrado (ADR-0011). */
+  async listPolls(slug: string, problemSlug?: string, limit = 50): Promise<PollView[]> {
     return this.store.read(async (r) => {
       const lab = await requireLab(r, slug);
-      const rows = await r.listPolls(lab.id, { limit: Math.min(Math.max(limit, 1), 200) });
+      const problem = problemSlug ? await requireProblem(r, lab, problemSlug) : null;
+      const rows = await r.listPolls(lab.id, { problemId: problem?.id, limit: Math.min(Math.max(limit, 1), 200) });
       return pollViews(r, lab.id, rows, true);
     });
   }
 
-  /** Quién está trabajando ahora mismo en la sala y con qué rol. */
+  /** Quién está trabajando ahora mismo en la sala, en qué problema y con qué rol. */
   async listActiveTurns(slug: string): Promise<ActiveTurnView[]> {
     const now = this.clock.now();
     return this.store.read(async (r) => {
       const lab = await requireLab(r, slug);
+      const slugs = new Map((await r.listProblems(lab.id)).map((p) => [p.id, p.slug]));
       const rows = await r.listActiveTurns(lab.id, now);
-      return rows.map((t) => ({
-        agent: { name: t.agentName, model_family: t.modelFamily },
-        role: t.role,
-        started_at: t.startedAt.toISOString(),
-        lease_expires_at: t.leaseExpiresAt.toISOString(),
-      }));
+      return rows.map((t) => {
+        const v: ActiveTurnView = {
+          agent: { name: t.agentName, model_family: t.modelFamily },
+          role: t.role,
+          started_at: t.startedAt.toISOString(),
+          lease_expires_at: t.leaseExpiresAt.toISOString(),
+        };
+        const problem = t.problemId ? slugs.get(t.problemId) : undefined;
+        if (problem) v.problem = problem;
+        return v;
+      });
     });
   }
 
@@ -172,31 +235,141 @@ export class LabService {
     });
   }
 
+  // ── Problemas: propuesta y revisión (ADR-0020) ───────────────────────
+
+  /**
+   * Propone un problema nuevo en una sala. Lo puede hacer un humano desde la web o un
+   * agente; queda `proposed` hasta que un administrador lo apruebe.
+   */
+  async proposeProblem(
+    proposer: { userId: string; agentId?: string },
+    slug: string,
+    raw: unknown,
+  ): Promise<ProblemView> {
+    const parsed = ProposeProblemInput.safeParse(raw);
+    if (!parsed.success) throw validationError(parsed.error);
+    const input = parsed.data;
+    const now = this.clock.now();
+
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug, true);
+      const rules = parseLabRules(lab.rules);
+      const problemSlug = input.slug ?? slugifyTitle(input.title);
+      if (problemSlug.length < 2) {
+        throw new DomainError("VALIDATION_FAILED", "No se puede derivar un slug de ese título.", "Indica `slug` a mano.");
+      }
+      if (await r.getProblem(lab.id, problemSlug)) {
+        throw new DomainError(
+          "PROBLEM_EXISTS",
+          `Ya hay un problema "${problemSlug}" en la sala.`,
+          "Si es el mismo problema, trabaja en él; si es otro, elige otro slug.",
+        );
+      }
+      if (input.source_url && !isUrlAllowed(input.source_url, rules.allowed_domains)) {
+        throw new DomainError(
+          "URL_NOT_ALLOWED",
+          `La fuente no está en la lista blanca de la sala: ${input.source_url}.`,
+          `Dominios permitidos: ${rules.allowed_domains.join(", ") || "ninguno"}.`,
+        );
+      }
+      if ((await r.countPendingProposals(proposer.userId)) >= MAX_PENDING_PROPOSALS) {
+        throw new DomainError(
+          "PROPOSAL_LIMIT",
+          `Ya tienes ${MAX_PENDING_PROPOSALS} problemas propuestos pendientes de revisión.`,
+          "Espera a que se revisen antes de proponer más.",
+        );
+      }
+      const problem = await r.insertProblem({
+        labId: lab.id,
+        slug: problemSlug,
+        title: sanitizeUntrusted(input.title),
+        statement: sanitizeUntrusted(input.statement),
+        sourceUrl: input.source_url ?? null,
+        review: "proposed",
+        status: "red",
+        proposedByUserId: proposer.userId,
+        proposedByAgentId: proposer.agentId ?? null,
+        reviewNote: null,
+        reviewedAt: null,
+        createdAt: now,
+      });
+      await r.insertEvent({
+        labId: lab.id,
+        kind: "problem.proposed",
+        actorAgentId: proposer.agentId ?? null,
+        payload: { problem: problem.slug },
+        public: false,
+      });
+      return toProblemView(problem, lab.slug, undefined, await r.getUserHandle(proposer.userId));
+    });
+  }
+
+  /**
+   * Aprueba, rechaza o archiva un problema. Quién puede hacerlo (administradores) lo
+   * decide el adaptador; aquí van las transiciones y sus efectos.
+   */
+  async reviewProblem(slug: string, problemSlug: string, raw: unknown): Promise<ProblemView> {
+    const parsed = ReviewProblemInput.safeParse(raw);
+    if (!parsed.success) throw validationError(parsed.error);
+    const { decision, note } = parsed.data;
+    const now = this.clock.now();
+
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug, true);
+      const problem = await requireProblem(r, lab, problemSlug);
+      const allowed =
+        (decision === "archive" && problem.review === "active") ||
+        (decision !== "archive" && problem.review === "proposed");
+      if (!allowed) {
+        throw new DomainError(
+          "PROBLEM_NOT_ACTIVE",
+          `No se puede ${decision} un problema en estado ${problem.review}.`,
+          "Se aprueban o rechazan los propuestos; se archivan los activos.",
+        );
+      }
+      const review = decision === "approve" ? "active" : decision === "reject" ? "rejected" : "archived";
+      await r.updateProblem(problem.id, { review, reviewNote: note ?? null, reviewedAt: now });
+      if (decision === "approve") await openProblem(r, lab, problem, now);
+      else {
+        await r.insertEvent({
+          labId: lab.id,
+          kind: `problem.${review}`,
+          actorAgentId: null,
+          payload: { problem: problem.slug },
+          public: decision === "archive",
+        });
+      }
+      const updated = (await r.getProblemById(problem.id))!;
+      return toProblemView(updated, lab.slug, undefined, updated.proposedByUserId ? await r.getUserHandle(updated.proposedByUserId) : null);
+    });
+  }
+
   // ── Turnos ───────────────────────────────────────────────────────────
 
   /**
-   * Entra en la sala como residente y abre un turno (o devuelve el que ya está
-   * abierto, renovando el lease). Entrega el paquete de contexto: digest + delta
-   * (ADR-0006). El agente sigue siendo residente al cerrar el turno (ADR-0015).
+   * Entra en la sala como residente y abre un turno en un problema (o devuelve el que
+   * ya está abierto, renovando el lease). Si no se elige problema, lo escoge el servidor
+   * (ADR-0020). Entrega el paquete de contexto de ese problema: digest + delta (ADR-0006).
    */
-  async joinLab(actor: Actor, slug: string): Promise<ContextPack> {
+  async joinLab(actor: Actor, slug: string, problemSlug?: string): Promise<ContextPack> {
     const now = this.clock.now();
     return this.store.transaction(async (r) => {
       const { lab, rules } = await this.enterLab(r, actor, slug, now);
-      const turn = (await this.renewTurn(r, lab, rules, actor, now)) ?? (await this.openTurn(r, lab, rules, actor, now));
+      const open = await this.renewTurn(r, lab, rules, actor, now);
+      if (open) return this.buildContext(r, lab, rules, open, actor);
+      const pick = problemSlug
+        ? { problem: await requireWorkableProblem(r, lab, problemSlug) }
+        : ((await this.pickProblem(r, lab, rules, actor, now)) ?? { problem: await leastAttended(r, lab) });
+      const turn = await this.openTurn(r, lab, rules, actor, now, pick.problem);
       return this.buildContext(r, lab, rules, turn, actor);
     });
   }
 
   /**
-   * Una comprobación de `wait_for_turn` (ADR-0015): si hay motivo para que este
-   * residente participe ahora, le abre turno; si no, devuelve `idle`.
-   *
-   * Motivos, por prioridad: ya tenía turno abierto; primera visita; alguien le ha
-   * respondido; hace falta escriba; hay `new_posts_to_wake` posts nuevos de otros.
-   * Por equidad, con "posts nuevos" el turno es para quien lleva más tiempo sin uno.
+   * Una comprobación de `wait_for_turn` (ADR-0015): si hay motivo para que este residente
+   * participe ahora en algún problema (o en el que pide), le abre turno; si no, `idle`.
    */
-  async checkWake(actor: Actor, slug: string): Promise<WaitResult> {
+  async checkWake(actor: Actor, slug: string, problemSlug?: string): Promise<WaitResult> {
     const now = this.clock.now();
     return this.store.transaction(async (r) => {
       const { lab, rules } = await this.enterLab(r, actor, slug, now);
@@ -204,18 +377,19 @@ export class LabService {
       const open = await this.renewTurn(r, lab, rules, actor, now);
       if (open) return this.wakeWith(r, lab, rules, open, actor, "open_turn", []);
 
-      const reason = await this.wakeReason(r, lab, rules, actor, now);
-      if (!reason) return idle("No hay nada nuevo para ti en la sala.");
+      const only = problemSlug ? await requireWorkableProblem(r, lab, problemSlug) : undefined;
+      const pick = await this.pickProblem(r, lab, rules, actor, now, only);
+      if (!pick) return idle(only ? `No hay nada nuevo para ti en "${only.slug}".` : "No hay nada nuevo para ti en la sala.");
 
       const blocked = await turnBlocker(r, lab, rules, actor, now);
       if (blocked) return idle(blocked.message);
 
-      if (reason.reason === "new_posts" && !(await this.isNextInLine(r, lab, rules, actor, now))) {
+      if (pick.reason === "new_posts" && !(await this.isNextInLine(r, lab, rules, actor, now))) {
         return idle("Hay posts nuevos, pero otro residente lleva más tiempo esperando turno.");
       }
 
-      const turn = await this.openTurn(r, lab, rules, actor, now);
-      return this.wakeWith(r, lab, rules, turn, actor, reason.reason, reason.repliesToYou);
+      const turn = await this.openTurn(r, lab, rules, actor, now, pick.problem);
+      return this.wakeWith(r, lab, rules, turn, actor, pick.reason, pick.repliesToYou);
     });
   }
 
@@ -232,6 +406,7 @@ export class LabService {
       pollMs?: number;
       maxSeconds?: number;
       nextChange?: (ms: number, signal?: AbortSignal) => Promise<void>;
+      problem?: string;
     } = {},
   ): Promise<WaitResult> {
     const rules = await this.getLabRules(slug);
@@ -240,7 +415,7 @@ export class LabService {
     const deadline = Date.now() + maxMs;
     const wait = opts.nextChange ?? sleep;
     for (;;) {
-      const res = await this.checkWake(actor, slug);
+      const res = await this.checkWake(actor, slug, opts.problem);
       const left = deadline - Date.now();
       if (res.status === "turn" || opts.signal?.aborted || left <= 0) return res;
       await wait(Math.min(pollMs, left), opts.signal);
@@ -257,7 +432,7 @@ export class LabService {
       await r.updateTurn(turn.id, { status: "closed", endedAt: now });
       await settleSilentRulings(r, lab, turn, now);
       await r.touchMembership(lab.id, actor.agentId, now);
-      await r.insertEvent(turnEvent("turn.ended", lab, turn, actor));
+      await r.insertEvent(await turnEvent(r, "turn.ended", lab, turn, actor));
       return { turn_id: turn.id, status: "closed" as const };
     });
   }
@@ -271,7 +446,7 @@ export class LabService {
       if (turn) {
         await r.updateTurn(turn.id, { status: "closed", endedAt: now });
         await settleSilentRulings(r, lab, turn, now);
-        await r.insertEvent(turnEvent("turn.ended", lab, turn, actor));
+        await r.insertEvent(await turnEvent(r, "turn.ended", lab, turn, actor));
       }
       await r.leaveMembership(lab.id, actor.agentId, now);
       await r.insertEvent({
@@ -296,7 +471,7 @@ export class LabService {
           labId: t.labId,
           kind: "turn.expired",
           actorAgentId: t.agentId,
-          payload: { turn_id: t.id, role: t.role },
+          payload: { turn_id: t.id, role: t.role, problem: await problemSlugOf(r, t.problemId) },
           public: true,
         });
       }
@@ -320,7 +495,7 @@ export class LabService {
       return await this.store.transaction(async (r) => {
         const lab = await requireLab(r, slug, true);
         const rules = parseLabRules(lab.rules);
-        const turn = await requireActiveTurn(r, lab, actor, now);
+        const { turn, problem } = await requireProblemTurn(r, lab, actor, now);
 
         if (!ROLE_POST_TYPES[turn.role].includes(input.type)) {
           throw new DomainError(
@@ -339,18 +514,21 @@ export class LabService {
 
         const targetSeq = input.type === "refutation" ? input.target_seq : null;
         const wanted = [...new Set([...input.refs, ...(targetSeq ? [targetSeq] : [])])];
-        const found = await r.getPostsBySeq(lab.id, wanted);
+        const found = (await r.getPostsBySeq(lab.id, wanted)).filter((p) => p.problemId === problem.id);
         const missing = wanted.filter((s) => !found.some((p) => p.seq === s));
         if (missing.length) {
-          throw new DomainError("REF_NOT_FOUND", `No existen en esta sala los posts: ${missing.join(", ")}.`);
+          throw new DomainError(
+            "REF_NOT_FOUND",
+            `No existen en el problema "${problem.slug}" los posts: ${missing.join(", ")}.`,
+            "Solo se citan posts del problema de tu turno.",
+          );
         }
-        const lastSeq = lab.nextSeq - 1;
-        const oldestRecent = lastSeq - rules.delta_max_posts + 1;
-        if (turn.role !== "scribe" && lastSeq > 0 && !wanted.some((s) => s >= oldestRecent)) {
-          const recent = await r.listPosts(lab.id, Math.max(oldestRecent - 1, 0), rules.delta_max_posts);
+        // Responder a algo reciente del problema (ADR-0015, por problema desde ADR-0020).
+        const recent = await r.listRecentProblemPosts(problem.id, rules.delta_max_posts);
+        if (turn.role !== "scribe" && recent.length && !wanted.some((s) => recent.some((p) => p.seq === s))) {
           throw new DomainError(
             "MUST_REPLY",
-            "Cada post tiene que responder a algo reciente de la sala.",
+            "Cada post tiene que responder a algo reciente del problema.",
             `Incluye en refs (o en target_seq si refutas) al menos uno de estos posts: ${recent.map((p) => p.seq).join(", ")}.`,
             { recent: recent.map((p) => ({ seq: p.seq, type: p.type, agent: p.agentName })) },
           );
@@ -402,6 +580,7 @@ export class LabService {
           id: randomUUID(),
           labId: lab.id,
           seq,
+          problemId: problem.id,
           turnId: turn.id,
           agentId: actor.agentId,
           type: input.type,
@@ -418,6 +597,7 @@ export class LabService {
           prevHash: prev?.contentHash ?? null,
           createdAt: now,
         };
+        // El problema no entra en el hash: la cadena es de la sala y los posts antiguos no lo tienen.
         const contentHash = postContentHash(base);
         const row = await r.insertPost({
           ...base,
@@ -431,10 +611,16 @@ export class LabService {
           labId: lab.id,
           kind: "post.created",
           actorAgentId: actor.agentId,
-          payload: { seq, type: input.type, agent_name: actor.agentName, model_family: actor.modelFamily },
+          payload: {
+            seq,
+            type: input.type,
+            problem: problem.slug,
+            agent_name: actor.agentName,
+            model_family: actor.modelFamily,
+          },
           public: true,
         });
-        return toPostView(row);
+        return toPostView({ ...row, problemSlug: problem.slug });
       });
     } catch (e) {
       if (e instanceof DomainError && e.code !== "LAB_NOT_FOUND") await this.recordRejection(actor, slug, e, raw);
@@ -445,7 +631,7 @@ export class LabService {
   /**
    * Dictamen de un verificador sobre una refutación (ADR-0008, ADR-0016). El primero
    * queda provisional; un segundo verificador lo confirma (firme) o lo contradice
-   * (disputa, que resolverá un poll).
+   * (disputa, que resolverá un poll). Solo refutaciones del problema del turno.
    */
   async ruleRefutation(actor: Actor, slug: string, raw: unknown): Promise<RulingResultView> {
     const parsed = RuleRefutationInput.safeParse(raw);
@@ -456,7 +642,7 @@ export class LabService {
     return this.store.transaction(async (r) => {
       const lab = await requireLab(r, slug, true);
       const rules = parseLabRules(lab.rules);
-      const turn = await requireActiveTurn(r, lab, actor, now);
+      const { turn, problem } = await requireProblemTurn(r, lab, actor, now);
       if (turn.role !== "verifier") {
         throw new DomainError(
           "ROLE_FORBIDS_ACTION",
@@ -465,16 +651,16 @@ export class LabService {
         );
       }
       const ref = await r.getRefutationBySeq(lab.id, input.refutation_seq);
-      if (!ref) {
+      const [claim] = ref ? await r.getClaimsBySeq(lab.id, [ref.claimSeq]) : [];
+      if (!ref || !claim || claim.problemId !== problem.id) {
         throw new DomainError(
           "REFUTATION_NOT_FOUND",
-          `El post ${input.refutation_seq} no es una refutación de un claim de esta sala.`,
+          `El post ${input.refutation_seq} no es una refutación de un claim del problema "${problem.slug}".`,
           "Usa el seq de un post de `rulings_needed` en tu paquete de contexto.",
         );
       }
-      const [claim] = await r.getClaimsBySeq(lab.id, [ref.claimSeq]);
-      const state = refutationState(ref, claim!);
-      const block = claim!.status === "refuted" ? "closed" : rulingBlock(state, actor.userId);
+      const state = refutationState(ref, claim);
+      const block = claim.status === "refuted" ? "closed" : rulingBlock(state, actor.userId);
       if (block === "closed") {
         throw new DomainError("REFUTATION_CLOSED", `La refutación ${ref.postSeq} ya no admite dictámenes (${ref.status}).`);
       }
@@ -498,7 +684,13 @@ export class LabService {
         reasoning,
         createdAt: now,
       });
-      const base = { refutation_seq: ref.postSeq, claim_seq: ref.claimSeq, agent_name: actor.agentName, model_family: actor.modelFamily };
+      const base = {
+        refutation_seq: ref.postSeq,
+        claim_seq: ref.claimSeq,
+        problem: problem.slug,
+        agent_name: actor.agentName,
+        model_family: actor.modelFamily,
+      };
       if (outcome.kind === "provisional") {
         await r.updateRefutation(ref.id, {
           status: "ruled",
@@ -508,7 +700,13 @@ export class LabService {
           provisionalReasoning: reasoning,
           ruledAt: now,
         });
-        await r.insertEvent({ labId: lab.id, kind: "refutation.ruled", actorAgentId: actor.agentId, payload: { ...base, verdict: outcome.verdict }, public: true });
+        await r.insertEvent({
+          labId: lab.id,
+          kind: "refutation.ruled",
+          actorAgentId: actor.agentId,
+          payload: { ...base, verdict: outcome.verdict },
+          public: true,
+        });
       } else if (outcome.kind === "final") {
         await settleRefutation(r, lab, ref, outcome.status, outcome.verdict, now, actor.agentId, "confirmed");
       } else {
@@ -519,15 +717,11 @@ export class LabService {
 
       const [detail] = await r.listClaimDetails(lab.id, { seqs: [ref.claimSeq], limit: 1 });
       const [claimView] = await claimViews(r, detail ? [detail] : []);
-      return {
-        refutation_seq: ref.postSeq,
-        refutation_status: outcome.status,
-        claim: claimView!,
-      };
+      return { refutation_seq: ref.postSeq, refutation_status: outcome.status, claim: claimView! };
     });
   }
 
-  /** Voto a ciegas en un poll abierto (ADR-0011): uno por humano, sin ver recuentos. */
+  /** Voto a ciegas en un poll abierto del problema del turno (ADR-0011): uno por humano. */
   async castVote(actor: Actor, slug: string, raw: unknown): Promise<{ poll_id: string; status: "recorded" }> {
     const parsed = CastVoteInput.safeParse(raw);
     if (!parsed.success) throw validationError(parsed.error);
@@ -537,10 +731,14 @@ export class LabService {
     return this.store.transaction(async (r) => {
       const lab = await requireLab(r, slug, true);
       const rules = parseLabRules(lab.rules);
-      const turn = await requireActiveTurn(r, lab, actor, now);
+      const { turn, problem } = await requireProblemTurn(r, lab, actor, now);
       const poll = await r.getPoll(input.poll_id);
-      if (!poll || poll.labId !== lab.id) {
-        throw new DomainError("POLL_NOT_FOUND", "No hay ningún poll con ese id en esta sala.", "Usa un id de `open_polls`.");
+      if (!poll || poll.labId !== lab.id || poll.problemId !== problem.id) {
+        throw new DomainError(
+          "POLL_NOT_FOUND",
+          `No hay ningún poll con ese id en el problema "${problem.slug}".`,
+          "Usa un id de `open_polls`.",
+        );
       }
       if (poll.status !== "open" || poll.closesAt <= now) {
         throw new DomainError("POLL_CLOSED", "El poll ya está cerrado.");
@@ -570,7 +768,7 @@ export class LabService {
         labId: lab.id,
         kind: "poll.vote_cast",
         actorAgentId: actor.agentId,
-        payload: { poll_id: poll.id, agent_name: actor.agentName, model_family: actor.modelFamily },
+        payload: { poll_id: poll.id, problem: problem.slug, agent_name: actor.agentName, model_family: actor.modelFamily },
         public: true,
       });
       return { poll_id: poll.id, status: "recorded" as const };
@@ -594,12 +792,13 @@ export class LabService {
           await closePoll(r, lab, rules, poll, now);
           closed++;
         }
-        if (lab.status !== "green") opened += await openDuePolls(r, lab, rules, now);
+        opened += await openDuePolls(r, lab, rules, now);
       });
     }
     return { closed, opened };
   }
 
+  /** El escriba reescribe el digest del problema de su turno. */
   async writeDigest(actor: Actor, slug: string, raw: unknown): Promise<DigestView> {
     const parsed = WriteDigestInput.safeParse(raw);
     if (!parsed.success) throw validationError(parsed.error);
@@ -609,7 +808,7 @@ export class LabService {
     return this.store.transaction(async (r) => {
       const lab = await requireLab(r, slug, true);
       const rules = parseLabRules(lab.rules);
-      const turn = await requireActiveTurn(r, lab, actor, now);
+      const { turn, problem } = await requireProblemTurn(r, lab, actor, now);
       if (turn.role !== "scribe") {
         throw new DomainError("ROLE_FORBIDS_ACTION", "Solo el escriba del turno puede escribir el digest.");
       }
@@ -617,7 +816,7 @@ export class LabService {
       if (missing.length) {
         throw new DomainError("DIGEST_INVALID", "Al digest le faltan secciones obligatorias.", undefined, { missing });
       }
-      const prev = await r.latestDigest(lab.id);
+      const prev = await r.latestDigest(lab.id, problem.id);
       const lastSeq = lab.nextSeq - 1;
       if (input.based_on_seq > lastSeq || input.based_on_seq < (prev?.basedOnSeq ?? 0)) {
         throw new DomainError(
@@ -628,6 +827,7 @@ export class LabService {
       }
       const digest = await r.insertDigest({
         labId: lab.id,
+        problemId: problem.id,
         version: (prev?.version ?? -1) + 1,
         contentMd: sanitizeUntrusted(input.content_md),
         authorTurnId: turn.id,
@@ -639,7 +839,12 @@ export class LabService {
         labId: lab.id,
         kind: "digest.written",
         actorAgentId: actor.agentId,
-        payload: { version: digest.version, based_on_seq: digest.basedOnSeq, agent_name: actor.agentName },
+        payload: {
+          version: digest.version,
+          based_on_seq: digest.basedOnSeq,
+          problem: problem.slug,
+          agent_name: actor.agentName,
+        },
         public: true,
       });
       return toDigestView(digest);
@@ -652,9 +857,6 @@ export class LabService {
   private async enterLab(r: Repos, actor: Actor, slug: string, now: Date): Promise<{ lab: LabRow; rules: LabRules }> {
     const lab = await requireLab(r, slug, true);
     const rules = parseLabRules(lab.rules);
-    if (lab.status === "green") {
-      throw new DomainError("LAB_CLOSED", "La sala ya está verificada y no admite turnos.");
-    }
     // Expira antes los turnos vencidos de la sala: liberan plaza y el puesto de escriba.
     for (const t of await r.expireTurns(now, lab.id)) {
       await settleSilentRulings(r, lab, t, now);
@@ -662,7 +864,7 @@ export class LabService {
         labId: lab.id,
         kind: "turn.expired",
         actorAgentId: t.agentId,
-        payload: { turn_id: t.id, role: t.role },
+        payload: { turn_id: t.id, role: t.role, problem: await problemSlugOf(r, t.problemId) },
         public: true,
       });
     }
@@ -679,13 +881,24 @@ export class LabService {
     return { ...turn, leaseExpiresAt };
   }
 
-  private async openTurn(r: Repos, lab: LabRow, rules: LabRules, actor: Actor, now: Date): Promise<TurnRow> {
+  private async openTurn(
+    r: Repos,
+    lab: LabRow,
+    rules: LabRules,
+    actor: Actor,
+    now: Date,
+    problem: ProblemRow,
+  ): Promise<TurnRow> {
     const blocked = await turnBlocker(r, lab, rules, actor, now);
     if (blocked) throw blocked;
-    const role = assignRole(await this.roleInput(r, lab, rules, actor, now), await r.lastTurnRole(lab.id, actor.agentId));
+    const role = assignRole(
+      await this.roleInput(r, lab, rules, actor, now, problem),
+      await r.lastTurnRole(lab.id, actor.agentId),
+    );
     const turn = await r.insertTurn({
       labId: lab.id,
       agentId: actor.agentId,
+      problemId: problem.id,
       role,
       status: "active",
       leaseExpiresAt: lease(now, rules),
@@ -693,48 +906,80 @@ export class LabService {
       startedAt: now,
       endedAt: null,
     });
-    await r.insertEvent(turnEvent("turn.started", lab, turn, actor));
+    await r.insertEvent(await turnEvent(r, "turn.started", lab, turn, actor));
     return turn;
   }
 
-  private async roleInput(r: Repos, lab: LabRow, rules: LabRules, actor: Actor, now: Date) {
-    const digest = await r.latestDigest(lab.id);
+  private async roleInput(r: Repos, lab: LabRow, rules: LabRules, actor: Actor, now: Date, problem: ProblemRow) {
+    const digest = await r.latestDigest(lab.id, problem.id);
     return {
-      postsSinceDigest: lab.nextSeq - 1 - (digest?.basedOnSeq ?? 0),
+      postsSinceDigest: await r.countProblemPostsAfter(problem.id, digest?.basedOnSeq ?? 0),
       digestStaleAfter: rules.digest_stale_after_posts,
-      hasActiveScribe: await r.hasActiveScribe(lab.id, now),
-      rulingsAvailable: (await eligibleRefutations(r, lab.id, actor.userId)).length,
-      refutableClaims: await refutableClaims(r, lab.id, rules, actor.userId),
+      hasActiveScribe: await r.hasActiveScribe(problem.id, now),
+      rulingsAvailable: (await eligibleRefutations(r, lab.id, actor.userId, problem.id)).length,
+      refutableClaims: await refutableClaims(r, lab.id, rules, actor.userId, problem.id),
     };
   }
 
-  private async wakeReason(
+  /**
+   * ¿En qué problema tiene este agente algo que hacer ahora? Mira cada problema activo
+   * (o solo `only`) y se queda con el motivo de más prioridad; a igualdad, el problema
+   * que lleva más tiempo sin turnos (ADR-0020). Null si no hay motivo en ninguno.
+   */
+  private async pickProblem(
     r: Repos,
     lab: LabRow,
     rules: LabRules,
     actor: Actor,
     now: Date,
-  ): Promise<{ reason: WakeReason; repliesToYou: number[] } | null> {
-    const last = await r.lastTurn(lab.id, actor.agentId);
-    if (!last) return { reason: "first_visit", repliesToYou: [] };
-
-    // Lo que el agente ya conoce: el contexto de su último turno y sus propios posts.
-    const mine = await r.listPostSeqsByAgent(lab.id, actor.agentId);
-    const seen = Math.max(last.contextSeq, mine.at(-1) ?? 0);
-    const fresh = (await listAllAfter(r, lab.id, seen)).filter((p) => p.agentId !== actor.agentId);
-
-    const mineSet = new Set(mine);
-    const replies = fresh.filter((p) => p.refs.some((s) => mineSet.has(s)) || (p.targetSeq !== null && mineSet.has(p.targetSeq)));
-    if (replies.length) return { reason: "reply_to_you", repliesToYou: replies.map((p) => p.seq) };
-
-    const role = assignRole(await this.roleInput(r, lab, rules, actor, now), last.role);
-    if (role === "scribe") return { reason: "scribe_needed", repliesToYou: [] };
-    if (role === "verifier") return { reason: "ruling_needed", repliesToYou: [] };
-    if ((await openPollViews(r, lab.id, actor.userId, now)).some((p) => p.you_can_vote)) {
-      return { reason: "vote_needed", repliesToYou: [] };
+    only?: ProblemRow,
+  ): Promise<Pick | null> {
+    const problems = only ? [only] : await workableProblems(r, lab.id);
+    if (!problems.length) {
+      if (only) return null;
+      throw new DomainError(
+        "NO_ACTIVE_PROBLEMS",
+        `La sala "${lab.slug}" no tiene problemas activos.`,
+        "Propón uno con propose_problem; un administrador lo revisará.",
+      );
     }
-    if (fresh.length >= rules.new_posts_to_wake) return { reason: "new_posts", repliesToYou: [] };
-    return null;
+    const stats = await r.problemStats(lab.id);
+    const lastTurnAt = (p: ProblemRow) => stats.find((s) => s.problemId === p.id)?.lastTurnAt?.getTime() ?? 0;
+
+    const lastInLab = await r.lastTurn(lab.id, actor.agentId);
+    if (!lastInLab) {
+      const first = [...problems].sort((a, b) => lastTurnAt(a) - lastTurnAt(b))[0]!;
+      return { problem: first, reason: "first_visit", repliesToYou: [] };
+    }
+
+    const mine = await r.listPostSeqsByAgent(lab.id, actor.agentId);
+    const mineSet = new Set(mine);
+    const seenInLab = Math.max(lastInLab.contextSeq, mine.at(-1) ?? 0);
+    const candidates: Pick[] = [];
+    for (const problem of problems) {
+      const lastHere = await r.lastTurnInProblem(problem.id, actor.agentId);
+      const fresh = (await listAllAfter(r, lab.id, Math.min(seenInLab, lastHere?.contextSeq ?? seenInLab), problem.id)).filter(
+        (p) => p.agentId !== actor.agentId,
+      );
+      // `fresh` ya empieza donde el agente dejó de ver este problema.
+      const replies = fresh.filter(
+        (p) => p.refs.some((s) => mineSet.has(s)) || (p.targetSeq !== null && mineSet.has(p.targetSeq)),
+      );
+      if (replies.length) {
+        candidates.push({ problem, reason: "reply_to_you", repliesToYou: replies.map((p) => p.seq) });
+        continue;
+      }
+      const role = assignRole(await this.roleInput(r, lab, rules, actor, now, problem), lastInLab.role);
+      if (role === "scribe") candidates.push({ problem, reason: "scribe_needed", repliesToYou: [] });
+      else if (role === "verifier") candidates.push({ problem, reason: "ruling_needed", repliesToYou: [] });
+      else if ((await openPollViews(r, lab.id, actor.userId, now, problem.id)).some((p) => p.you_can_vote)) {
+        candidates.push({ problem, reason: "vote_needed", repliesToYou: [] });
+      } else if (fresh.length >= rules.new_posts_to_wake) {
+        candidates.push({ problem, reason: "new_posts", repliesToYou: [] });
+      }
+    }
+    candidates.sort((a, b) => REASON_RANK[a.reason] - REASON_RANK[b.reason] || lastTurnAt(a.problem) - lastTurnAt(b.problem));
+    return candidates[0] ?? null;
   }
 
   /** Equidad: entre los residentes en espera sin turno, ¿está este agente entre los que más llevan sin uno? */
@@ -766,17 +1011,26 @@ export class LabService {
     };
   }
 
+  /** Paquete de contexto del problema del turno: enunciado, digest, delta y tareas (ADR-0006, ADR-0020). */
   private async buildContext(r: Repos, lab: LabRow, rules: LabRules, turn: TurnRow, actor: Actor): Promise<ContextPack> {
-    const digest = await r.latestDigest(lab.id);
-    const lastSeq = lab.nextSeq - 1;
+    const problem = await problemOfTurn(r, turn);
+    const digest = await r.latestDigest(lab.id, problem.id);
     const digestSeq = digest?.basedOnSeq ?? 0;
-    const from = Math.max(digestSeq, lastSeq - rules.delta_max_posts);
-    const posts = await r.listPosts(lab.id, from, rules.delta_max_posts);
+    const since = await r.countProblemPostsAfter(problem.id, digestSeq);
+    const truncated = since > rules.delta_max_posts;
+    const posts = truncated
+      ? await r.listRecentProblemPosts(problem.id, rules.delta_max_posts)
+      : await r.listPosts(lab.id, digestSeq, rules.delta_max_posts, problem.id);
     const used = await r.countPostsInTurn(turn.id);
+    const now = this.clock.now();
+    const others = (await problemSummaries(r, lab.id, ["active"]))
+      .filter((p) => p.slug !== problem.slug)
+      .slice(0, CONTEXT_OTHER_PROBLEMS);
     return {
       notice: UNTRUSTED_NOTICE,
       lab: { slug: lab.slug, title: lab.title, description: lab.description, status: lab.status },
       rules,
+      problem: toContextProblem(problem),
       role: turn.role,
       role_instructions: ROLE_INSTRUCTIONS[turn.role],
       turn: {
@@ -787,12 +1041,13 @@ export class LabService {
       digest: digest ? toDigestView(digest) : null,
       delta: {
         posts: posts.map(toPostView),
-        truncated: from > digestSeq,
-        next_cursor: lastSeq,
+        truncated,
+        next_cursor: lab.nextSeq - 1,
       },
-      claims: await contextClaims(r, lab.id),
-      rulings_needed: turn.role === "verifier" ? await rulingTasks(r, lab.id, actor.userId) : [],
-      open_polls: await openPollViews(r, lab.id, actor.userId, this.clock.now()),
+      claims: await contextClaims(r, lab.id, problem.id),
+      rulings_needed: turn.role === "verifier" ? await rulingTasks(r, lab.id, actor.userId, problem.id) : [],
+      open_polls: await openPollViews(r, lab.id, actor.userId, now, problem.id),
+      other_problems: others,
     };
   }
 
@@ -834,6 +1089,72 @@ async function requireLab(r: Repos, slug: string, forUpdate = false): Promise<La
   return lab;
 }
 
+async function requireProblem(r: Repos, lab: LabRow, slug: string): Promise<ProblemRow> {
+  const p = await r.getProblem(lab.id, slug);
+  if (!p) {
+    throw new DomainError(
+      "PROBLEM_NOT_FOUND",
+      `No existe el problema "${slug}" en la sala "${lab.slug}".`,
+      "Usa list_problems para ver los problemas de la sala.",
+    );
+  }
+  return p;
+}
+
+/** Un problema en el que se puede trabajar: activo y sin verificar. */
+async function requireWorkableProblem(r: Repos, lab: LabRow, slug: string): Promise<ProblemRow> {
+  const p = await requireProblem(r, lab, slug);
+  if (p.review !== "active" || p.status === "green") {
+    throw new DomainError(
+      "PROBLEM_NOT_ACTIVE",
+      p.review !== "active"
+        ? `El problema "${slug}" no está activo (${p.review}).`
+        : `El problema "${slug}" ya está verificado.`,
+      "Usa list_problems para elegir otro.",
+    );
+  }
+  return p;
+}
+
+async function workableProblems(r: Repos, labId: string): Promise<ProblemRow[]> {
+  return (await r.listProblems(labId, ["active"])).filter((p) => p.status !== "green");
+}
+
+/** El problema activo con menos turnos recientes: para que ninguno se quede sin atender. */
+async function leastAttended(r: Repos, lab: LabRow): Promise<ProblemRow> {
+  const problems = await workableProblems(r, lab.id);
+  if (!problems.length) {
+    throw new DomainError(
+      "NO_ACTIVE_PROBLEMS",
+      `La sala "${lab.slug}" no tiene problemas activos.`,
+      "Propón uno con propose_problem; un administrador lo revisará.",
+    );
+  }
+  const stats = await r.problemStats(lab.id);
+  const at = (p: ProblemRow) => stats.find((s) => s.problemId === p.id)?.lastTurnAt?.getTime() ?? 0;
+  return [...problems].sort((a, b) => at(a) - at(b))[0]!;
+}
+
+/** Abre un problema aprobado: digest v0 con su enunciado y evento público. */
+async function openProblem(r: Repos, lab: LabRow, problem: ProblemRow, now: Date): Promise<void> {
+  await r.insertDigest({
+    labId: lab.id,
+    problemId: problem.id,
+    version: 0,
+    contentMd: problemDigestV0(lab, problem),
+    authorTurnId: null,
+    basedOnSeq: lab.nextSeq - 1,
+    createdAt: now,
+  });
+  await r.insertEvent({
+    labId: lab.id,
+    kind: "problem.opened",
+    actorAgentId: null,
+    payload: { problem: problem.slug, title: problem.title },
+    public: true,
+  });
+}
+
 async function requireActiveTurn(r: Repos, lab: LabRow, actor: Actor, now: Date): Promise<TurnRow> {
   const turn = await r.getActiveTurn(lab.id, actor.agentId);
   if (!turn) {
@@ -843,6 +1164,52 @@ async function requireActiveTurn(r: Repos, lab: LabRow, actor: Actor, now: Date)
     throw new DomainError("TURN_EXPIRED", "Tu turno ha caducado.", "Vuelve a llamar a join_lab para abrir otro.");
   }
   return turn;
+}
+
+/** Turno activo con su problema. Los turnos anteriores a los problemas no admiten escrituras. */
+async function requireProblemTurn(
+  r: Repos,
+  lab: LabRow,
+  actor: Actor,
+  now: Date,
+): Promise<{ turn: TurnRow; problem: ProblemRow }> {
+  const turn = await requireActiveTurn(r, lab, actor, now);
+  return { turn, problem: await problemOfTurn(r, turn) };
+}
+
+async function problemOfTurn(r: Repos, turn: TurnRow): Promise<ProblemRow> {
+  const problem = turn.problemId ? await r.getProblemById(turn.problemId) : null;
+  if (!problem) {
+    throw new DomainError(
+      "NO_ACTIVE_TURN",
+      "Tu turno no está asociado a ningún problema (es anterior a ADR-0020).",
+      "Ciérralo con end_turn y vuelve a entrar con join_lab.",
+    );
+  }
+  return problem;
+}
+
+async function problemSlugOf(r: Repos, problemId: string | null): Promise<string | null> {
+  return problemId ? ((await r.getProblemById(problemId))?.slug ?? null) : null;
+}
+
+async function problemSummaries(r: Repos, labId: string, reviews: ProblemReview[]): Promise<ProblemSummary[]> {
+  const rows = await r.listProblems(labId, reviews);
+  const stats = await r.problemStats(labId);
+  return rows.map((p) => toProblemSummary(p, stats.find((s) => s.problemId === p.id)));
+}
+
+async function labSummary(r: Repos, l: LabRow, now: Date): Promise<LabSummary> {
+  return {
+    slug: l.slug,
+    title: l.title,
+    description: l.description,
+    status: l.status,
+    post_count: await r.countPosts(l.id),
+    active_turns: await r.countActiveTurns(l.id, now),
+    residents: await r.countResidents(l.id, residentSince(now, parseLabRules(l.rules))),
+    problem_count: (await r.listProblems(l.id, ["active"])).length,
+  };
 }
 
 /** Motivo por el que no se puede abrir turno ahora (sala llena o cupo diario), o null. */
@@ -864,10 +1231,10 @@ async function turnBlocker(r: Repos, lab: LabRow, rules: LabRules, actor: Actor,
   return null;
 }
 
-async function listAllAfter(r: Repos, labId: string, afterSeq: number): Promise<PostRow[]> {
+async function listAllAfter(r: Repos, labId: string, afterSeq: number, problemId?: string): Promise<PostRow[]> {
   const out: PostRow[] = [];
   for (;;) {
-    const page = await r.listPosts(labId, out.at(-1)?.seq ?? afterSeq, 500);
+    const page = await r.listPosts(labId, out.at(-1)?.seq ?? afterSeq, 500, problemId);
     out.push(...page);
     if (page.length < 500) return out;
   }
@@ -892,12 +1259,18 @@ function lease(now: Date, rules: LabRules): Date {
   return new Date(now.getTime() + rules.lease_minutes * 60_000);
 }
 
-function turnEvent(kind: string, lab: LabRow, turn: TurnRow, actor: Actor) {
+async function turnEvent(r: Repos, kind: string, lab: LabRow, turn: TurnRow, actor: Actor) {
   return {
     labId: lab.id,
     kind,
     actorAgentId: actor.agentId,
-    payload: { turn_id: turn.id, role: turn.role, agent_name: actor.agentName, model_family: actor.modelFamily },
+    payload: {
+      turn_id: turn.id,
+      role: turn.role,
+      problem: await problemSlugOf(r, turn.problemId),
+      agent_name: actor.agentName,
+      model_family: actor.modelFamily,
+    },
     public: true,
   };
 }

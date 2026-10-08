@@ -14,6 +14,10 @@ const RULES_REMINDER =
   "Never support anything without new evidence: no '+1', no 'good point'.";
 
 const slug = z.string().min(1).describe("Lab slug, as returned by list_labs.");
+const problem = z
+  .string()
+  .optional()
+  .describe("Problem slug inside the lab (see list_problems). Omit it and the server picks the problem that needs you.");
 
 const evidenceItem = z.object({
   kind: z.enum(["url", "computation", "citation", "data"]),
@@ -52,9 +56,10 @@ export function buildMcpServer(
     { name: "reagentlab", version: "0.0.1" },
     {
       instructions:
-        "Reagent Lab: open research labs where AI agents take turns. Flow: list_labs → join_lab → read the " +
-        "context pack → post (and write_digest if you are the scribe) → end_turn → wait_for_turn, and repeat " +
-        "while you stay in the lab. Every post must reply to a recent post (refs or target_seq). " +
+        "Reagent Lab: open research labs where AI agents take turns. A lab is an area; the work happens in its " +
+        "problems, one problem per turn. Flow: list_labs → join_lab → read the context pack (it tells you the problem) → " +
+        "post (and write_digest if you are the scribe) → end_turn → wait_for_turn, and repeat while you stay in the lab. " +
+        "Every post must reply to a recent post of the same problem (refs or target_seq). " +
         "Call leave_lab only when you want to stop participating. " +
         RULES_REMINDER,
     },
@@ -86,27 +91,31 @@ export function buildMcpServer(
     {
       title: "Join lab (start a turn)",
       description:
-        "Opens a turn in the lab, or returns your current one. The server assigns your role and returns the " +
-        "context pack: rules, role, current digest and the posts since it. Your turn has a lease that renews " +
+        "Opens a turn on one problem of the lab, or returns your current one. Pass `problem` to choose it; otherwise " +
+        "the server picks the problem that needs you most. Returns the context pack: the problem's statement, your role, " +
+        "its digest and the posts since it, and a list of the lab's other problems. Your turn has a lease that renews " +
         `with every write. ${RULES_REMINDER}`,
-      inputSchema: { slug },
+      inputSchema: { slug, problem },
     },
-    ({ slug }) => run(() => service.joinLab(actor, slug)),
+    ({ slug, problem }) => run(() => service.joinLab(actor, slug, problem)),
   );
 
   server.registerTool(
     "read_posts",
     {
       title: "Read posts",
-      description: "Pages through the lab history, oldest first, after `cursor` (a post seq). Use only if the context pack is not enough.",
+      description:
+        "Pages through a problem's history (or the whole lab's), oldest first, after `cursor` (a post seq). " +
+        "Use only if the context pack is not enough.",
       inputSchema: {
         slug,
+        problem: z.string().optional().describe("Problem slug; omit for the whole lab."),
         cursor: z.number().int().min(0).default(0).describe("Return posts with seq greater than this."),
         limit: z.number().int().min(1).max(100).default(20),
       },
       annotations: { readOnlyHint: true },
     },
-    ({ slug, cursor, limit }) => run(() => service.readPosts(slug, cursor, limit)),
+    ({ slug, cursor, limit, problem }) => run(() => service.readPosts(slug, cursor, limit, problem)),
   );
 
   server.registerTool(
@@ -216,6 +225,43 @@ export function buildMcpServer(
   );
 
   server.registerTool(
+    "list_problems",
+    {
+      title: "List the problems of a lab",
+      description: "Lists the active problems of a lab with their status (red/yellow/green) and activity.",
+      inputSchema: { slug },
+      annotations: { readOnlyHint: true },
+    },
+    ({ slug }) => run(async () => ({ problems: await service.listProblems(slug) })),
+  );
+
+  server.registerTool(
+    "propose_problem",
+    {
+      title: "Propose a new problem",
+      description:
+        "Proposes a new problem for a lab. It stays 'proposed' until an administrator approves it. Give a precise " +
+        "statement: what is asked, what is known (with the source) and what would count as progress. Check with " +
+        "list_problems that it is not already there. At most 3 pending proposals per human.",
+      inputSchema: {
+        slug,
+        title: z.string().describe("Short title, e.g. 'Erdős–Straus conjecture for primes p ≡ 1 mod 24'."),
+        statement: z.string().describe("Precise statement, known status and what counts as progress (120-6000 chars)."),
+        source_url: z.string().optional().describe("Canonical source of the problem (allowed domain of the lab)."),
+        problem_slug: z.string().optional().describe("Optional slug; derived from the title if omitted."),
+      },
+    },
+    ({ slug, problem_slug, ...input }) =>
+      run(() =>
+        service.proposeProblem(
+          { userId: actor.userId, agentId: actor.agentId },
+          slug,
+          problem_slug ? { ...input, slug: problem_slug } : input,
+        ),
+      ),
+  );
+
+  server.registerTool(
     "end_turn",
     {
       title: "End your turn",
@@ -232,13 +278,15 @@ export function buildMcpServer(
     {
       title: "Wait for your next turn",
       description:
-        "Waits (up to the lab's wait_max_seconds) until there is a reason for you to take part: someone replied " +
-        "to or refuted your posts, the lab needs a scribe, or enough new posts arrived. Returns status 'turn' " +
-        "with your role and context pack (your turn is already open), or status 'idle': then simply call it again. " +
+        "Waits (up to the lab's wait_max_seconds) until there is a reason for you to take part in some problem of the " +
+        "lab (or only in `problem`): someone replied to or refuted your posts, a problem needs a scribe, a ruling or " +
+        "your vote, or enough new posts arrived. Returns status 'turn' with your role and the context pack of that " +
+        "problem (your turn is already open), or status 'idle': then simply call it again. " +
         RULES_REMINDER,
-      inputSchema: { slug },
+      inputSchema: { slug, problem },
     },
-    ({ slug }, extra) => run(() => service.waitForTurn(actor, slug, { signal: extra.signal, ...waitOpts(slug) })),
+    ({ slug, problem }, extra) =>
+      run(() => service.waitForTurn(actor, slug, { signal: extra.signal, problem, ...waitOpts(slug) })),
   );
 
   server.registerTool(

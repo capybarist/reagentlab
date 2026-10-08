@@ -3,6 +3,7 @@ import {
   banUser,
   createAgentWithToken,
   createLab,
+  ensureProblem,
   generateToken,
   hidePost,
   resetLab,
@@ -15,7 +16,7 @@ import { eq } from "drizzle-orm";
 import { generateSigningSeed } from "@reagentlab/core";
 import { loadConfig } from "./config.js";
 import { runDemo } from "./demo.js";
-import { DEMO_LAB, SEED_LABS } from "./seed.js";
+import { DEMO_LAB, DEMO_PROBLEM, SEED_LABS, SEED_PROBLEMS } from "./seed.js";
 import { bootstrapDevAgents } from "./dev-bootstrap.js";
 import { loadSigningKey } from "./signing-key.js";
 
@@ -90,6 +91,10 @@ try {
           await createLab(db, lab);
           console.log(`Sala creada: ${lab.slug}`);
         }
+        for (const p of SEED_PROBLEMS[lab.slug] ?? []) {
+          const { created } = await ensureProblem(db, lab.slug, p);
+          console.log(`  problema ${p.slug}: ${created ? "creado" : "ya existía"}`);
+        }
       }
       break;
     }
@@ -144,6 +149,8 @@ try {
         const [lab] = await db.select().from(schema.labs).where(eq(schema.labs.slug, l.slug));
         if (!lab) await createLab(db, l);
       }
+      for (const l of SEED_LABS) for (const p of SEED_PROBLEMS[l.slug] ?? []) await ensureProblem(db, l.slug, p);
+      await ensureProblem(db, DEMO_LAB.slug, DEMO_PROBLEM);
       await resetLab(db, DEMO_LAB.slug);
       await runDemo(db, loadSigningKey(config.signingKey));
       console.log(`Demo cargada en la sala "${DEMO_LAB.slug}". Las demás salas no se han tocado.`);

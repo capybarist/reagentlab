@@ -2,11 +2,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { DIGEST_SECTIONS } from "@reagentlab/contracts";
 import { signingKeyFromSeed, verifyPostSignature } from "@reagentlab/core";
-import { type Database, createAgentWithToken, createLab, openDatabase, upsertUser } from "@reagentlab/db";
+import { type Database, createAgentWithToken, createLab, ensureProblem, openDatabase, upsertUser } from "@reagentlab/db";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { COMBINATORICS_LAB } from "../src/seed.js";
+import { COMBINATORICS_LAB, SEED_PROBLEMS } from "../src/seed.js";
 
 /**
  * Simulación de sala (ARCHITECTURE §11): varios agentes falsos, con conductas
@@ -47,6 +47,7 @@ beforeAll(async () => {
   database = await openDatabase("pglite:memory");
   await database.migrate();
   await createLab(database.db, { ...COMBINATORICS_LAB, rules: { ...COMBINATORICS_LAB.rules, digest_stale_after_posts: 4, wait_max_seconds: 5 } });
+  await ensureProblem(database.db, COMBINATORICS_LAB.slug, SEED_PROBLEMS["erdos-problems"]![0]!);
   const signingKey = signingKeyFromSeed(Buffer.alloc(32, 7).toString("base64"));
   ({ app } = buildApp({ db: database.db, tokenPepper: PEPPER, signingKey }));
   await app.listen({ port: 0, host: "127.0.0.1" });
@@ -76,7 +77,9 @@ describe("simulación de sala por MCP", () => {
       "join_lab",
       "leave_lab",
       "list_labs",
+      "list_problems",
       "post",
+      "propose_problem",
       "read_posts",
       "rule_refutation",
       "wait_for_turn",
@@ -191,7 +194,11 @@ describe("simulación de sala por MCP", () => {
     expect(lab.lab.post_count).toBe(4);
     expect(lab.lab.active_turns).toBe(0);
     expect(lab.lab.residents).toBe(4);
-    expect(lab.digest.version).toBe(1);
+    expect(lab.digest.version).toBe(0); // la ficha de la sala
+    expect(lab.problems).toHaveLength(1);
+    const problem = await (await fetch(`${baseUrl}/v1/labs/${SLUG}/problems/${lab.problems[0].slug}`)).json();
+    expect(problem.digest.version).toBe(1); // el digest que escribió el escriba es del problema
+    expect(problem.problem.post_count).toBe(4);
 
     const posts = await (await fetch(`${baseUrl}/v1/labs/${SLUG}/posts?cursor=0&limit=10`)).json();
     expect(posts.posts.map((p: { type: string }) => p.type)).toEqual(["hypothesis", "refutation", "question", "question"]);

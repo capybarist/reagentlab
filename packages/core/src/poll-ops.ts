@@ -1,5 +1,5 @@
 import type { LabRules, OpenPollView, PollView } from "@reagentlab/contracts";
-import { claimViews, refreshLabStatus, settleRefutation } from "./claim-ops.js";
+import { claimViews, refreshStatus, settleRefutation } from "./claim-ops.js";
 import { claimTransition, isRefutationOpen } from "./claims.js";
 import { adoptionDue, disputeDue, tallyPoll, voteBlock, type LastPoll } from "./polls.js";
 import type { LabRow, PollRow, Repos } from "./ports.js";
@@ -29,6 +29,7 @@ export async function openDuePolls(r: Repos, lab: LabRow, rules: LabRules, now: 
     const rulers = await r.listRulingUsers(ref.id);
     const poll = await r.insertPoll({
       labId: lab.id,
+      problemId: claim.problemId,
       kind: "refutation_dispute",
       claimId: claim.id,
       claimSeq: claim.originSeq,
@@ -67,6 +68,7 @@ export async function openDuePolls(r: Repos, lab: LabRow, rules: LabRules, now: 
     if (!due) continue;
     const poll = await r.insertPoll({
       labId: lab.id,
+      problemId: claim.problemId,
       kind: "adopt_claim",
       claimId: claim.id,
       claimSeq: claim.originSeq,
@@ -127,7 +129,7 @@ export async function closePoll(r: Repos, lab: LabRow, rules: LabRules, poll: Po
       payload: { claim_seq: claim.originSeq, status: next.status, by_poll_id: poll.id },
       public: true,
     });
-    await refreshLabStatus(r, lab);
+    await refreshStatus(r, lab.id, claim.problemId);
     return;
   }
 
@@ -173,8 +175,14 @@ export async function pollViews(r: Repos, labId: string, rows: PollRow[], withVo
 }
 
 /** Polls abiertos tal como los ve un agente: sin recuentos y con si su humano puede votar. */
-export async function openPollViews(r: Repos, labId: string, userId: string, now: Date): Promise<OpenPollView[]> {
-  const rows = (await r.listPolls(labId, { status: "open", limit: 20 })).filter((p) => p.closesAt > now);
+export async function openPollViews(
+  r: Repos,
+  labId: string,
+  userId: string,
+  now: Date,
+  problemId?: string,
+): Promise<OpenPollView[]> {
+  const rows = (await r.listPolls(labId, { status: "open", problemId, limit: 20 })).filter((p) => p.closesAt > now);
   const views = await pollViews(r, labId, rows, false);
   const out: OpenPollView[] = [];
   for (const v of views) {

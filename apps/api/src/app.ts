@@ -33,6 +33,12 @@ const STATUS: Record<string, number> = {
   REFUTATION_NOT_FOUND: 404,
   REFUTATION_CLOSED: 409,
   CONFLICT_OF_INTEREST: 403,
+  PROBLEM_NOT_FOUND: 404,
+  PROBLEM_NOT_ACTIVE: 409,
+  NO_ACTIVE_PROBLEMS: 409,
+  PROPOSAL_LIMIT: 429,
+  PROBLEM_EXISTS: 409,
+  STEP_REQUIRED: 422,
   POLL_NOT_FOUND: 404,
   POLL_CLOSED: 409,
   ALREADY_VOTED: 409,
@@ -53,6 +59,8 @@ export interface AppOptions {
   signingKey?: SigningKey;
   /** Agentes de desarrollo con token fijo (`DEV_AGENTS`); la cuenta muestra su comando. Nunca en producción. */
   devAgents?: { handle: string; name: string; token: string }[];
+  /** Handles que pueden aprobar problemas propuestos (ADR-0020). */
+  adminHandles?: string[];
   /** Avisos de LISTEN/NOTIFY. Sin ellos, SSE y wait_for_turn sondean la base de datos cada 2 s. */
   events?: LabEventsHub;
 }
@@ -139,17 +147,26 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
 
     app.get<{ Params: { slug: string } }>("/v1/labs/:slug", async (req) => service.getLab(req.params.slug));
 
-    app.get<{ Params: { slug: string }; Querystring: { cursor?: string; limit?: string } }>(
+    app.get<{ Params: { slug: string }; Querystring: { cursor?: string; limit?: string; problem?: string } }>(
       "/v1/labs/:slug/posts",
-      async (req) => service.readPosts(req.params.slug, Number(req.query.cursor ?? 0), Number(req.query.limit ?? 20)),
+      async (req) =>
+        service.readPosts(req.params.slug, Number(req.query.cursor ?? 0), Number(req.query.limit ?? 20), req.query.problem),
     );
 
-    app.get<{ Params: { slug: string } }>("/v1/labs/:slug/claims", async (req) => ({
-      claims: await service.listClaims(req.params.slug),
+    app.get<{ Params: { slug: string } }>("/v1/labs/:slug/problems", async (req) => ({
+      problems: await service.listProblems(req.params.slug),
     }));
 
-    app.get<{ Params: { slug: string } }>("/v1/labs/:slug/polls", async (req) => ({
-      polls: await service.listPolls(req.params.slug),
+    app.get<{ Params: { slug: string; problem: string } }>("/v1/labs/:slug/problems/:problem", async (req) =>
+      service.getProblem(req.params.slug, req.params.problem),
+    );
+
+    app.get<{ Params: { slug: string }; Querystring: { problem?: string } }>("/v1/labs/:slug/claims", async (req) => ({
+      claims: await service.listClaims(req.params.slug, req.query.problem),
+    }));
+
+    app.get<{ Params: { slug: string }; Querystring: { problem?: string } }>("/v1/labs/:slug/polls", async (req) => ({
+      polls: await service.listPolls(req.params.slug, req.query.problem),
     }));
 
     app.get<{ Params: { slug: string } }>("/v1/labs/:slug/turns", async (req) => ({
@@ -196,12 +213,24 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       serviceKey: opts.webServiceKey ?? "",
       clock: opts.clock,
       devAgents: opts.devAgents,
+      service,
+      adminHandles: opts.adminHandles,
     });
 
     // ── REST: escrituras de agentes (mismas reglas que MCP) ────────────────
+    const problemOf = (body: unknown): string | undefined => {
+      const p = (body as { problem?: unknown } | null)?.problem;
+      return typeof p === "string" && p ? p : undefined;
+    };
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/join", async (req) =>
-      service.joinLab(await actorOf(req), req.params.slug),
+      service.joinLab(await actorOf(req), req.params.slug, problemOf(req.body)),
     );
+    app.post<{ Params: { slug: string } }>("/v1/labs/:slug/problems", async (req, reply) => {
+      const actor = await actorOf(req);
+      return reply
+        .status(201)
+        .send(await service.proposeProblem({ userId: actor.userId, agentId: actor.agentId }, req.params.slug, req.body));
+    });
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/posts", async (req, reply) =>
       reply.status(201).send(await service.post(await actorOf(req), req.params.slug, req.body)),
     );
@@ -225,7 +254,11 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       const actor = await actorOf(req);
       const abort = new AbortController();
       req.raw.on("close", () => abort.abort());
-      return service.waitForTurn(actor, req.params.slug, { signal: abort.signal, ...waitOpts(req.params.slug) });
+      return service.waitForTurn(actor, req.params.slug, {
+        signal: abort.signal,
+        problem: problemOf(req.body),
+        ...waitOpts(req.params.slug),
+      });
     });
 
     // ── MCP ───────────────────────────────────────────────────────────────

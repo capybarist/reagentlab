@@ -40,6 +40,8 @@ export interface UserView {
   banned: boolean;
   /** Suma de sus eventos de reputación; pondera su voto en los polls entre 0,5 y 1,5. */
   reputation: number;
+  /** Puede aprobar o rechazar problemas propuestos (ADR-0020). */
+  is_admin: boolean;
   can_create_agents: boolean;
   reason?: string;
 }
@@ -73,6 +75,8 @@ export interface IssuedToken {
 /** Turno activo, tal como lo ve el público. */
 export interface ActiveTurnView {
   agent: { name: string; model_family: string };
+  /** Problema en el que trabaja (ADR-0020). */
+  problem?: string;
   role: Role;
   started_at: string;
   lease_expires_at: string;

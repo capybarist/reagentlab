@@ -7,7 +7,8 @@ import {
   UpsertUserInput,
   type UserView,
 } from "@reagentlab/contracts";
-import { DomainError, agentCreationBlocker, type Clock, systemClock } from "@reagentlab/core";
+import { DomainError, type LabService, agentCreationBlocker, type Clock, systemClock } from "@reagentlab/core";
+import type { ProblemReview, ProblemView } from "@reagentlab/contracts";
 import {
   type Db,
   countActiveAgents,
@@ -35,6 +36,10 @@ export interface AccountOptions {
   clock?: Clock;
   /** Agentes de desarrollo con token fijo (`DEV_AGENTS`). Vacío en producción. */
   devAgents?: { handle: string; name: string; token: string }[];
+  /** Casos de uso de las salas: proponer y revisar problemas (ADR-0020). */
+  service: LabService;
+  /** Handles (GitHub, o del login de desarrollo en local) que pueden aprobar problemas. */
+  adminHandles?: string[];
 }
 
 const MAX_TOKENS_PER_AGENT = 3;
@@ -70,6 +75,14 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
     return user;
   };
 
+  const admins = new Set((opts.adminHandles ?? []).map((h) => h.toLowerCase()));
+  const isAdmin = (user: { handle: string; bannedAt: Date | null }) => !user.bannedAt && admins.has(user.handle.toLowerCase());
+  const requireAdmin = async (req: FastifyRequest) => {
+    const user = await requireUser(req);
+    if (!isAdmin(user)) throw new DomainError("FORBIDDEN", "Solo los administradores revisan problemas.");
+    return user;
+  };
+
   const userView = async (user: NonNullable<Awaited<ReturnType<typeof getUser>>>): Promise<UserView> => {
     const blocker = agentCreationBlocker(
       {
@@ -86,6 +99,7 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
       handle: user.handle,
       banned: !!user.bannedAt,
       reputation: user.reputation,
+      is_admin: isAdmin(user),
       can_create_agents: !blocker,
       ...(blocker ? { reason: blocker.message } : {}),
     };
@@ -209,4 +223,31 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
     await disableAgent(opts.db, agent.id);
     return { disabled: true };
   });
+
+  // ── Problemas (ADR-0020) ────────────────────────────────────────────────
+
+  /** Un humano propone un problema en una sala; queda pendiente de revisión. */
+  app.post<{ Params: { slug: string } }>("/v1/account/labs/:slug/problems", async (req, reply) => {
+    const user = await requireUser(req);
+    if (user.bannedAt) throw new DomainError("USER_BANNED", "Tu cuenta está suspendida.");
+    return reply.status(201).send(await opts.service.proposeProblem({ userId: user.id }, req.params.slug, req.body));
+  });
+
+  /** Administradores: problemas de todas las salas en un estado de revisión (por defecto, propuestos). */
+  app.get<{ Querystring: { review?: string } }>("/v1/account/problems", async (req): Promise<{ problems: ProblemView[] }> => {
+    await requireAdmin(req);
+    const review = (req.query.review ?? "proposed") as ProblemReview;
+    const labs = await opts.service.listLabs();
+    const lists = await Promise.all(labs.map((l) => opts.service.listProblems(l.slug, [review])));
+    return { problems: lists.flat() };
+  });
+
+  /** Administradores: aprobar, rechazar o archivar un problema. */
+  app.post<{ Params: { slug: string; problem: string } }>(
+    "/v1/account/labs/:slug/problems/:problem/review",
+    async (req) => {
+      await requireAdmin(req);
+      return opts.service.reviewProblem(req.params.slug, req.params.problem, req.body);
+    },
+  );
 }

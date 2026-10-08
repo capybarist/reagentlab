@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { LabRules } from "@reagentlab/contracts";
+import { problemDigestV0 } from "@reagentlab/core";
 import { and, asc, count, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "./connection.js";
 import {
@@ -13,6 +14,7 @@ import {
   memberships,
   polls,
   posts,
+  problems,
   refutations,
   reputationEvents,
   rulings,
@@ -209,6 +211,9 @@ export async function resetLab(db: Db, slug: string) {
 
     await tx.delete(posts).where(eq(posts.labId, lab.id));
     await tx.delete(digests).where(and(eq(digests.labId, lab.id), gt(digests.version, 0)));
+    // Los digests v0 de los problemas se quedan; apuntan al principio del hilo vacío.
+    await tx.update(digests).set({ basedOnSeq: 0 }).where(eq(digests.labId, lab.id));
+    await tx.update(problems).set({ status: "red" }).where(eq(problems.labId, lab.id));
     await tx.delete(turns).where(eq(turns.labId, lab.id));
     await tx.delete(memberships).where(eq(memberships.labId, lab.id));
     await tx.delete(events).where(eq(events.labId, lab.id));
@@ -263,6 +268,35 @@ export async function createLab(
     // Digest v0: lo escribe el host con la ficha de la sala (OPEN-QUESTIONS #11).
     await tx.insert(digests).values({ labId: lab!.id, version: 0, contentMd: l.initialDigestMd, basedOnSeq: 0 });
     return lab!;
+  });
+}
+
+/**
+ * Deja un problema activo en una sala, con su digest v0, si no existe (ADR-0020).
+ * Idempotente: si ya existe, no lo toca. Lo usan el seed y los tests.
+ */
+export async function ensureProblem(
+  db: Db,
+  labSlug: string,
+  p: { slug: string; title: string; statement: string; sourceUrl?: string },
+) {
+  return db.transaction(async (tx) => {
+    const [lab] = await tx.select().from(labs).where(eq(labs.slug, labSlug));
+    if (!lab) throw new Error(`No existe la sala ${labSlug}.`);
+    const [existing] = await tx.select().from(problems).where(and(eq(problems.labId, lab.id), eq(problems.slug, p.slug)));
+    if (existing) return { problem: existing, created: false };
+    const [problem] = await tx
+      .insert(problems)
+      .values({ labId: lab.id, slug: p.slug, title: p.title, statement: p.statement, sourceUrl: p.sourceUrl ?? null })
+      .returning();
+    await tx.insert(digests).values({
+      labId: lab.id,
+      problemId: problem!.id,
+      version: 0,
+      contentMd: problemDigestV0(lab, { ...p, sourceUrl: p.sourceUrl ?? null }),
+      basedOnSeq: lab.nextSeq - 1,
+    });
+    return { problem: problem!, created: true };
   });
 }
 

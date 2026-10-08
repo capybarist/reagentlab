@@ -9,6 +9,8 @@ import type {
   LabSummary,
   PollView,
   PostsPage,
+  ProblemSummary,
+  ProblemView,
   UserView,
 } from "@reagentlab/contracts";
 
@@ -34,19 +36,32 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 // ── Lecturas públicas ───────────────────────────────────────────────────
-export type LabDetail = { lab: LabSummary; rules: LabRules; digest: DigestView | null; last_event_id: number };
+export type LabDetail = {
+  lab: LabSummary;
+  rules: LabRules;
+  /** Ficha de la sala. */
+  digest: DigestView | null;
+  problems: ProblemSummary[];
+  last_event_id: number;
+};
+export type ProblemDetail = { problem: ProblemView; digest: DigestView | null };
+
+const lab = (slug: string) => `/v1/labs/${encodeURIComponent(slug)}`;
+const q = (problem?: string) => (problem ? `problem=${encodeURIComponent(problem)}` : "");
 
 export const getLabs = () => request<{ labs: LabSummary[] }>("/v1/labs").then((r) => r.labs);
 export const getLab = (slug: string) => request<LabDetail>(`/v1/labs/${encodeURIComponent(slug)}`);
-export const getPosts = (slug: string, cursor = 0, limit = 100) =>
-  request<PostsPage>(`/v1/labs/${encodeURIComponent(slug)}/posts?cursor=${cursor}&limit=${limit}`);
+export const getPosts = (slug: string, cursor = 0, limit = 100, problem?: string) =>
+  request<PostsPage>(`${lab(slug)}/posts?cursor=${cursor}&limit=${limit}&${q(problem)}`);
+export const getProblem = (slug: string, problem: string) =>
+  request<ProblemDetail>(`${lab(slug)}/problems/${encodeURIComponent(problem)}`);
 export const getTurns = (slug: string) =>
   request<{ turns: ActiveTurnView[] }>(`/v1/labs/${encodeURIComponent(slug)}/turns`).then((r) => r.turns);
 
-export const getClaims = (slug: string) =>
-  request<{ claims: ClaimView[] }>(`/v1/labs/${encodeURIComponent(slug)}/claims`).then((r) => r.claims);
-export const getPolls = (slug: string) =>
-  request<{ polls: PollView[] }>(`/v1/labs/${encodeURIComponent(slug)}/polls`).then((r) => r.polls);
+export const getClaims = (slug: string, problem?: string) =>
+  request<{ claims: ClaimView[] }>(`${lab(slug)}/claims?${q(problem)}`).then((r) => r.claims);
+export const getPolls = (slug: string, problem?: string) =>
+  request<{ polls: PollView[] }>(`${lab(slug)}/polls?${q(problem)}`).then((r) => r.polls);
 
 // ── Cuenta (solo desde el servidor: lleva la clave de servicio) ─────────
 function service(userId?: string): Record<string, string> {
@@ -86,3 +101,29 @@ export const revokeToken = (userId: string, agentId: string, tokenId: string) =>
   });
 export const disableAgent = (userId: string, agentId: string) =>
   request<{ disabled: true }>(`/v1/account/agents/${agentId}/disable`, { method: "POST", headers: service(userId) });
+
+// ── Problemas (ADR-0020) ─────────────────────────────────────────────────
+export const proposeProblem = (
+  userId: string,
+  slug: string,
+  input: { title: string; statement: string; source_url?: string },
+) =>
+  request<ProblemView>(`/v1/account/labs/${encodeURIComponent(slug)}/problems`, {
+    method: "POST",
+    headers: { ...service(userId), "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+export const listPendingProblems = (userId: string) =>
+  request<{ problems: ProblemView[] }>("/v1/account/problems?review=proposed", { headers: service(userId) }).then(
+    (r) => r.problems,
+  );
+export const reviewProblem = (
+  userId: string,
+  slug: string,
+  problem: string,
+  input: { decision: "approve" | "reject" | "archive"; note?: string },
+) =>
+  request<ProblemView>(
+    `/v1/account/labs/${encodeURIComponent(slug)}/problems/${encodeURIComponent(problem)}/review`,
+    { method: "POST", headers: { ...service(userId), "content-type": "application/json" }, body: JSON.stringify(input) },
+  );

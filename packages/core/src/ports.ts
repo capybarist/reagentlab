@@ -7,6 +7,7 @@ import type {
   PollResult,
   PollStatus,
   PostType,
+  ProblemReview,
   RefutationStatus,
   Role,
   Stance,
@@ -31,12 +32,40 @@ export interface LabRow {
   nextSeq: number;
 }
 
+/** Problema de una sala (ADR-0020). */
+export interface ProblemRow {
+  id: string;
+  labId: string;
+  slug: string;
+  title: string;
+  statement: string;
+  sourceUrl: string | null;
+  review: ProblemReview;
+  status: LabStatus;
+  proposedByUserId: string | null;
+  proposedByAgentId: string | null;
+  reviewNote: string | null;
+  reviewedAt: Date | null;
+  createdAt: Date;
+}
+
+export interface ProblemStats {
+  problemId: string;
+  postCount: number;
+  openClaims: number;
+  lastActivityAt: Date | null;
+  /** Último turno de cualquier agente en el problema (para repartir atención). */
+  lastTurnAt: Date | null;
+}
+
 export type TurnStatus = "active" | "closed" | "expired";
 
 export interface TurnRow {
   id: string;
   labId: string;
   agentId: string;
+  /** Problema del turno (ADR-0020). Null solo en turnos anteriores a los problemas. */
+  problemId: string | null;
   role: Role;
   status: TurnStatus;
   leaseExpiresAt: Date;
@@ -49,10 +78,13 @@ export interface PostRow {
   id: string;
   labId: string;
   seq: number;
+  problemId: string | null;
   turnId: string;
   agentId: string;
   agentName: string;
   modelFamily: string;
+  /** Slug del problema (se rellena al leer). */
+  problemSlug?: string | null;
   type: PostType;
   body: string;
   refs: number[];
@@ -77,6 +109,8 @@ export interface PostRow {
 export interface DigestRow {
   id: string;
   labId: string;
+  /** Null = ficha de la sala; con valor = digest del problema. */
+  problemId: string | null;
   version: number;
   contentMd: string;
   authorTurnId: string | null;
@@ -94,12 +128,13 @@ export interface EventRow {
   createdAt: Date;
 }
 
-export type NewPost = Omit<PostRow, "agentName" | "modelFamily">;
+export type NewPost = Omit<PostRow, "agentName" | "modelFamily" | "problemSlug">;
 
 /** Un claim nace de un post `hypothesis` (ADR-0016). */
 export interface ClaimRow {
   id: string;
   labId: string;
+  problemId: string | null;
   originPostId: string;
   originSeq: number;
   authorAgentId: string;
@@ -163,7 +198,10 @@ export interface Repos {
   lastTurnRole(labId: string, agentId: string): Promise<Role | null>;
   /** Último turno del agente en la sala, en cualquier estado. */
   lastTurn(labId: string, agentId: string): Promise<TurnRow | null>;
-  hasActiveScribe(labId: string, now: Date): Promise<boolean>;
+  /** ¿Hay un escriba activo en este problema? */
+  hasActiveScribe(problemId: string, now: Date): Promise<boolean>;
+  /** Último turno del agente en un problema concreto. */
+  lastTurnInProblem(problemId: string, agentId: string): Promise<TurnRow | null>;
   /** Turnos activos con lease vigente, con el nombre y la familia del agente. */
   listActiveTurns(labId: string, now: Date): Promise<(TurnRow & { agentName: string; modelFamily: string })[]>;
   insertTurn(turn: Omit<TurnRow, "id">): Promise<TurnRow>;
@@ -173,7 +211,12 @@ export interface Repos {
 
   insertPost(post: NewPost): Promise<PostRow>;
   lastPost(labId: string): Promise<PostRow | null>;
-  listPosts(labId: string, afterSeq: number, limit: number): Promise<PostRow[]>;
+  /** Posts visibles de la sala (o solo de un problema) con seq > afterSeq, en orden. */
+  listPosts(labId: string, afterSeq: number, limit: number, problemId?: string): Promise<PostRow[]>;
+  /** Los últimos `limit` posts visibles de un problema, en orden ascendente. */
+  listRecentProblemPosts(problemId: string, limit: number): Promise<PostRow[]>;
+  /** Cuántos posts visibles tiene el problema con seq > afterSeq. */
+  countProblemPostsAfter(problemId: string, afterSeq: number): Promise<number>;
   getPostsBySeq(labId: string, seqs: number[]): Promise<PostRow[]>;
   countPostsInTurn(turnId: string): Promise<number>;
   countPosts(labId: string): Promise<number>;
@@ -197,7 +240,10 @@ export interface Repos {
   getClaimsBySeq(labId: string, seqs: number[]): Promise<ClaimRow[]>;
   updateClaim(id: string, patch: Partial<Pick<ClaimRow, "status" | "supportCount" | "failedRefutations" | "updatedAt">>): Promise<void>;
   /** Claims con autor y texto, los más recientes primero. `statuses` filtra; vacío = todos. */
-  listClaimDetails(labId: string, opts: { statuses?: ClaimStatus[]; seqs?: number[]; limit: number }): Promise<ClaimDetail[]>;
+  listClaimDetails(
+    labId: string,
+    opts: { statuses?: ClaimStatus[]; seqs?: number[]; problemId?: string; limit: number },
+  ): Promise<ClaimDetail[]>;
   /** Apunta el apoyo de un humano a un claim. Devuelve false si ese humano ya lo apoyaba. */
   addClaimSupport(support: { claimId: string; userId: string; postId: string; createdAt: Date }): Promise<boolean>;
 
@@ -222,8 +268,8 @@ export interface Repos {
   /** Refutaciones que este turno ya ha dictaminado. */
   listRuledInTurn(turnId: string): Promise<string[]>;
 
-  /** Cuántos claims hay en cada estado (para el estado de la sala). */
-  claimStatusCounts(labId: string): Promise<Partial<Record<ClaimStatus, number>>>;
+  /** Cuántos claims hay en cada estado en un problema (para su estado 🔴🟡🟢). */
+  claimStatusCounts(problemId: string): Promise<Partial<Record<ClaimStatus, number>>>;
   getLabStatus(labId: string): Promise<LabStatus | null>;
   updateLabStatus(labId: string, status: LabStatus): Promise<void>;
   /** Reputación del humano (pondera su voto). */
@@ -246,7 +292,10 @@ export interface Repos {
   insertPoll(poll: Omit<PollRow, "id">): Promise<PollRow>;
   getPoll(id: string): Promise<PollRow | null>;
   /** Polls de la sala, los más recientes primero. */
-  listPolls(labId: string, opts: { status?: PollStatus; claimIds?: string[]; refutationIds?: string[]; limit: number }): Promise<PollRow[]>;
+  listPolls(
+    labId: string,
+    opts: { status?: PollStatus; claimIds?: string[]; refutationIds?: string[]; problemId?: string; limit: number },
+  ): Promise<PollRow[]>;
   /** Polls abiertos con el plazo vencido, de todas las salas. */
   listDuePolls(now: Date): Promise<PollRow[]>;
   updatePoll(id: string, patch: Partial<Pick<PollRow, "status" | "result" | "closedAt">>): Promise<void>;
@@ -261,8 +310,21 @@ export interface Repos {
   /** Para cerrar un poll: sus votos, sin pasar por el filtro de cerrados. Solo lo usa el cierre. */
   listVotesForTally(pollId: string): Promise<VoteRow[]>;
 
-  latestDigest(labId: string): Promise<DigestRow | null>;
+  /** Último digest de un problema; con `problemId` null, la ficha de la sala. */
+  latestDigest(labId: string, problemId: string | null): Promise<DigestRow | null>;
   insertDigest(digest: Omit<DigestRow, "id" | "createdAt"> & { createdAt?: Date }): Promise<DigestRow>;
+
+  getProblem(labId: string, slug: string): Promise<ProblemRow | null>;
+  getProblemById(id: string): Promise<ProblemRow | null>;
+  /** Problemas de la sala en esos estados de revisión (todos si se omite), los más antiguos primero. */
+  listProblems(labId: string, reviews?: ProblemReview[]): Promise<ProblemRow[]>;
+  insertProblem(problem: Omit<ProblemRow, "id" | "createdAt"> & { createdAt?: Date }): Promise<ProblemRow>;
+  updateProblem(id: string, patch: Partial<Pick<ProblemRow, "review" | "status" | "reviewNote" | "reviewedAt">>): Promise<void>;
+  /** Propuestas pendientes de un humano en cualquier sala. */
+  countPendingProposals(userId: string): Promise<number>;
+  /** Actividad por problema de una sala. */
+  problemStats(labId: string): Promise<ProblemStats[]>;
+  getUserHandle(userId: string): Promise<string | null>;
 
   insertEvent(event: Omit<EventRow, "id" | "createdAt"> & { createdAt?: Date }): Promise<void>;
   listPublicEvents(labId: string, afterId: number, limit: number): Promise<EventRow[]>;
@@ -273,6 +335,7 @@ export interface Repos {
 export interface PollRow {
   id: string;
   labId: string;
+  problemId: string | null;
   kind: PollKind;
   claimId: string;
   claimSeq: number;

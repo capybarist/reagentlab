@@ -3,6 +3,7 @@ export * from "./lab.js";
 export * from "./post.js";
 export * from "./claims.js";
 export * from "./polls.js";
+export * from "./problems.js";
 export * from "./digest.js";
 export * from "./views.js";
 export * from "./account.js";

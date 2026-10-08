@@ -25,6 +25,7 @@ export async function applyPostToClaims(
   if (post.type === "hypothesis") {
     await r.insertClaim({
       labId: lab.id,
+      problemId: post.problemId,
       originPostId: post.id,
       originSeq: post.seq,
       authorAgentId: actor.agentId,
@@ -147,17 +148,39 @@ export async function settleRefutation(
       payload: { claim_seq: claim.originSeq, status: next.status, by_refutation_seq: ref.postSeq },
       public: true,
     });
-    await refreshLabStatus(r, lab);
+    await refreshStatus(r, lab.id, claim.problemId);
   }
 }
 
-/** Recalcula el estado 🔴🟡🟢 de la sala a partir de sus claims y emite un evento si cambia. */
-export async function refreshLabStatus(r: Repos, lab: Pick<LabRow, "id">): Promise<void> {
-  const current = await r.getLabStatus(lab.id);
-  const next = labStatusFor(await r.claimStatusCounts(lab.id));
-  if (current === null || current === next) return;
-  await r.updateLabStatus(lab.id, next);
-  await r.insertEvent({ labId: lab.id, kind: "lab.status_changed", actorAgentId: null, payload: { from: current, to: next }, public: true });
+const STATUS_RANK = { red: 0, yellow: 1, green: 2 } as const;
+
+/**
+ * Recalcula el estado 🔴🟡🟢 de un problema a partir de sus claims y, con él, el de la
+ * sala: el mejor estado entre sus problemas activos (ADR-0020). Emite eventos si cambian.
+ */
+export async function refreshStatus(r: Repos, labId: string, problemId: string | null): Promise<void> {
+  if (problemId) {
+    const problem = await r.getProblemById(problemId);
+    const next = labStatusFor(await r.claimStatusCounts(problemId));
+    if (problem && problem.status !== next) {
+      await r.updateProblem(problemId, { status: next });
+      await r.insertEvent({
+        labId,
+        kind: "problem.status_changed",
+        actorAgentId: null,
+        payload: { problem: problem.slug, from: problem.status, to: next },
+        public: true,
+      });
+    }
+  }
+  const current = await r.getLabStatus(labId);
+  const best = (await r.listProblems(labId, ["active"])).reduce<"red" | "yellow" | "green">(
+    (acc, p) => (STATUS_RANK[p.status] > STATUS_RANK[acc] ? p.status : acc),
+    "red",
+  );
+  if (current === null || current === best) return;
+  await r.updateLabStatus(labId, best);
+  await r.insertEvent({ labId, kind: "lab.status_changed", actorAgentId: null, payload: { from: current, to: best }, public: true });
 }
 
 /**
@@ -169,10 +192,12 @@ export async function settleSilentRulings(r: Repos, lab: Pick<LabRow, "id">, tur
   const userId = (await r.getAgent(turn.agentId))?.userId;
   if (!userId) return 0;
   const touched = new Set(await r.listRuledInTurn(turn.id));
-  const ruled = (await r.listRefutations(lab.id, ["ruled"])).filter(
+  const candidates = (await r.listRefutations(lab.id, ["ruled"])).filter(
     (ref) => ref.ruledAt !== null && ref.ruledAt < turn.startedAt && !touched.has(ref.id),
   );
-  const claims = await claimsById(r, lab.id, ruled);
+  const claims = await claimsById(r, lab.id, candidates);
+  // Solo las del problema del turno: es lo que el verificador tenía delante (ADR-0020).
+  const ruled = candidates.filter((ref) => claims.get(ref.claimId)?.problemId === turn.problemId);
   let n = 0;
   for (const ref of ruled) {
     const claim = claims.get(ref.claimId);
@@ -188,18 +213,30 @@ export async function settleSilentRulings(r: Repos, lab: Pick<LabRow, "id">, tur
 }
 
 /** Refutaciones que este humano puede dictaminar ahora, las más antiguas primero. */
-export async function eligibleRefutations(r: Repos, labId: string, userId: string): Promise<RefutationRow[]> {
+export async function eligibleRefutations(
+  r: Repos,
+  labId: string,
+  userId: string,
+  problemId?: string,
+): Promise<RefutationRow[]> {
   const open = await r.listRefutations(labId, ["pending", "ruled"]);
   const claims = await claimsById(r, labId, open);
   return open.filter((ref) => {
     const claim = claims.get(ref.claimId);
-    return claim && claim.status !== "refuted" && !rulingBlock(refutationState(ref, claim), userId);
+    if (!claim || (problemId && claim.problemId !== problemId)) return false;
+    return claim.status !== "refuted" && !rulingBlock(refutationState(ref, claim), userId);
   });
 }
 
 /** Claims apoyados de otros humanos, sin refutación abierta y que aún no han resistido bastante. */
-export async function refutableClaims(r: Repos, labId: string, rules: LabRules, userId: string): Promise<number> {
-  const supported = await r.listClaimDetails(labId, { statuses: ["supported"], limit: 200 });
+export async function refutableClaims(
+  r: Repos,
+  labId: string,
+  rules: LabRules,
+  userId: string,
+  problemId?: string,
+): Promise<number> {
+  const supported = await r.listClaimDetails(labId, { statuses: ["supported"], problemId, limit: 200 });
   const refs = await r.listRefutationsForClaims(supported.map((c) => c.id));
   return supported.filter(
     (c) =>
@@ -210,8 +247,12 @@ export async function refutableClaims(r: Repos, labId: string, rules: LabRules, 
   ).length;
 }
 
-export async function contextClaims(r: Repos, labId: string): Promise<ClaimView[]> {
-  const claims = await r.listClaimDetails(labId, { statuses: ["open", "supported", "adopted", "verified"], limit: CONTEXT_CLAIMS });
+export async function contextClaims(r: Repos, labId: string, problemId?: string): Promise<ClaimView[]> {
+  const claims = await r.listClaimDetails(labId, {
+    statuses: ["open", "supported", "adopted", "verified"],
+    problemId,
+    limit: CONTEXT_CLAIMS,
+  });
   return claimViews(r, claims);
 }
 
@@ -235,8 +276,13 @@ export function toClaimView(c: ClaimDetail, refs: RefutationRow[]): ClaimView {
 }
 
 /** Lo que el verificador tiene que dictaminar, con la refutación y el claim completos. */
-export async function rulingTasks(r: Repos, labId: string, userId: string): Promise<RulingTaskView[]> {
-  const refs = (await eligibleRefutations(r, labId, userId)).slice(0, 10);
+export async function rulingTasks(
+  r: Repos,
+  labId: string,
+  userId: string,
+  problemId?: string,
+): Promise<RulingTaskView[]> {
+  const refs = (await eligibleRefutations(r, labId, userId, problemId)).slice(0, 10);
   if (!refs.length) return [];
   const posts = await r.getPostsBySeq(labId, refs.map((ref) => ref.postSeq));
   const claims = await r.listClaimDetails(labId, { seqs: refs.map((ref) => ref.claimSeq), limit: refs.length });

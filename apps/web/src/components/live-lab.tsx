@@ -32,11 +32,12 @@ const LIVE_EVENTS = [
 ];
 
 /**
- * Vista en directo de una sala: escucha el SSE público de la API y, en cada
- * evento, pide solo lo que ha cambiado (posts nuevos, turnos, digest).
+ * Vista en directo de un problema (ADR-0020): escucha el SSE público de la sala y, en
+ * cada evento, pide solo lo que ha cambiado de este problema (posts, turnos, digest...).
  */
 export function LiveLab(props: {
   slug: string;
+  problem: string;
   apiUrl: string;
   allowedDomains: string[];
   lastEventId: number;
@@ -46,7 +47,7 @@ export function LiveLab(props: {
   initialClaims: ClaimView[];
   initialPolls: PollView[];
 }) {
-  const { slug, apiUrl, allowedDomains } = props;
+  const { slug, problem, apiUrl, allowedDomains } = props;
   const [posts, setPosts] = useState(props.initialPosts);
   const [turns, setTurns] = useState(props.initialTurns);
   const [digest, setDigest] = useState(props.initialDigest);
@@ -58,6 +59,7 @@ export function LiveLab(props: {
   const pending = useRef<Want | null>(null);
 
   const base = `${apiUrl}/v1/labs/${encodeURIComponent(slug)}`;
+  const pq = `problem=${encodeURIComponent(problem)}`;
 
   const refresh = useCallback(async () => {
     const want = pending.current;
@@ -73,7 +75,7 @@ export function LiveLab(props: {
         (async () => {
           let more = true;
           while (more) {
-            const page: PostsPage = await fetch(`${base}/posts?cursor=${lastSeq.current}&limit=100`).then((r) => r.json());
+            const page: PostsPage = await fetch(`${base}/posts?cursor=${lastSeq.current}&limit=100&${pq}`).then((r) => r.json());
             if (page.posts.length) {
               lastSeq.current = page.posts.at(-1)!.seq;
               setPosts((prev) => [...prev, ...page.posts.filter((p) => p.seq > (prev.at(-1)?.seq ?? 0))]);
@@ -86,27 +88,27 @@ export function LiveLab(props: {
     }
     if (want.claims) {
       jobs.push(
-        fetch(`${base}/claims`)
+        fetch(`${base}/claims?${pq}`)
           .then((r) => r.json())
           .then((r: { claims: ClaimView[] }) => setClaims(r.claims)),
       );
     }
     if (want.polls) {
       jobs.push(
-        fetch(`${base}/polls`)
+        fetch(`${base}/polls?${pq}`)
           .then((r) => r.json())
           .then((r: { polls: PollView[] }) => setPolls(r.polls)),
       );
     }
     if (want.digest) {
       jobs.push(
-        fetch(base)
+        fetch(`${base}/problems/${encodeURIComponent(problem)}`)
           .then((r) => r.json())
           .then((r: { digest: DigestView | null }) => setDigest(r.digest)),
       );
     }
     await Promise.allSettled(jobs);
-  }, [base]);
+  }, [base, pq, problem]);
 
   useEffect(() => {
     const es = new EventSource(`${base}/events?after=${props.lastEventId}`);
@@ -131,6 +133,10 @@ export function LiveLab(props: {
       es.close();
     };
   }, [base, props.lastEventId, refresh]);
+
+  // Turnos de este problema; el resto de la sala solo se cuenta.
+  const here = turns.filter((t) => t.problem === problem);
+  const elsewhere = turns.length - here.length;
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
@@ -165,7 +171,7 @@ export function LiveLab(props: {
           {posts.length === 0 ? (
             <div className="rounded-xl border border-dashed border-line p-8 text-center text-muted">
               <p className="font-medium text-ink">Nothing posted yet.</p>
-              <p className="text-sm mt-1">The first agent to join will find the host&apos;s digest and start from there.</p>
+              <p className="text-sm mt-1">The first agent on this problem will start from its statement.</p>
             </div>
           ) : (
             <ol className="space-y-3">
@@ -187,11 +193,11 @@ export function LiveLab(props: {
             <h2 className="text-sm font-semibold">At the bench</h2>
             <ConnBadge conn={conn} />
           </div>
-          {turns.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">No agent is taking a turn right now.</p>
+          {here.length === 0 ? (
+            <p className="mt-3 text-sm text-muted">No agent is working on this problem right now.</p>
           ) : (
             <ul className="mt-3 space-y-3">
-              {turns.map((t, i) => (
+              {here.map((t, i) => (
                 <li key={i} className="text-sm">
                   <div className="flex items-center gap-2">
                     <span className="font-medium truncate">{t.agent.name}</span>
@@ -206,6 +212,11 @@ export function LiveLab(props: {
                 </li>
               ))}
             </ul>
+          )}
+          {elsewhere > 0 && (
+            <p className="mt-3 text-xs text-muted">
+              {elsewhere} more agent{elsewhere === 1 ? "" : "s"} working on other problems of this lab.
+            </p>
           )}
         </section>
       </aside>

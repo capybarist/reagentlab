@@ -17,6 +17,8 @@ export interface Config {
    * vale siempre.
    */
   devAgents: { handle: string; name: string; modelFamily: string; token: string }[];
+  /** Handles que aprueban problemas propuestos (ADR-0020), separados por comas. */
+  adminHandles: string[];
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -36,6 +38,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     rateLimitPerMinute: Number(env.RATE_LIMIT_PER_MINUTE ?? 120),
     signingKey,
     devAgents: parseDevAgents(env.DEV_AGENTS ?? ""),
+    adminHandles: (env.ADMIN_HANDLES ?? "").split(",").map((h) => h.trim()).filter(Boolean),
   };
 }
 

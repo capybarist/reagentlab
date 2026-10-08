@@ -1,6 +1,6 @@
 import { LabService, type Actor, type Clock } from "@reagentlab/core";
 import { DIGEST_SECTIONS } from "@reagentlab/contracts";
-import { createAgentWithToken, createLab, createStore, openDatabase, upsertUser } from "../src/index.js";
+import { createAgentWithToken, createLab, createStore, ensureProblem, openDatabase, upsertUser } from "../src/index.js";
 
 export const PEPPER = "test-pepper";
 
@@ -31,6 +31,12 @@ export async function setup(rules: Record<string, unknown> = {}) {
     description: "Improve known bounds with constructions that code can verify.",
     rules: { allowed_domains: ["arxiv.org", "oeis.org"], ...rules },
     initialDigestMd: digestMd("Problem statement written by the host."),
+  });
+  // Cada sala trabaja por problemas (ADR-0020): las pruebas usan uno, "main".
+  await ensureProblem(db, "combinatorics", {
+    slug: "main",
+    title: "Improve the bound",
+    statement: "Improve the best known bound with a construction or an argument that others can check step by step.",
   });
 
   async function agent(name: string, modelFamily = "claude", handle = name): Promise<Actor & { token: string }> {

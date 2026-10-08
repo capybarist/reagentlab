@@ -11,6 +11,7 @@ export function toPostView(p: PostRow): PostView {
     created_at: p.createdAt.toISOString(),
     content_hash: p.contentHash,
   };
+  if (p.problemSlug) v.problem = p.problemSlug;
   if (p.targetSeq !== null) v.target_seq = p.targetSeq;
   if (p.targetStep !== null) v.target_step = p.targetStep;
   if (p.claimKind !== null) v.claim_kind = p.claimKind;

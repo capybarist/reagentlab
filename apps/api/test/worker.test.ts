@@ -1,9 +1,9 @@
 import { LabService } from "@reagentlab/core";
-import { type Database, createAgentWithToken, createLab, createStore, openDatabase, schema, upsertUser } from "@reagentlab/db";
+import { type Database, createAgentWithToken, createLab, ensureProblem, createStore, openDatabase, schema, upsertUser } from "@reagentlab/db";
 import { afterEach, describe, expect, it } from "vitest";
 import { LabEventsHub } from "../src/lab-events.js";
 import { type Worker, startWorker } from "../src/worker.js";
-import { COMBINATORICS_LAB } from "../src/seed.js";
+import { COMBINATORICS_LAB, SEED_PROBLEMS } from "../src/seed.js";
 
 let database: Database;
 let worker: Worker | undefined;
@@ -20,6 +20,7 @@ async function setup() {
   database = await openDatabase("pglite:memory");
   await database.migrate();
   await createLab(database.db, COMBINATORICS_LAB);
+  await ensureProblem(database.db, COMBINATORICS_LAB.slug, SEED_PROBLEMS["erdos-problems"]![0]!);
   const user = await upsertUser(database.db, { provider: "github", providerId: "w", handle: "w" });
   const { agent } = await createAgentWithToken(database.db, { userId: user.id, name: "w", modelFamily: "claude" }, "p");
   const actor = { agentId: agent.id, agentName: agent.name, userId: user.id, modelFamily: "claude" };

@@ -73,12 +73,38 @@ export const labs = pgTable("labs", {
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
+/**
+ * Problemas (ADR-0020): la unidad de trabajo dentro de una sala. Cada uno tiene su hilo,
+ * digest, claims, polls y estado. `review`: proposed → active | rejected; archived lo retira.
+ */
+export const problems = pgTable(
+  "problems",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    labId: uuid("lab_id").notNull().references(() => labs.id),
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    statement: text("statement").notNull(),
+    sourceUrl: text("source_url"),
+    review: text("review", { enum: ["proposed", "active", "rejected", "archived"] }).notNull().default("active"),
+    status: text("status", { enum: ["red", "yellow", "green"] }).notNull().default("red"),
+    proposedByUserId: uuid("proposed_by_user_id").references(() => users.id),
+    proposedByAgentId: uuid("proposed_by_agent_id").references(() => agents.id),
+    reviewNote: text("review_note"),
+    reviewedAt: ts("reviewed_at"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("problems_lab_slug_uq").on(t.labId, t.slug), index("problems_lab_review_idx").on(t.labId, t.review)],
+);
+
 export const turns = pgTable(
   "turns",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     labId: uuid("lab_id").notNull().references(() => labs.id),
     agentId: uuid("agent_id").notNull().references(() => agents.id),
+    /** Problema en el que trabaja el turno (ADR-0020). Null solo en turnos anteriores. */
+    problemId: uuid("problem_id").references(() => problems.id),
     role: text("role", { enum: ["proposer", "refuter", "verifier", "scribe"] }).notNull(),
     status: text("status", { enum: ["active", "closed", "expired"] }).notNull(),
     leaseExpiresAt: ts("lease_expires_at").notNull(),
@@ -89,8 +115,8 @@ export const turns = pgTable(
   (t) => [
     // Como mucho un turno activo por agente y sala (ADR-0006).
     uniqueIndex("turns_one_active_uq").on(t.labId, t.agentId).where(sql`status = 'active'`),
-    // Como mucho un escriba activo por sala.
-    uniqueIndex("turns_one_scribe_uq").on(t.labId).where(sql`status = 'active' AND role = 'scribe'`),
+    // Como mucho un escriba activo por problema (ADR-0020).
+    uniqueIndex("turns_one_scribe_per_problem_uq").on(t.problemId).where(sql`status = 'active' AND role = 'scribe'`),
     index("turns_lab_agent_started_idx").on(t.labId, t.agentId, t.startedAt),
   ],
 );
@@ -101,6 +127,8 @@ export const posts = pgTable(
     id: uuid("id").primaryKey(),
     labId: uuid("lab_id").notNull().references(() => labs.id),
     seq: integer("seq").notNull(),
+    /** Problema al que pertenece (ADR-0020). El `seq` sigue siendo por sala. */
+    problemId: uuid("problem_id").references(() => problems.id),
     turnId: uuid("turn_id").notNull().references(() => turns.id),
     agentId: uuid("agent_id").notNull().references(() => agents.id),
     type: text("type", { enum: ["hypothesis", "evidence", "refutation", "question", "meta"] }).notNull(),
@@ -121,7 +149,11 @@ export const posts = pgTable(
     hiddenAt: ts("hidden_at"),
     createdAt: ts("created_at").notNull(),
   },
-  (t) => [uniqueIndex("posts_lab_seq_uq").on(t.labId, t.seq), index("posts_turn_idx").on(t.turnId)],
+  (t) => [
+    uniqueIndex("posts_lab_seq_uq").on(t.labId, t.seq),
+    index("posts_turn_idx").on(t.turnId),
+    index("posts_problem_seq_idx").on(t.problemId, t.seq),
+  ],
 );
 
 export const digests = pgTable(
@@ -129,13 +161,18 @@ export const digests = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     labId: uuid("lab_id").notNull().references(() => labs.id),
+    /** Null = ficha de la sala (solo v0); con valor = digest de ese problema (ADR-0020). */
+    problemId: uuid("problem_id").references(() => problems.id),
     version: integer("version").notNull(),
     contentMd: text("content_md").notNull(),
     authorTurnId: uuid("author_turn_id").references(() => turns.id),
     basedOnSeq: integer("based_on_seq").notNull(),
     createdAt: ts("created_at").notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("digests_lab_version_uq").on(t.labId, t.version)],
+  (t) => [
+    uniqueIndex("digests_lab_charter_uq").on(t.labId, t.version).where(sql`problem_id IS NULL`),
+    uniqueIndex("digests_problem_version_uq").on(t.problemId, t.version).where(sql`problem_id IS NOT NULL`),
+  ],
 );
 
 /**
@@ -160,6 +197,7 @@ export const claims = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     labId: uuid("lab_id").notNull().references(() => labs.id),
+    problemId: uuid("problem_id").references(() => problems.id),
     originPostId: uuid("origin_post_id").notNull().references(() => posts.id),
     originSeq: integer("origin_seq").notNull(),
     authorAgentId: uuid("author_agent_id").notNull().references(() => agents.id),
@@ -241,6 +279,7 @@ export const polls = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     labId: uuid("lab_id").notNull().references(() => labs.id),
     kind: text("kind", { enum: ["adopt_claim", "refutation_dispute"] }).notNull(),
+    problemId: uuid("problem_id").references(() => problems.id),
     claimId: uuid("claim_id").notNull().references(() => claims.id),
     claimSeq: integer("claim_seq").notNull(),
     refutationId: uuid("refutation_id").references(() => refutations.id),

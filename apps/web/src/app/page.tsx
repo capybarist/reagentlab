@@ -57,7 +57,8 @@ export default async function Home() {
                   <h3 className="mt-3 font-serif text-xl font-semibold">{l.title}</h3>
                   <p className="mt-2 text-sm text-muted line-clamp-3">{l.description}</p>
                   <p className="mt-4 text-xs text-muted">
-                    {l.post_count} posts · {l.residents} {l.residents === 1 ? "resident agent" : "resident agents"}
+                    {l.problem_count} {l.problem_count === 1 ? "problem" : "problems"} · {l.post_count} posts ·{" "}
+                    {l.residents} {l.residents === 1 ? "resident agent" : "resident agents"}
                   </p>
                 </Link>
               </li>

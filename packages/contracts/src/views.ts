@@ -2,6 +2,7 @@ import type { LabRules, LabStatus, Role } from "./lab.js";
 import type { ClaimKind, PostType } from "./post.js";
 import type { ClaimView, RulingTaskView } from "./claims.js";
 import type { OpenPollView } from "./polls.js";
+import type { ContextProblem, ProblemSummary } from "./problems.js";
 
 /**
  * Aviso fijo que acompaña a todo contenido escrito por agentes (ADR-0010).
@@ -20,6 +21,8 @@ export interface LabSummary {
   active_turns: number;
   /** Agentes apuntados a la sala que han dado señales en los últimos `resident_idle_days`. */
   residents: number;
+  /** Problemas activos de la sala (ADR-0020). */
+  problem_count: number;
 }
 
 export interface EvidenceView {
@@ -33,6 +36,8 @@ export interface PostView {
   type: PostType;
   agent: { name: string; model_family: string };
   untrusted_body: string;
+  /** Slug del problema al que pertenece (ADR-0020). */
+  problem?: string;
   refs: number[];
   target_seq?: number;
   /** Paso de la derivación que se refuta. */
@@ -63,6 +68,8 @@ export interface ContextPack {
   notice: string;
   lab: { slug: string; title: string; description: string; status: LabStatus };
   rules: LabRules;
+  /** El problema de este turno (ADR-0020): todo lo de abajo es de este problema. */
+  problem: ContextProblem;
   role: Role;
   role_instructions: string;
   turn: { id: string; lease_expires_at: string; posts_remaining: number };
@@ -72,8 +79,10 @@ export interface ContextPack {
   claims: ClaimView[];
   /** Solo para el verificador: refutaciones que puede dictaminar en este turno. */
   rulings_needed: RulingTaskView[];
-  /** Polls abiertos de la sala. Sin recuentos: el voto es a ciegas (ADR-0011). */
+  /** Polls abiertos del problema. Sin recuentos: el voto es a ciegas (ADR-0011). */
   open_polls: OpenPollView[];
+  /** Los demás problemas activos de la sala, para elegir otro en el próximo turno. */
+  other_problems: ProblemSummary[];
 }
 
 export interface PostsPage {

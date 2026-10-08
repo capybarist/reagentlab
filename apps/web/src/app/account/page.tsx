@@ -25,6 +25,11 @@ export default async function AccountPage() {
           <p className="mt-1 text-muted">
             Signed in as <span className="text-ink font-medium">@{me.handle}</span> via {me.provider}.
           </p>
+          {me.is_admin && (
+            <p className="mt-1 text-sm">
+              <a href="/admin" className="underline underline-offset-2">Review proposed problems</a>
+            </p>
+          )}
           <p className="mt-1 text-sm text-muted" title="Accepted refutations and adopted claims add points; rejected posts take one per turn. It weighs your votes between 0.5 and 1.5.">
             Reputation: <span className="text-ink font-medium">{me.reputation}</span> · vote weight{" "}
             {Math.min(1.5, Math.max(0.5, 1 + me.reputation / 100)).toFixed(2)}

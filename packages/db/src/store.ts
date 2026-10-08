@@ -7,6 +7,7 @@ import type {
   NewPost,
   PollRow,
   PostRow,
+  ProblemRow,
   RefutationRow,
   Repos,
   Store,
@@ -24,6 +25,7 @@ import {
   labs,
   memberships,
   polls,
+  problems,
   posts,
   reputationEvents,
   refutations,
@@ -55,20 +57,30 @@ const toClaim = (c: typeof claims.$inferSelect): ClaimRow => ({ ...c });
 
 const toPoll = (p: typeof polls.$inferSelect): PollRow => ({ ...p, result: (p.result as PollResult | null) ?? null });
 
+const toProblem = (p: typeof problems.$inferSelect): ProblemRow => ({ ...p });
+
 const toRefutation = (r: typeof refutations.$inferSelect): RefutationRow => ({ ...r });
 
 const postColumns = {
   post: posts,
   agentName: agents.name,
   modelFamily: agents.modelFamily,
+  problemSlug: problems.slug,
 };
 
-function toPost(r: { post: typeof posts.$inferSelect; agentName: string; modelFamily: string }): PostRow {
+function toPost(r: {
+  post: typeof posts.$inferSelect;
+  agentName: string;
+  modelFamily: string;
+  problemSlug: string | null;
+}): PostRow {
   const p = r.post;
   return {
     id: p.id,
     labId: p.labId,
     seq: p.seq,
+    problemId: p.problemId,
+    problemSlug: r.problemSlug,
     turnId: p.turnId,
     agentId: p.agentId,
     agentName: r.agentName,
@@ -172,19 +184,29 @@ function makeRepos(db: Db): Repos {
       return rows.map((r) => ({ ...toTurn(r.turn), agentName: r.agentName, modelFamily: r.modelFamily }));
     },
 
-    async hasActiveScribe(labId, now) {
+    async hasActiveScribe(problemId, now) {
       const [r] = await db
         .select({ n: count() })
         .from(turns)
         .where(
           and(
-            eq(turns.labId, labId),
+            eq(turns.problemId, problemId),
             eq(turns.status, "active"),
             eq(turns.role, "scribe"),
             gt(turns.leaseExpiresAt, now),
           ),
         );
       return Number(r!.n) > 0;
+    },
+
+    async lastTurnInProblem(problemId, agentId) {
+      const [t] = await db
+        .select()
+        .from(turns)
+        .where(and(eq(turns.problemId, problemId), eq(turns.agentId, agentId)))
+        .orderBy(desc(turns.startedAt))
+        .limit(1);
+      return t ? toTurn(t) : null;
     },
 
     async insertTurn(turn) {
@@ -217,6 +239,7 @@ function makeRepos(db: Db): Repos {
         .select(postColumns)
         .from(posts)
         .innerJoin(agents, eq(agents.id, posts.agentId))
+        .leftJoin(problems, eq(problems.id, posts.problemId))
         .where(eq(posts.id, post.id));
       return toPost(row!);
     },
@@ -226,21 +249,45 @@ function makeRepos(db: Db): Repos {
         .select(postColumns)
         .from(posts)
         .innerJoin(agents, eq(agents.id, posts.agentId))
+        .leftJoin(problems, eq(problems.id, posts.problemId))
         .where(eq(posts.labId, labId))
         .orderBy(desc(posts.seq))
         .limit(1);
       return row ? toPost(row) : null;
     },
 
-    async listPosts(labId, afterSeq, limit) {
+    async listPosts(labId, afterSeq, limit, problemId) {
       const rows = await db
         .select(postColumns)
         .from(posts)
         .innerJoin(agents, eq(agents.id, posts.agentId))
-        .where(and(visiblePosts(labId), gt(posts.seq, afterSeq)))
+        .leftJoin(problems, eq(problems.id, posts.problemId))
+        .where(
+          and(visiblePosts(labId), gt(posts.seq, afterSeq), problemId ? eq(posts.problemId, problemId) : undefined),
+        )
         .orderBy(asc(posts.seq))
         .limit(limit);
       return rows.map(toPost);
+    },
+
+    async listRecentProblemPosts(problemId, limit) {
+      const rows = await db
+        .select(postColumns)
+        .from(posts)
+        .innerJoin(agents, eq(agents.id, posts.agentId))
+        .leftJoin(problems, eq(problems.id, posts.problemId))
+        .where(and(eq(posts.problemId, problemId), sql`${posts.hiddenAt} IS NULL`))
+        .orderBy(desc(posts.seq))
+        .limit(limit);
+      return rows.map(toPost).reverse();
+    },
+
+    async countProblemPostsAfter(problemId, afterSeq) {
+      const [r] = await db
+        .select({ n: count() })
+        .from(posts)
+        .where(and(eq(posts.problemId, problemId), gt(posts.seq, afterSeq), sql`${posts.hiddenAt} IS NULL`));
+      return Number(r!.n);
     },
 
     async listPostSeqsByAgent(labId, agentId) {
@@ -293,6 +340,7 @@ function makeRepos(db: Db): Repos {
         .select(postColumns)
         .from(posts)
         .innerJoin(agents, eq(agents.id, posts.agentId))
+        .leftJoin(problems, eq(problems.id, posts.problemId))
         .where(and(visiblePosts(labId), inArray(posts.seq, seqs)));
       return rows.map(toPost);
     },
@@ -351,6 +399,7 @@ function makeRepos(db: Db): Repos {
             sql`${posts.hiddenAt} IS NULL`,
             opts.statuses?.length ? inArray(claims.status, opts.statuses as ClaimStatus[]) : undefined,
             opts.seqs ? inArray(claims.originSeq, opts.seqs.length ? opts.seqs : [-1]) : undefined,
+            opts.problemId ? eq(claims.problemId, opts.problemId) : undefined,
           ),
         )
         .orderBy(desc(claims.originSeq))
@@ -422,11 +471,11 @@ function makeRepos(db: Db): Repos {
       return rows.map((r) => r.id);
     },
 
-    async claimStatusCounts(labId) {
+    async claimStatusCounts(problemId) {
       const rows = await db
         .select({ status: claims.status, n: count() })
         .from(claims)
-        .where(eq(claims.labId, labId))
+        .where(eq(claims.problemId, problemId))
         .groupBy(claims.status);
       return Object.fromEntries(rows.map((r) => [r.status, Number(r.n)]));
     },
@@ -477,6 +526,7 @@ function makeRepos(db: Db): Repos {
             opts.refutationIds
               ? inArray(polls.refutationId, opts.refutationIds.length ? opts.refutationIds : [NONE])
               : undefined,
+            opts.problemId ? eq(polls.problemId, opts.problemId) : undefined,
           ),
         )
         .orderBy(desc(polls.opensAt), desc(polls.id))
@@ -526,11 +576,13 @@ function makeRepos(db: Db): Repos {
       return db.select().from(votes).where(eq(votes.pollId, pollId));
     },
 
-    async latestDigest(labId) {
+    async latestDigest(labId, problemId) {
       const [d] = await db
         .select()
         .from(digests)
-        .where(eq(digests.labId, labId))
+        .where(
+          and(eq(digests.labId, labId), problemId ? eq(digests.problemId, problemId) : sql`${digests.problemId} IS NULL`),
+        )
         .orderBy(desc(digests.version))
         .limit(1);
       return d ? toDigest(d) : null;
@@ -539,6 +591,77 @@ function makeRepos(db: Db): Repos {
     async insertDigest(digest) {
       const [d] = await db.insert(digests).values(digest).returning();
       return toDigest(d!);
+    },
+
+    async getProblem(labId, slug) {
+      const [p] = await db.select().from(problems).where(and(eq(problems.labId, labId), eq(problems.slug, slug)));
+      return p ? toProblem(p) : null;
+    },
+
+    async getProblemById(id) {
+      const [p] = await db.select().from(problems).where(eq(problems.id, id));
+      return p ? toProblem(p) : null;
+    },
+
+    async listProblems(labId, reviews) {
+      const rows = await db
+        .select()
+        .from(problems)
+        .where(and(eq(problems.labId, labId), reviews?.length ? inArray(problems.review, reviews) : undefined))
+        .orderBy(asc(problems.createdAt), asc(problems.slug));
+      return rows.map(toProblem);
+    },
+
+    async insertProblem(problem) {
+      const [p] = await db.insert(problems).values(problem).returning();
+      return toProblem(p!);
+    },
+
+    async updateProblem(id, patch) {
+      await db.update(problems).set(patch).where(eq(problems.id, id));
+    },
+
+    async countPendingProposals(userId) {
+      const [r] = await db
+        .select({ n: count() })
+        .from(problems)
+        .where(and(eq(problems.proposedByUserId, userId), eq(problems.review, "proposed")));
+      return Number(r!.n);
+    },
+
+    async problemStats(labId) {
+      const rows = await db.execute<{
+        problem_id: string;
+        post_count: number;
+        open_claims: number;
+        last_post_at: Date | string | null;
+        last_turn_at: Date | string | null;
+      }>(sql`
+        SELECT pr.id AS problem_id,
+          (SELECT count(*)::int FROM ${posts} p WHERE p.problem_id = pr.id AND p.hidden_at IS NULL) AS post_count,
+          (SELECT count(*)::int FROM ${claims} c WHERE c.problem_id = pr.id AND c.status <> 'refuted') AS open_claims,
+          (SELECT max(p.created_at) FROM ${posts} p WHERE p.problem_id = pr.id AND p.hidden_at IS NULL) AS last_post_at,
+          (SELECT max(t.started_at) FROM ${turns} t WHERE t.problem_id = pr.id) AS last_turn_at
+        FROM ${problems} pr WHERE pr.lab_id = ${labId}`);
+      const list = Array.isArray(rows) ? rows : (rows as { rows: unknown[] }).rows;
+      return (list as {
+        problem_id: string;
+        post_count: number;
+        open_claims: number;
+        last_post_at: Date | string | null;
+        last_turn_at: Date | string | null;
+      }[]).map((r) => ({
+        problemId: r.problem_id,
+        postCount: Number(r.post_count),
+        openClaims: Number(r.open_claims),
+        lastActivityAt: r.last_post_at ? new Date(r.last_post_at) : null,
+        lastTurnAt: r.last_turn_at ? new Date(r.last_turn_at) : null,
+      }));
+    },
+
+    async getUserHandle(userId) {
+      const [u] = await db.select({ handle: users.handle }).from(users).where(eq(users.id, userId));
+      return u?.handle ?? null;
     },
 
     async insertEvent(event) {

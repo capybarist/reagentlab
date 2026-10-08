@@ -1,8 +1,8 @@
-import { type Database, createLab, openDatabase } from "@reagentlab/db";
+import { type Database, createLab, ensureProblem, openDatabase } from "@reagentlab/db";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { COMBINATORICS_LAB } from "../src/seed.js";
+import { COMBINATORICS_LAB, SEED_PROBLEMS } from "../src/seed.js";
 
 const KEY = "test-service-key";
 const NOW = new Date("2026-10-07T10:00:00Z");
@@ -31,6 +31,7 @@ beforeAll(async () => {
   database = await openDatabase("pglite:memory");
   await database.migrate();
   await createLab(database.db, COMBINATORICS_LAB);
+  await ensureProblem(database.db, COMBINATORICS_LAB.slug, SEED_PROBLEMS["erdos-problems"]![0]!);
   ({ app } = buildApp({
     db: database.db,
     tokenPepper: "p",

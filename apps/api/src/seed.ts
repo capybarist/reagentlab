@@ -203,3 +203,68 @@ export const DEMO_LAB = {
     "Not a real lab.",
   initialDigestMd: COMBINATORICS_LAB.initialDigestMd.replace("erdos-problems", "demo"),
 };
+
+/**
+ * Problemas iniciales de cada sala (ADR-0020). Enunciados que el host conoce bien; cada
+ * digest pide comprobar el estado actual contra la fuente. Se añaden más con propose_problem.
+ */
+export const SEED_PROBLEMS: Record<string, { slug: string; title: string; statement: string; sourceUrl?: string }[]> = {
+  "erdos-problems": [
+    {
+      slug: "erdos-straus",
+      title: "Erdős–Straus conjecture: 4/n = 1/x + 1/y + 1/z",
+      statement:
+        "For every integer n ≥ 2 there are positive integers x, y, z with 4/n = 1/x + 1/y + 1/z. It suffices to prove it " +
+        "for primes. Mordell's identities settle every n outside the residue classes 1, 121, 169, 289, 361, 529 mod 840, " +
+        "and polynomial identities cannot cover square classes; it has been checked by computer up to very large bounds. " +
+        "Progress here: a new family of identities or a proof for a subclass of the open primes, a density bound, or a " +
+        "checked computation that narrows the open classes. Find its number on erdosproblems.com and check its status.",
+      sourceUrl: "https://en.wikipedia.org/wiki/Erd%C5%91s%E2%80%93Straus_conjecture",
+    },
+    {
+      slug: "erdos-turan-additive-bases",
+      title: "Erdős–Turán conjecture on additive bases",
+      statement:
+        "If B is an additive basis of order 2 of the natural numbers (every sufficiently large n is a sum of two elements " +
+        "of B), then the number of representations r_B(n) is unbounded. Open since 1941. Progress here: a proof for a " +
+        "restricted class of bases, a quantitative lower bound on max r_B(n) under extra hypotheses, or a counterexample " +
+        "to a proposed strengthening. Find its number on erdosproblems.com and check its status.",
+      sourceUrl: "https://en.wikipedia.org/wiki/Erd%C5%91s%E2%80%93Tur%C3%A1n_conjecture_on_additive_bases",
+    },
+  ],
+  "hubble-tension": [
+    {
+      slug: "early-dark-energy",
+      title: "Can early dark energy resolve the Hubble tension?",
+      statement:
+        "Early dark energy adds a component that is active around matter–radiation equality, shrinks the sound horizon " +
+        "and raises the H0 inferred from the CMB. Question: can it reach the distance-ladder value without breaking other " +
+        "data (CMB polarization, BAO, the growth of structure S8)? Progress here: a derivation or computation that links " +
+        "the H0 shift a model achieves to the observable it worsens, and by how much, with every input sourced.",
+    },
+    {
+      slug: "distance-ladder-systematics",
+      title: "Could a systematic in the distance ladder explain the tension?",
+      statement:
+        "The local H0 rests on Cepheids (and alternatives such as TRGB and JAGB) calibrating type Ia supernovae. " +
+        "Question: what size of systematic offset in that calibration would close the gap with the CMB value, and is an " +
+        "offset of that size excluded by independent checks (other ladders, JWST observations, geometric anchors)? " +
+        "Progress here: the required offset derived explicitly, and a sourced comparison with the measured limits.",
+    },
+  ],
+  "simon-problems": [
+    {
+      slug: "extended-states-anderson",
+      title: "Extended states for the 3D Anderson model at weak disorder",
+      statement:
+        "Prove that the discrete Anderson Hamiltonian on Z^3 with weak i.i.d. random potential has absolutely continuous " +
+        "spectrum (extended states) in part of its spectrum. One of the central open problems in Simon's list; the analogue " +
+        "on tree graphs (the Bethe lattice) is known. Progress here: a proof for a simplified model, a lemma towards the " +
+        "Z^3 case, or a precise statement of why a known method fails. Check the current status against the literature.",
+      sourceUrl: "https://en.wikipedia.org/wiki/Anderson_localization",
+    },
+  ],
+};
+
+/** El problema de la sala de demo. */
+export const DEMO_PROBLEM = SEED_PROBLEMS["erdos-problems"]![0]!;

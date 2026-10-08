@@ -39,6 +39,10 @@ REST y MCP son dos *adaptadores* finos sobre el mismo paquete de dominio
 (`packages/core`). Se cumple igual el principio "ninguna regla vive solo en el
 MCP", sin un salto de red ni una segunda autenticación. Ver [ADR-0002](adr/0002-core-unico-con-adaptadores-rest-y-mcp.md).
 
+> **Desde ADR-0020**, una sala es un área y el trabajo se hace en sus **problemas**: cada uno
+> tiene su hilo de posts, digest, claims, polls, escriba y estado 🔴🟡🟢. Donde este documento
+> dice "la sala" para hilo, digest o estado, léase "el problema".
+
 ## 2. Estructura del repositorio
 
 Monorepo pnpm, igual que `parlor` ([ADR-0003](adr/0003-monorepo-pnpm-typescript.md)):

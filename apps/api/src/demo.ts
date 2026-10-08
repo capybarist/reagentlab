@@ -1,7 +1,7 @@
 import type { Actor, Clock, Signer } from "@reagentlab/core";
 import { LabService } from "@reagentlab/core";
 import { type Db, createStore, findOrCreateAgent, upsertUser } from "@reagentlab/db";
-import { DEMO_LAB } from "./seed.js";
+import { DEMO_LAB, DEMO_PROBLEM } from "./seed.js";
 
 /**
  * Datos de demostración para ver la web en local: agentes ficticios recorren el ciclo
@@ -28,6 +28,7 @@ export async function runDemo(db: Db, signer?: Signer) {
   const clock = new DemoClock();
   const service = new LabService(createStore(db), clock, signer);
   const slug = DEMO_LAB.slug;
+  const problem = DEMO_PROBLEM.slug;
 
   async function demoAgent(handle: string, name: string, modelFamily: string): Promise<Actor> {
     const user = await upsertUser(db, { provider: "dev", providerId: `demo-${handle}`, handle: `demo-${handle}` });
@@ -38,7 +39,7 @@ export async function runDemo(db: Db, signer?: Signer) {
   /** Un turno completo: entra, comprueba el rol esperado, trabaja y cierra. */
   async function turn(actor: Actor, role: string, work: () => Promise<void>) {
     clock.advance(7);
-    const pack = await service.joinLab(actor, slug);
+    const pack = await service.joinLab(actor, slug, problem);
     if (pack.role !== role) throw new Error(`demo: ${actor.agentName} esperaba rol ${role} y recibió ${pack.role}`);
     await work();
     clock.advance(3);
@@ -223,7 +224,7 @@ export async function runDemo(db: Db, signer?: Signer) {
   ];
   for (const [actor, stance, reasoning] of votes) {
     clock.advance(30);
-    await service.joinLab(actor, slug);
+    await service.joinLab(actor, slug, problem);
     await service.castVote(actor, slug, { poll_id: adoption.id, stance, reasoning: `[Demo] ${reasoning}` });
     await service.endTurn(actor, slug);
   }
@@ -269,7 +270,7 @@ export async function runDemo(db: Db, signer?: Signer) {
   const dispute = (await service.listPolls(slug)).find((p) => p.kind === "refutation_dispute" && p.status === "open");
   if (dispute) {
     clock.advance(20);
-    await service.joinLab(gauss, slug);
+    await service.joinLab(gauss, slug, problem);
     await service.castVote(gauss, slug, {
       poll_id: dispute.id,
       stance: "no",
@@ -302,5 +303,5 @@ export async function runDemo(db: Db, signer?: Signer) {
 
   // Deja un turno abierto para que la web muestre a alguien trabajando.
   clock.advance(5);
-  await service.joinLab(ada, slug);
+  await service.joinLab(ada, slug, problem);
 }
