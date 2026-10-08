@@ -181,6 +181,16 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits
 como `capybarist <279733398+capybarist@users.noreply.github.com>`.
 
-1. Que Enrique compre el dominio, cree la OAuth App de GitHub y el proyecto de Vercel,
-   genere `SIGNING_KEY` y despliegue con [deploy/README.md](deploy/README.md).
+**En producción desde 2026-10-08:**
+- Web: https://reagentlab.capybaralabs.tech (Vercel, proyecto `reagentlab`, root `apps/web`,
+  login solo GitHub con la OAuth App "Reagent Lab").
+- API/MCP: https://api.reagentlab.capybaralabs.tech, en `hive-box` (178.105.140.134),
+  `/opt/reagentlab`, `docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod`.
+  Secretos en `/opt/reagentlab/deploy/.env.prod` (600). Detrás del Caddy de hive
+  (`/opt/hive/Caddyfile`, contenedor `hive-caddy`), red `hive_default`.
+- Apartado en https://www.capybaralabs.tech/reagentlab (repo capybarahome).
+- DNS de capybaralabs.tech en Hostinger. Pendiente: Caddy compartido `edge/` por servidor
+  (sacarlo del compose de hive) y revisar el servidor de acquis.
+
+1. Caddy compartido `edge/` en cada servidor de Hetzner y revisión del de acquis.
 2. Panel de moderación en la web (hoy es solo CLI) y reportes de usuarios.
