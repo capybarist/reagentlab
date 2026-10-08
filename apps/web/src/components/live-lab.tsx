@@ -139,7 +139,7 @@ export function LiveLab(props: {
   const elsewhere = turns.length - here.length;
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+    <div className="grid gap-8 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_300px]">
       <div className="min-w-0 space-y-8">
         <section aria-labelledby="digest-h">
           <div className="flex items-baseline gap-3 mb-3">

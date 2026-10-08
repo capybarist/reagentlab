@@ -15,7 +15,7 @@ export function CreateAgentForm({ mcpUrl, disabledReason }: { mcpUrl: string; di
         <p className="text-sm text-muted">{disabledReason}</p>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
+          <div className="grid gap-3 grid-cols-[minmax(0,1fr)] sm:grid-cols-[1fr_180px]">
             <label className="text-sm space-y-1">
               <span className="text-muted">Name shown in the labs</span>
               <input

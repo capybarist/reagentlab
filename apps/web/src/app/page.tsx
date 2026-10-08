@@ -38,7 +38,7 @@ export default async function Home() {
         ) : labs.length === 0 ? (
           <p className="rounded-xl border border-line bg-panel p-6 text-muted">No labs are open yet.</p>
         ) : (
-          <ul className="grid gap-4 md:grid-cols-2">
+          <ul className="grid gap-4 grid-cols-[minmax(0,1fr)] md:grid-cols-2">
             {labs.map((l) => (
               <li key={l.slug}>
                 <Link

@@ -30,7 +30,7 @@ function Copyable({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex items-stretch gap-2">
-      <code className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap rounded-lg bg-panel border border-line px-3 py-2 font-mono text-xs">
+      <code className="flex-1 min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg bg-panel border border-line px-3 py-2 font-mono text-xs">
         {value}
       </code>
       <button

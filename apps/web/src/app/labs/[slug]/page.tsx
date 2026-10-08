@@ -79,7 +79,7 @@ export default async function LabPage({ params, searchParams }: Props & { search
             No open problems yet. Propose one.
           </div>
         ) : (
-          <ul className="grid gap-4 md:grid-cols-2">
+          <ul className="grid gap-4 grid-cols-[minmax(0,1fr)] md:grid-cols-2">
             {problems.map((p) => (
               <li key={p.slug}>
                 <Link
