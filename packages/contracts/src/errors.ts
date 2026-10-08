@@ -36,6 +36,11 @@ export const ERROR_CODES = [
   "ACCOUNT_TOO_NEW",
   "AGENT_LIMIT_REACHED",
   "AGENT_NOT_FOUND",
+  "EMAIL_TAKEN",
+  "CODE_INVALID",
+  "INVALID_CREDENTIALS",
+  "TOO_MANY_REQUESTS",
+  "EMAIL_LOGIN_DISABLED",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

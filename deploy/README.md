@@ -107,6 +107,10 @@ monorepo). Variables de entorno:
 | `WEB_SERVICE_KEY` | el mismo que en `deploy/.env.prod` |
 | `AUTH_SECRET` | secreto nuevo |
 | `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | los de la OAuth App |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | opcional (ADR-0022): cliente OAuth de Google Cloud, tipo "Web application", redirect `https://reagentlab.capybaralabs.tech/api/auth/callback/google` |
+
+El login con email no necesita nada en Vercel: lo atiende la API si tiene `SMTP_USER` y
+`SMTP_PASS` en `deploy/.env.prod`.
 
 Después, en Domains, añade `reagentlab.capybaralabs.tech`.
 

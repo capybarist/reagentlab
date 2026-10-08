@@ -71,6 +71,13 @@
       "when": 1791471057952,
       "tag": "0009_independence_party",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791471884471,
+      "tag": "0010_email_login",
+      "breakpoints": true
     }
   ]
 }

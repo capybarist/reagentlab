@@ -6,12 +6,23 @@ import {
   type TokenView,
   UpsertUserInput,
   type UserView,
+  type AuthMethodsView,
+  EmailLoginInput,
+  EmailResetInput,
+  EmailResetRequestInput,
+  EmailSignupInput,
+  EmailVerifyInput,
 } from "@reagentlab/contracts";
 import { DomainError, type LabService, agentCreationBlocker, type Clock, systemClock } from "@reagentlab/core";
 import type { ProblemReview, ProblemView } from "@reagentlab/contracts";
 import {
   type Db,
   countActiveAgents,
+  finishPasswordReset,
+  loginWithEmail,
+  startEmailSignup,
+  startPasswordReset,
+  verifyEmailSignup,
   createAgentWithToken,
   disableAgent,
   getAgentOfUser,
@@ -40,7 +51,17 @@ export interface AccountOptions {
   service: LabService;
   /** Handles (GitHub, o del login de desarrollo en local) que pueden aprobar problemas. */
   adminHandles?: string[];
+  /** Envía los códigos del login con email (ADR-0022). Sin él, ese login está desactivado. */
+  mailer?: Mailer | null;
 }
+
+export interface Mailer {
+  send(to: string, subject: string, body: string): Promise<void>;
+}
+
+/** Intentos fallidos de contraseña por email antes de bloquear un rato (la web llega con una sola IP). */
+const MAX_LOGIN_FAILURES = 10;
+const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
 
 const MAX_TOKENS_PER_AGENT = 3;
 
@@ -75,8 +96,15 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
     return user;
   };
 
+  // Los handles no son únicos entre proveedores (ADR-0022): un handle a secas solo vale para
+  // GitHub (o el login dev en local); para otro proveedor se escribe "google:handle".
   const admins = new Set((opts.adminHandles ?? []).map((h) => h.toLowerCase()));
-  const isAdmin = (user: { handle: string; bannedAt: Date | null }) => !user.bannedAt && admins.has(user.handle.toLowerCase());
+  const isAdmin = (user: { handle: string; provider: string; bannedAt: Date | null }) => {
+    if (user.bannedAt) return false;
+    const h = user.handle.toLowerCase();
+    if (admins.has(`${user.provider}:${h}`)) return true;
+    return (user.provider === "github" || user.provider === "dev") && admins.has(h);
+  };
   const requireAdmin = async (req: FastifyRequest) => {
     const user = await requireUser(req);
     if (!isAdmin(user)) throw new DomainError("FORBIDDEN", "Solo los administradores revisan problemas.");
@@ -88,6 +116,7 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
       {
         bannedAt: user.bannedAt,
         accountCreatedAt: user.accountCreatedAt,
+        createdAt: user.createdAt,
         provider: user.provider,
         activeAgents: await countActiveAgents(opts.db, user.id),
       },
@@ -128,6 +157,82 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
 
   app.get("/v1/account/me", async (req) => userView(await requireUser(req)));
 
+  // ── Login con email y contraseña (ADR-0022). La web reenvía los formularios con su clave. ──
+
+  const failures = new Map<string, { count: number; since: number }>();
+  const requireMailer = () => {
+    if (!opts.mailer) throw new DomainError("EMAIL_LOGIN_DISABLED", "Email sign-in is not available on this server.");
+    return opts.mailer;
+  };
+  const parse = <T>(schema: { safeParse(v: unknown): { success: true; data: T } | { success: false; error: { issues: unknown } } }, body: unknown): T => {
+    const r = schema.safeParse(body);
+    if (!r.success) throw new DomainError("VALIDATION_FAILED", "Invalid form.", "Check the fields.", r.error.issues);
+    return r.data;
+  };
+  const codeMail = (code: string, what: string) =>
+    `Your Reagent Lab code is ${code}.\n\nUse it to ${what}. It expires in 15 minutes.\n\n` +
+    "If you did not ask for it, ignore this email: nothing changes without the code.\n\n— Reagent Lab, https://reagentlab.capybaralabs.tech";
+
+  app.get("/v1/account/auth/methods", async (req): Promise<AuthMethodsView> => {
+    requireService(req);
+    return { email: Boolean(opts.mailer) };
+  });
+
+  app.post("/v1/account/auth/email/signup", async (req) => {
+    requireService(req);
+    const mailer = requireMailer();
+    const input = parse(EmailSignupInput, req.body);
+    const code = await startEmailSignup(opts.db, input, opts.tokenPepper, clock.now());
+    await mailer.send(input.email, `Reagent Lab code: ${code}`, codeMail(code, "finish creating your account"));
+    return { ok: true };
+  });
+
+  app.post("/v1/account/auth/email/verify", async (req) => {
+    requireService(req);
+    requireMailer();
+    const user = await verifyEmailSignup(opts.db, parse(EmailVerifyInput, req.body), opts.tokenPepper, clock.now());
+    return userView(user);
+  });
+
+  app.post("/v1/account/auth/email/login", async (req) => {
+    requireService(req);
+    requireMailer();
+    const input = parse(EmailLoginInput, req.body);
+    const now = clock.now().getTime();
+    const f = failures.get(input.email);
+    if (f && now - f.since < LOGIN_FAILURE_WINDOW_MS && f.count >= MAX_LOGIN_FAILURES) {
+      throw new DomainError("TOO_MANY_REQUESTS", "Too many failed attempts.", "Wait 15 minutes, or reset your password.");
+    }
+    const user = await loginWithEmail(opts.db, input);
+    if (!user) {
+      const fresh = !f || now - f.since >= LOGIN_FAILURE_WINDOW_MS;
+      failures.set(input.email, fresh ? { count: 1, since: now } : { count: f.count + 1, since: f.since });
+      throw new DomainError("INVALID_CREDENTIALS", "Wrong email or password.");
+    }
+    failures.delete(input.email);
+    if (user.bannedAt) throw new DomainError("USER_BANNED", "This account is banned.", "Contact the moderators.");
+    return userView(user);
+  });
+
+  /** Siempre responde ok: no dice si el email tiene cuenta. */
+  app.post("/v1/account/auth/email/reset-request", async (req) => {
+    requireService(req);
+    const mailer = requireMailer();
+    const { email } = parse(EmailResetRequestInput, req.body);
+    const code = await startPasswordReset(opts.db, email, opts.tokenPepper, clock.now());
+    if (code) await mailer.send(email, `Reagent Lab code: ${code}`, codeMail(code, "set a new password"));
+    return { ok: true };
+  });
+
+  app.post("/v1/account/auth/email/reset", async (req) => {
+    requireService(req);
+    requireMailer();
+    const input = parse(EmailResetInput, req.body);
+    const user = await finishPasswordReset(opts.db, input, opts.tokenPepper, clock.now());
+    failures.delete(input.email);
+    return userView(user);
+  });
+
   app.get("/v1/account/agents", async (req): Promise<{ agents: AgentView[] }> => {
     const user = await requireUser(req);
     const rows = await listAgentsWithTokens(opts.db, user.id);
@@ -165,6 +270,7 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
       {
         bannedAt: user.bannedAt,
         accountCreatedAt: user.accountCreatedAt,
+        createdAt: user.createdAt,
         provider: user.provider,
         activeAgents: await countActiveAgents(opts.db, user.id),
       },

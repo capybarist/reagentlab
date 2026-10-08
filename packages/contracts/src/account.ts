@@ -19,19 +19,64 @@ export type CreateAgentInput = z.infer<typeof CreateAgentInput>;
 
 /** Lo que la web envía al iniciar sesión un humano (identidad del proveedor OAuth). */
 export const UpsertUserInput = z.object({
-  provider: z.enum(["github", "dev"]),
+  provider: z.enum(["github", "google", "dev"]),
   provider_id: z.string().min(1).max(100),
   handle: z.string().min(1).max(100),
   account_created_at: z.iso.datetime({ offset: true }).optional(),
 });
 export type UpsertUserInput = z.infer<typeof UpsertUserInput>;
 
-/** Normas de cuenta (ADR-0005, ARCHITECTURE §8 Sybil). */
+// ── Login con email y contraseña (ADR-0022): la web los reenvía a la API con su clave de servicio ──
+
+const Email = z.string().trim().toLowerCase().pipe(z.email()).pipe(z.string().max(200));
+const Password = z.string().min(10, "Use at least 10 characters.").max(200);
+const Code = z.string().trim().regex(/^\d{6}$/, "The code has 6 digits.");
+
+export const EmailSignupInput = z.object({
+  email: Email,
+  password: Password,
+  handle: z
+    .string()
+    .trim()
+    .min(2)
+    .max(39)
+    .regex(/^[a-z0-9-]+$/i, "Only letters, digits and -"),
+});
+export type EmailSignupInput = z.infer<typeof EmailSignupInput>;
+
+export const EmailVerifyInput = z.object({ email: Email, code: Code });
+export type EmailVerifyInput = z.infer<typeof EmailVerifyInput>;
+
+export const EmailLoginInput = z.object({ email: Email, password: z.string().min(1).max(200) });
+export type EmailLoginInput = z.infer<typeof EmailLoginInput>;
+
+export const EmailResetRequestInput = z.object({ email: Email });
+export type EmailResetRequestInput = z.infer<typeof EmailResetRequestInput>;
+
+export const EmailResetInput = z.object({ email: Email, code: Code, password: Password });
+export type EmailResetInput = z.infer<typeof EmailResetInput>;
+
+/** Métodos de login que la API puede atender (el email necesita SMTP en producción). */
+export interface AuthMethodsView {
+  email: boolean;
+}
+
+/**
+ * Normas de cuenta (ADR-0005, modificado por ADR-0022; ARCHITECTURE §8 Sybil): una cuenta
+ * nueva puede tener `new_account_max_agents`; a los `min_account_age_days` días pasa a
+ * `max_agents_per_human`. La antigüedad es la del proveedor si se conoce (GitHub) o la de
+ * la cuenta en Reagent Lab (Google, email).
+ */
 export interface AccountRules {
   max_agents_per_human: number;
+  new_account_max_agents: number;
   min_account_age_days: number;
 }
-export const DEFAULT_ACCOUNT_RULES: AccountRules = { max_agents_per_human: 3, min_account_age_days: 90 };
+export const DEFAULT_ACCOUNT_RULES: AccountRules = {
+  max_agents_per_human: 3,
+  new_account_max_agents: 1,
+  min_account_age_days: 90,
+};
 
 export interface UserView {
   id: string;
