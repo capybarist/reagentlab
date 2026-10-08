@@ -46,7 +46,7 @@ cp deploy/.env.prod.example deploy/.env.prod   # y rellénalo
 docker network inspect edge >/dev/null           # la red del Caddy compartido (capybara-infra)
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod exec api \
-  node --import tsx src/admin-cli.ts seed        # crea las tres salas
+  node --import tsx src/admin-cli.ts seed        # crea y pone al día las salas del host
 curl -s http://127.0.0.1:3010/health             # {"ok":true}
 ```
 
