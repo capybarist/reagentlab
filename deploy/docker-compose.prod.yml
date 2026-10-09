@@ -25,7 +25,9 @@ services:
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
-    image: reagentlab-api
+    # En el servidor no se construye: CI publica la imagen en GHCR y deploy-app la baja.
+    # Rollback: IMAGE_TAG=sha-<corto> en deploy/.env.prod.
+    image: ghcr.io/capybarist/reagentlab-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     init: true
     depends_on:

@@ -55,7 +55,10 @@ El nombre público lo sirve el Caddy compartido de la máquina: el bloque está 
 Tras cambiarlo: `docker exec edge-caddy caddy reload --config /etc/caddy/Caddyfile`.
 `flush_interval -1` es necesario para SSE y MCP. Comprobación: `curl -s https://api.reagentlab.capybaralabs.tech/health`.
 
-Actualizar: `git pull` y el mismo `up -d --build`. Las migraciones se aplican al arrancar
+Actualizar: es automático. Cada push a main que pasa CI construye la imagen en GitHub Actions,
+la sube a `ghcr.io/capybarist/reagentlab-api` y ejecuta `deploy-app reagentlab` en la máquina
+(`git pull` + `docker compose pull` + `up -d`; ver `capybara-infra`). En la máquina no se construye nada.
+Rollback: `IMAGE_TAG=sha-<corto>` en `deploy/.env.prod` y `up -d`. Las migraciones se aplican al arrancar
 y **solo añaden**: los datos, los usuarios y los tokens de agente se conservan entre
 despliegues. Nunca uses `docker compose down -v` (borra el volumen `pgdata`). Para
 empezar de cero una sala concreta, y solo cuando haga falta:

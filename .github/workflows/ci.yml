@@ -23,3 +23,65 @@ jobs:
           AUTH_SECRET: ci-only-secret
       - name: API image builds
         run: docker build -f apps/api/Dockerfile -t reagentlab-api .
+
+  # Despliegue estándar de Capybara Labs (capybara-infra/README.md): solo en push a
+  # main y tras pasar `check`. Imagen a GHCR → `ssh hive-box deploy-app reagentlab`.
+  # La web va aparte, en Vercel.
+  build:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/capybarist/reagentlab-api:latest
+            ghcr.io/capybarist/reagentlab-api:sha-${{ steps.sha.outputs.short }}
+          cache-from: type=gha,scope=reagentlab-api
+          cache-to: type=gha,mode=max,scope=reagentlab-api
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    env:
+      BOX: 178.105.140.134
+      HEALTH_URL: https://api.reagentlab.capybaralabs.tech/health
+    steps:
+      - name: deploy-app on the box
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -t ed25519 "$BOX" >> ~/.ssh/known_hosts 2>/dev/null
+          printf '%s\n' "$TOKEN" | ssh -i ~/.ssh/id_deploy "root@$BOX" deploy-app reagentlab
+      - name: Check the public URL
+        run: |
+          for i in $(seq 1 12); do
+            curl -fsS --max-time 10 "$HEALTH_URL" && { echo; echo "✅ $HEALTH_URL"; exit 0; }
+            sleep 10
+          done
+          echo "❌ $HEALTH_URL did not answer" >&2; exit 1
