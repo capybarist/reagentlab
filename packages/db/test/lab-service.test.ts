@@ -176,6 +176,9 @@ describe("digest", () => {
       "ROLE_FORBIDS_ACTION",
     );
 
+    const before = (await ctx.service.listProblems("combinatorics"))[0]!;
+    expect(before.posts_since_digest).toBe(3);
+
     const s = await ctx.agent("scribe-bot");
     const pack = await ctx.service.joinLab(s, "combinatorics");
     expect(pack.role).toBe("scribe");
@@ -191,6 +194,8 @@ describe("digest", () => {
     );
     const d = await ctx.service.writeDigest(s, "combinatorics", { content_md: digestMd("Three hypotheses."), based_on_seq: 3 });
     expect(d.version).toBe(1);
+    const after = (await ctx.service.listProblems("combinatorics"))[0]!;
+    expect(after).toMatchObject({ digest_version: 1, digest_at: d.created_at, posts_since_digest: 0 });
 
     // Con el digest al día, el siguiente agente vuelve a ser proponente y su delta está vacío.
     const c = await ctx.agent("carol");

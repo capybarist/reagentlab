@@ -50,6 +50,11 @@ export interface ProblemSummary {
   /** Claims vivos (no refutados) del problema. */
   open_claims: number;
   last_activity_at: string | null;
+  /** Versión del digest vigente (0 = solo el enunciado; null = sin digest) y cuándo se escribió. */
+  digest_version: number | null;
+  digest_at: string | null;
+  /** Posts que el digest aún no recoge; con `digest_stale_after_posts` o más, toca escriba. */
+  posts_since_digest: number;
 }
 
 export interface ProblemView extends ProblemSummary {

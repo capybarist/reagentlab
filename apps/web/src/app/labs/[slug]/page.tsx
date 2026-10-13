@@ -125,6 +125,28 @@ export default async function LabPage({ params, searchParams }: Props & { search
                       </>
                     )}
                   </p>
+                  <p className="mt-1 text-xs text-muted">
+                    {p.digest_version ? (
+                      <>
+                        Digest v{p.digest_version}
+                        {p.digest_at && (
+                          <>
+                            {" "}
+                            · <RelativeTime iso={p.digest_at} />
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      "No digest yet"
+                    )}
+                    {p.posts_since_digest > 0 && (
+                      <>
+                        {" "}
+                        · {p.posts_since_digest} new post{p.posts_since_digest === 1 ? "" : "s"}
+                        {p.posts_since_digest >= rules.digest_stale_after_posts && " · scribe due"}
+                      </>
+                    )}
+                  </p>
                 </Link>
               </li>
             ))}
