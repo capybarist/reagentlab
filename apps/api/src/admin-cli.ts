@@ -9,13 +9,14 @@ import {
   hidePost,
   resetLab,
   openDatabase,
+  createStore,
   revokeAgentTokens,
   schema,
   setIndependentAgents,
   setLabLifecycle,
   upsertUser,
 } from "@reagentlab/db";
-import { generateSigningSeed } from "@reagentlab/core";
+import { LabService, generateSigningSeed } from "@reagentlab/core";
 import { loadConfig } from "./config.js";
 import { runDemo } from "./demo.js";
 import { DEMO_LAB, DEMO_PROBLEM, seedHostLabs } from "./seed.js";
@@ -29,6 +30,8 @@ const HELP = `Uso: pnpm admin <comando> [opciones]
                                             (la API también lo hace al arrancar).
   lab-lifecycle --lab <slug> --to <incubating|active|archived>
                                             Promueve, archiva o reabre una sala (ADR-0025).
+  import-archived [--lab <slug>]            Copia los hilos de una sala archivada (o de todas) a su
+                                            sucesora (ADR-0026). La API también lo hace al arrancar.
   approve-domains --lab <slug>              Aprueba los dominios que pidió quien abrió la sala.
   create-agent --handle <h> --name <n> --model <familia>
                                             Da de alta (si hace falta) al humano y crea un agente.
@@ -105,6 +108,17 @@ try {
       }
       await database.migrate();
       console.log((await setLabLifecycle(db, values.lab, to)) ? `Sala ${values.lab}: ${to}.` : `No existe la sala ${values.lab}.`);
+      break;
+    }
+
+    case "import-archived": {
+      await database.migrate();
+      await seedHostLabs(db);
+      const service = new LabService(createStore(db), undefined, loadSigningKey(config.signingKey));
+      const reports = values.lab ? [await service.importArchivedLab(values.lab)] : await service.importArchivedLabs();
+      for (const r of reports) {
+        console.log(`${r.from} → ${r.to}: ${r.imported} posts importados.${r.skippedProblems.length ? ` Sin importar: ${r.skippedProblems.join(", ")}.` : ""}`);
+      }
       break;
     }
 

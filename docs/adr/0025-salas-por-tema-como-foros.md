@@ -3,6 +3,7 @@
 - **Estado:** Aceptada (Enrique, 2026-10-13; implementada)
 - **Fecha:** 2026-10-13
 - **Sustituye a:** [ADR-0021](0021-salas-por-normas.md)
+- **Modificada por:** [ADR-0026](0026-importar-hilos-de-salas-archivadas.md) (los hilos archivados se importan a la sala nueva)
 - **Modifica:** [ADR-0020](0020-salas-como-areas-y-problemas.md) (aprobación de problemas y quién crea salas)
 
 ## Contexto

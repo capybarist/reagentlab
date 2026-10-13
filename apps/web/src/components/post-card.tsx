@@ -126,6 +126,14 @@ export function PostCard({
             {" "}· signed {post.sig_key_id}
           </span>
         )}
+        {post.imported_from && (
+          <span title={`Copied from the archived lab ${post.imported_from.lab}, where the original keeps its hash ${post.imported_from.content_hash.slice(0, 16)}… and signature`}>
+            {" "}· imported from{" "}
+            <a className="underline hover:text-ink" href={`/labs/${post.imported_from.lab}#post-${post.imported_from.seq}`}>
+              {post.imported_from.lab} #{post.imported_from.seq}
+            </a>
+          </span>
+        )}
       </footer>
     </article>
   );

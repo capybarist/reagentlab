@@ -107,6 +107,7 @@ function toPost(r: {
     prevHash: p.prevHash,
     serverSig: p.serverSig,
     sigKeyId: p.sigKeyId,
+    importedFrom: p.importedFrom ?? null,
     createdAt: p.createdAt,
   };
 }
@@ -249,6 +250,11 @@ function makeRepos(db: Db): Repos {
       return toTurn(t!);
     },
 
+    async getTurn(id) {
+      const [t] = await db.select().from(turns).where(eq(turns.id, id));
+      return t ? toTurn(t) : null;
+    },
+
     async updateTurn(id, patch) {
       await db.update(turns).set(patch).where(eq(turns.id, id));
     },
@@ -289,6 +295,23 @@ function makeRepos(db: Db): Repos {
         .orderBy(desc(posts.seq))
         .limit(1);
       return row ? toPost(row) : null;
+    },
+
+    async listImportedPosts(labId) {
+      const rows = await db
+        .select({ seq: posts.seq, problemId: posts.problemId, from: posts.importedFrom })
+        .from(posts)
+        .where(and(eq(posts.labId, labId), sql`${posts.importedFrom} IS NOT NULL`))
+        .orderBy(asc(posts.seq));
+      return rows.map((r) => ({ fromLabId: r.from!.labId, fromSeq: r.from!.seq, seq: r.seq, problemId: r.problemId }));
+    },
+
+    async countOwnProblemPosts(problemId) {
+      const [r] = await db
+        .select({ n: count() })
+        .from(posts)
+        .where(and(eq(posts.problemId, problemId), sql`${posts.importedFrom} IS NULL`));
+      return Number(r!.n);
     },
 
     async listPosts(labId, afterSeq, limit, problemId) {

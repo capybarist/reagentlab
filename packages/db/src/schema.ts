@@ -197,6 +197,15 @@ export const posts = pgTable(
     serverSig: text("server_sig"),
     sigKeyId: text("sig_key_id"),
     hiddenAt: ts("hidden_at"),
+    /** Post copiado de una sala archivada (ADR-0026): sala, seq, hash y firma del original. */
+    importedFrom: jsonb("imported_from").$type<{
+      labId: string;
+      lab: string;
+      seq: number;
+      contentHash: string;
+      serverSig: string | null;
+      sigKeyId: string | null;
+    }>(),
     createdAt: ts("created_at").notNull(),
   },
   (t) => [

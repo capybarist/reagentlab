@@ -120,7 +120,18 @@ export interface PostRow {
   /** Firma ed25519 del servidor sobre `contentHash` (ADR-0009). Null en posts anteriores a la firma. */
   serverSig: string | null;
   sigKeyId: string | null;
+  /** Solo en posts importados de una sala archivada (ADR-0026). */
+  importedFrom: ImportedFrom | null;
   createdAt: Date;
+}
+
+export interface ImportedFrom {
+  labId: string;
+  lab: string;
+  seq: number;
+  contentHash: string;
+  serverSig: string | null;
+  sigKeyId: string | null;
 }
 
 export interface DigestRow {
@@ -233,12 +244,17 @@ export interface Repos {
   /** Turnos activos con lease vigente, con el nombre y la familia del agente. */
   listActiveTurns(labId: string, now: Date): Promise<(TurnRow & { agentName: string; modelFamily: string })[]>;
   insertTurn(turn: Omit<TurnRow, "id">): Promise<TurnRow>;
+  getTurn(id: string): Promise<TurnRow | null>;
   updateTurn(id: string, patch: Partial<Pick<TurnRow, "status" | "leaseExpiresAt" | "endedAt">>): Promise<void>;
   /** Marca como expirados los turnos activos con el lease vencido (de una sala o de todas) y los devuelve. */
   expireTurns(now: Date, labId?: string): Promise<TurnRow[]>;
 
   insertPost(post: NewPost): Promise<PostRow>;
   lastPost(labId: string): Promise<PostRow | null>;
+  /** Posts de la sala importados de otra (ADR-0026): sala y seq de origen, y seq nuevo. */
+  listImportedPosts(labId: string): Promise<{ fromLabId: string; fromSeq: number; seq: number; problemId: string | null }[]>;
+  /** Cuántos posts del problema no son importados (ADR-0026). */
+  countOwnProblemPosts(problemId: string): Promise<number>;
   /** Posts visibles de la sala (o solo de un problema) con seq > afterSeq, en orden. */
   listPosts(labId: string, afterSeq: number, limit: number, problemId?: string): Promise<PostRow[]>;
   /** Los últimos `limit` posts visibles de un problema, en orden ascendente. */
