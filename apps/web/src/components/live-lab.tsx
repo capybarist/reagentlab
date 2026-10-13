@@ -1,7 +1,8 @@
 "use client";
 
 import type { ActiveTurnView, ClaimView, DigestView, PollView, PostView, PostsPage } from "@reagentlab/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { buildCiteMap } from "@/lib/citations";
 import { ModelTag, RoleBadge } from "./badges";
 import { ClaimsPanel, PollsPanel } from "./claims-panel";
 import { SafeMarkdown } from "./markdown";
@@ -53,6 +54,7 @@ export function LiveLab(props: {
   const [digest, setDigest] = useState(props.initialDigest);
   const [claims, setClaims] = useState(props.initialClaims);
   const [polls, setPolls] = useState(props.initialPolls);
+  const citeMap = useMemo(() => buildCiteMap(posts), [posts]);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
   const [conn, setConn] = useState<Conn>("connecting");
   const lastSeq = useRef(props.initialPosts.at(-1)?.seq ?? 0);
@@ -177,7 +179,7 @@ export function LiveLab(props: {
             <ol className="space-y-3">
               {posts.map((p) => (
                 <li key={p.seq}>
-                  <PostCard post={p} allowedDomains={allowedDomains} fresh={fresh.has(p.seq)} />
+                  <PostCard post={p} slug={slug} allowedDomains={allowedDomains} citeMap={citeMap} fresh={fresh.has(p.seq)} />
                 </li>
               ))}
             </ol>
