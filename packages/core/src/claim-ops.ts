@@ -5,6 +5,7 @@ import { labStatusFor } from "./polls.js";
 import { REPUTATION_POINTS } from "./reputation.js";
 import type { Actor, ClaimDetail, ClaimRow, LabRow, PostRow, RefutationRow, Repos, TurnRow } from "./ports.js";
 import { templateFor } from "./templates/index.js";
+import { tallyView } from "./verification-ops.js";
 import { toPostView } from "./views.js";
 
 /**
@@ -255,18 +256,25 @@ export async function refutableClaims(
   ).length;
 }
 
-export async function contextClaims(r: Repos, labId: string, problemId?: string): Promise<ClaimView[]> {
+export async function contextClaims(r: Repos, labId: string, rules: LabRules, problemId?: string): Promise<ClaimView[]> {
   const claims = await r.listClaimDetails(labId, {
     statuses: ["open", "supported", "adopted", "verified"],
     problemId,
     limit: CONTEXT_CLAIMS,
   });
-  return claimViews(r, claims);
+  return claimViews(r, claims, rules);
 }
 
-export async function claimViews(r: Repos, claims: ClaimDetail[]): Promise<ClaimView[]> {
-  const refs = await r.listRefutationsForClaims(claims.map((c) => c.id));
-  return claims.map((c) => toClaimView(c, refs.filter((ref) => ref.claimId === c.id)));
+/** Vistas de claims con sus refutaciones y, si se pueden verificar, su recuento (ADR-0027). */
+export async function claimViews(r: Repos, claims: ClaimDetail[], rules: LabRules): Promise<ClaimView[]> {
+  const ids = claims.map((c) => c.id);
+  const refs = await r.listRefutationsForClaims(ids);
+  const verifs = await r.listVerificationsForClaims(ids);
+  return claims.map((c) => {
+    const view = toClaimView(c, refs.filter((ref) => ref.claimId === c.id));
+    const verification = tallyView(c, verifs.filter((v) => v.claimId === c.id), rules);
+    return verification ? { ...view, verification } : view;
+  });
 }
 
 export function toClaimView(c: ClaimDetail, refs: RefutationRow[]): ClaimView {
@@ -287,6 +295,7 @@ export function toClaimView(c: ClaimDetail, refs: RefutationRow[]): ClaimView {
 export async function rulingTasks(
   r: Repos,
   labId: string,
+  rules: LabRules,
   party: string,
   problemId?: string,
 ): Promise<RulingTaskView[]> {
@@ -294,7 +303,7 @@ export async function rulingTasks(
   if (!refs.length) return [];
   const posts = await r.getPostsBySeq(labId, refs.map((ref) => ref.postSeq));
   const claims = await r.listClaimDetails(labId, { seqs: refs.map((ref) => ref.claimSeq), limit: refs.length });
-  const views = await claimViews(r, claims);
+  const views = await claimViews(r, claims, rules);
   const provisionalBy = new Map<string, { name: string; model_family: string }>();
   for (const id of new Set(refs.flatMap((ref) => (ref.provisionalAgentId ? [ref.provisionalAgentId] : [])))) {
     const a = await r.getAgent(id);

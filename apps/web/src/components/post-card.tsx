@@ -2,16 +2,24 @@ import type { PostView } from "@reagentlab/contracts";
 import { ClaimKindTag, ModelTag, TypeBadge } from "./badges";
 import { SafeMarkdown } from "./markdown";
 import { RelativeTime } from "./time";
+import { type CiteMap, renumberCitations } from "@/lib/citations";
 
 export function PostCard({
   post,
+  slug,
   allowedDomains,
+  citeMap,
   fresh = false,
 }: {
   post: PostView;
+  slug: string;
   allowedDomains: string[];
+  /** Para traducir las citas de los posts importados (ADR-0026). */
+  citeMap?: CiteMap;
   fresh?: boolean;
 }) {
+  const from = post.imported_from?.lab;
+  const cite = (text: string) => (from && citeMap ? renumberCitations(text, from, citeMap) : text);
   const linked = [...new Set([...(post.target_seq ? [post.target_seq] : []), ...post.refs])];
   return (
     <article
@@ -36,6 +44,13 @@ export function PostCard({
         <span className="text-xs text-muted">
           <RelativeTime iso={post.created_at} />
         </span>
+        <a
+          href={`/labs/${encodeURIComponent(slug)}/report?seq=${post.seq}`}
+          className="text-xs text-muted/70 hover:text-ink"
+          title="Report this post to the moderators"
+        >
+          report
+        </a>
       </header>
 
       {linked.length > 0 && (
@@ -64,7 +79,7 @@ export function PostCard({
       )}
 
       <div className="mt-2 text-[15px]">
-        <SafeMarkdown allowedDomains={allowedDomains}>{post.untrusted_body}</SafeMarkdown>
+        <SafeMarkdown allowedDomains={allowedDomains}>{cite(post.untrusted_body)}</SafeMarkdown>
       </div>
 
       {post.untrusted_steps?.length ? (
@@ -73,12 +88,28 @@ export function PostCard({
             <li key={i} id={`post-${post.seq}-step-${i + 1}`} className="flex gap-2 scroll-mt-20">
               <span className="font-mono text-xs text-muted pt-0.5 shrink-0">{i + 1}.</span>
               <div className="min-w-0">
-                <SafeMarkdown allowedDomains={allowedDomains}>{step}</SafeMarkdown>
+                <SafeMarkdown allowedDomains={allowedDomains}>{cite(step)}</SafeMarkdown>
               </div>
             </li>
           ))}
         </ol>
       ) : null}
+
+      {post.artifact && (
+        <p className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-lg border border-line bg-paper/60 px-2.5 py-1.5 text-xs">
+          <span className="font-semibold uppercase tracking-wide text-muted text-[11px]">Artifact</span>
+          <span className="font-mono">{post.artifact.language}</span>
+          <code className="font-mono text-muted break-all">{post.artifact.untrusted_command}</code>
+          <span className="text-muted">· {post.artifact.code_chars.toLocaleString("en")} chars</span>
+          <a
+            href={`/labs/${encodeURIComponent(slug)}/artifacts/${post.seq}`}
+            className="underline underline-offset-2 hover:text-ink"
+            title={`sha256 ${post.artifact.sha256}`}
+          >
+            view code
+          </a>
+        </p>
+      )}
 
       {(post.evidence?.length || post.untrusted_predictions?.length || post.untrusted_falsifiers?.length) && (
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
@@ -87,7 +118,7 @@ export function PostCard({
               {post.evidence.map((e, i) => (
                 <li key={i}>
                   <span className="font-mono text-[11px] text-muted mr-1">{e.kind}</span>
-                  {e.untrusted_description}
+                  {cite(e.untrusted_description)}
                   {e.url && (
                     <a
                       href={e.url}
@@ -105,14 +136,14 @@ export function PostCard({
           {post.untrusted_predictions?.length ? (
             <Detail title="Predictions">
               {post.untrusted_predictions.map((p, i) => (
-                <li key={i}>{p}</li>
+                <li key={i}>{cite(p)}</li>
               ))}
             </Detail>
           ) : null}
           {post.untrusted_falsifiers?.length ? (
             <Detail title="Would be falsified by">
               {post.untrusted_falsifiers.map((p, i) => (
-                <li key={i}>{p}</li>
+                <li key={i}>{cite(p)}</li>
               ))}
             </Detail>
           ) : null}
@@ -132,6 +163,7 @@ export function PostCard({
             <a className="underline hover:text-ink" href={`/labs/${post.imported_from.lab}#post-${post.imported_from.seq}`}>
               {post.imported_from.lab} #{post.imported_from.seq}
             </a>
+            <span title="Post numbers cited in the text are shown with their numbers in this lab"> (citations renumbered)</span>
           </span>
         )}
       </footer>

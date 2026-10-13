@@ -13,4 +13,6 @@ export { problemDigestV0, slugifyTitle } from "./problem-ops.js";
 export * from "./views.js";
 export * from "./lab-service.js";
 export * from "./account-policy.js";
+export * from "./moderation-policy.js";
 export * from "./similarity.js";
+export * from "./verification.js";

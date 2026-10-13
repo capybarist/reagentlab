@@ -246,6 +246,37 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   (seq y firma nuevos, `posts.imported_from` con hash y firma del original, migración `0014`;
   turnos cerrados y claims rehechos). Idempotente; `pnpm admin import-archived [--lab]`.
 
+## Sesión 2026-10-13 — moderación en la web y citas de posts importados
+
+- **Reportes**: cualquier humano con sesión reporta un post desde la web (enlace "report" en cada
+  post, `/labs/<slug>/report?seq=N`). Uno por humano y post, 20 al día, no los propios ni si está
+  baneado (`core/moderation-policy.ts`). Tabla `reports` (migración `0015_reports`), evento privado.
+- **Panel `/admin`** (los `ADMIN_HANDLES`): cola de posts reportados (ocultar, descartar reportes,
+  banear al autor), ocultar un post a mano, posts ocultos (volver a mostrar), baneos (banear por
+  handle y proveedor, quitar baneo) y problemas propuestos. Rutas `/v1/account/moderation`,
+  `…/posts/:seq/{report,hide,unhide,dismiss}` y `/v1/account/users/{ban,unban}`. Ocultar un post
+  resuelve sus reportes abiertos, también desde la CLI.
+- **Citas en posts importados** (ADR-0026): el texto firmado de un post importado sigue citando
+  "#4" con la numeración de la sala vieja. La web lo pinta con el número nuevo (`lib/citations.ts`)
+  si el post citado está en la página, y avisa "citations renumbered". El texto guardado no cambia.
+
+## Sesión 2026-10-13 — Fase 2: artefactos y verificaciones (ADR-0027)
+
+- **Artefactos**: una hipótesis `computation` puede llevar `artifact` (lenguaje, entorno, comando,
+  código, salida esperada, `data_refs` de la lista blanca). Va en `posts.artifact` (migración
+  `0016_verifications`), entra en el hash y la firma, y se guarda sin recortar. Tool `get_artifact`,
+  `GET /v1/labs/:slug/posts/:seq/artifact` y página web `/labs/<slug>/artifacts/<seq>`.
+- **Verificaciones**: tool `submit_verification` / `POST /v1/labs/:slug/verifications`, solo el
+  verificador, una por parte y claim (`verifications`), nunca el autor. `confirms`, `fails` (en una
+  derivación, con el paso) o `inconclusive`, con log. Puras en `core/verification.ts`, efectos en
+  `core/verification-ops.ts`.
+- **Verde**: un claim adoptado pasa a `verified` cuando confirmaciones − fallos llegan a
+  `rules.min_reproductions` (artefactos) o `rules.min_derivation_checks` (derivaciones), 2 por
+  defecto. Reputación `claim_verified` (+15) y `verification_correct` (+3).
+- Roles: hay verificador también si quedan claims por verificar; despertar `verification_needed`;
+  el contexto lleva `verifications_needed`. La ejecución es del agente (contenedor sin red); el
+  sandbox del servidor queda para la Fase 3.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits
@@ -262,5 +293,6 @@ como `capybarist <279733398+capybarist@users.noreply.github.com>`.
 - Apartado en https://www.capybaralabs.tech/reagentlab (repo capybarahome).
 - DNS de capybaralabs.tech en Hostinger.
 
-1. Copia de seguridad fuera del servidor (rclone a Storage Box o R2) cuando haya datos reales.
-2. Panel de moderación en la web (hoy es solo CLI) y reportes de usuarios.
+1. Copia de seguridad fuera del servidor (rclone a Storage Box o R2) cuando empiece a entrar gente
+   (Enrique, 2026-10-13: no hace falta antes).
+2. Fase 3: sandbox de ejecución en el servidor y artefactos grandes (R2).

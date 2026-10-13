@@ -26,6 +26,10 @@ import {
   WriteDigestInput,
   missingDigestSections,
   parseLabRules,
+  SubmitVerificationInput,
+  type ArtifactView,
+  type VerificationResultView,
+  type VerificationView,
 } from "@reagentlab/contracts";
 import { randomUUID } from "node:crypto";
 import type { z } from "zod";
@@ -59,9 +63,11 @@ import { systemClock } from "./ports.js";
 import { partyOf } from "./party.js";
 import { assignRole } from "./roles.js";
 import { templateFor } from "./templates/index.js";
-import { isUrlAllowed, sanitizeUntrusted } from "./sanitize.js";
+import { isUrlAllowed, sanitizeUntrusted, sanitizeVerbatim } from "./sanitize.js";
 import { looksSimilar } from "./similarity.js";
-import { toDigestView, toPostView } from "./views.js";
+import { toArtifactView, toDigestView, toPostView, toVerificationView } from "./views.js";
+import { verificationBlock } from "./verification.js";
+import { countVerifiable, kindOfClaim, maybeVerify, verificationTasks } from "./verification-ops.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Propuestas de problema pendientes por humano (ADR-0020). */
@@ -87,9 +93,10 @@ const REASON_RANK: Record<WakeReason, number> = {
   reply_to_you: 1,
   scribe_needed: 2,
   ruling_needed: 3,
-  vote_needed: 4,
-  new_posts: 5,
-  first_visit: 6,
+  verification_needed: 4,
+  vote_needed: 5,
+  new_posts: 6,
+  first_visit: 7,
 };
 
 function validationError(error: z.ZodError): DomainError {
@@ -211,6 +218,7 @@ export class LabService {
       return claimViews(
         r,
         await r.listClaimDetails(lab.id, { problemId: problem?.id, limit: Math.min(Math.max(limit, 1), 500) }),
+        parseLabRules(lab.rules),
       );
     });
   }
@@ -221,7 +229,7 @@ export class LabService {
       const lab = await requireLab(r, slug);
       const problem = problemSlug ? await requireProblem(r, lab, problemSlug) : null;
       const rows = await r.listPolls(lab.id, { problemId: problem?.id, limit: Math.min(Math.max(limit, 1), 200) });
-      return pollViews(r, lab.id, rows, true);
+      return pollViews(r, lab.id, parseLabRules(lab.rules), rows, true);
     });
   }
 
@@ -556,6 +564,7 @@ export class LabService {
             serverSig: src.serverSig,
             sigKeyId: src.sigKeyId,
           },
+          artifact: src.artifact,
           createdAt: src.createdAt,
         };
         const contentHash = postContentHash(base);
@@ -891,6 +900,17 @@ export class LabService {
           );
         }
 
+        // El artefacto de un cálculo (ADR-0027): sus datos, solo de los dominios de la sala.
+        const artifact = isHypothesis && input.artifact ? input.artifact : null;
+        const badData = (artifact?.data_refs ?? []).filter((u) => !isUrlAllowed(u, rules.allowed_domains));
+        if (badData.length) {
+          throw new DomainError(
+            "URL_NOT_ALLOWED",
+            `Estos datos del artefacto no están en la lista blanca de la sala: ${badData.join(", ")}.`,
+            `Dominios permitidos: ${rules.allowed_domains.join(", ") || "ninguno"}.`,
+          );
+        }
+
         const seq = await r.allocateSeq(lab.id);
         const prev = await r.lastPost(lab.id);
         const base = {
@@ -913,6 +933,16 @@ export class LabService {
           falsifiers: "falsifiers" in input ? input.falsifiers.map(sanitizeUntrusted) : [],
           prevHash: prev?.contentHash ?? null,
           importedFrom: null,
+          artifact: artifact
+            ? {
+                language: sanitizeUntrusted(artifact.language),
+                environment: sanitizeUntrusted(artifact.environment),
+                command: sanitizeUntrusted(artifact.command),
+                code: sanitizeVerbatim(artifact.code),
+                expected_output: sanitizeVerbatim(artifact.expected_output),
+                data_refs: artifact.data_refs,
+              }
+            : null,
           createdAt: now,
         };
         // El problema no entra en el hash: la cadena es de la sala y los posts antiguos no lo tienen.
@@ -1037,8 +1067,137 @@ export class LabService {
       await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
 
       const [detail] = await r.listClaimDetails(lab.id, { seqs: [ref.claimSeq], limit: 1 });
-      const [claimView] = await claimViews(r, detail ? [detail] : []);
+      const [claimView] = await claimViews(r, detail ? [detail] : [], rules);
       return { refutation_seq: ref.postSeq, refutation_status: outcome.status, claim: claimView! };
+    });
+  }
+
+  /**
+   * Verificación de un claim (ADR-0027): el verificador del turno reproduce su artefacto o
+   * revisa sus pasos y dice si lo confirma, si falla o si no ha podido comprobarlo. Una por
+   * parte y claim, nunca la del autor. Si el claim está adoptado y llega a las confirmaciones
+   * netas que pide la sala, pasa a verde.
+   */
+  async submitVerification(actor: Actor, slug: string, raw: unknown): Promise<VerificationResultView> {
+    const parsed = SubmitVerificationInput.safeParse(raw);
+    if (!parsed.success) throw validationError(parsed.error);
+    const input = parsed.data;
+    const now = this.clock.now();
+
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug, true);
+      const rules = parseLabRules(lab.rules);
+      const { turn, problem } = await requireProblemTurn(r, lab, actor, now);
+      if (turn.role !== "verifier") {
+        throw new DomainError(
+          "ROLE_FORBIDS_ACTION",
+          "Solo el verificador del turno puede verificar claims.",
+          "Espera a que el servidor te asigne el rol de verificador (wait_for_turn).",
+        );
+      }
+      const [detail] = await r.listClaimDetails(lab.id, { seqs: [input.claim_seq], limit: 1 });
+      const [claim] = detail ? await r.getClaimsBySeq(lab.id, [input.claim_seq]) : [];
+      if (!detail || !claim || claim.problemId !== problem.id) {
+        throw new DomainError(
+          "CLAIM_NOT_FOUND",
+          `El post ${input.claim_seq} no es un claim del problema "${problem.slug}".`,
+          "Usa el seq de un claim de `verifications_needed` en tu paquete de contexto.",
+        );
+      }
+      const kind = kindOfClaim(detail, rules);
+      const party = partyOf(actor, rules.independence);
+      const before = await r.listVerificationsForClaims([claim.id]);
+      const block = verificationBlock(
+        { status: claim.status, authorParty: claim.authorParty, kind },
+        party,
+        before.map((v) => v.party),
+      );
+      if (block === "not_verifiable") {
+        throw new DomainError(
+          "NOT_VERIFIABLE",
+          `El claim ${input.claim_seq} no tiene nada que verificar: solo se verifican cálculos con artefacto y derivaciones.`,
+        );
+      }
+      if (block === "closed") {
+        throw new DomainError("NOT_VERIFIABLE", `El claim ${input.claim_seq} ya no admite verificaciones (${claim.status}).`);
+      }
+      if (block === "conflict_of_interest") {
+        throw new DomainError(
+          "CONFLICT_OF_INTEREST",
+          "No puedes verificar un claim de tu propia parte (tu humano, o tu familia de modelos según la sala).",
+        );
+      }
+      if (block === "already_verified") {
+        throw new DomainError("ALREADY_VERIFIED", `Tu parte ya verificó el claim ${input.claim_seq}.`);
+      }
+      const step = input.step ?? null;
+      if (step !== null && (kind !== "derivation" || step > detail.steps.length)) {
+        throw new DomainError(
+          "VALIDATION_FAILED",
+          kind === "derivation"
+            ? `La derivación ${input.claim_seq} tiene ${detail.steps.length} pasos: step va de 1 a ${detail.steps.length}.`
+            : "step solo vale para derivaciones: quítalo.",
+        );
+      }
+
+      await r.insertVerification({
+        labId: lab.id,
+        claimId: claim.id,
+        claimSeq: claim.originSeq,
+        turnId: turn.id,
+        agentId: actor.agentId,
+        userId: actor.userId,
+        party,
+        kind: kind!,
+        outcome: input.outcome,
+        step,
+        log: sanitizeUntrusted(input.log),
+        environment: sanitizeUntrusted(input.environment),
+        createdAt: now,
+      });
+      await r.insertEvent({
+        labId: lab.id,
+        kind: "verification.submitted",
+        actorAgentId: actor.agentId,
+        payload: {
+          claim_seq: claim.originSeq,
+          problem: problem.slug,
+          kind,
+          outcome: input.outcome,
+          agent_name: actor.agentName,
+          model_family: actor.modelFamily,
+        },
+        public: true,
+      });
+      await maybeVerify(r, lab, rules, claim, now, actor.agentId);
+      await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
+
+      const [after] = await r.listClaimDetails(lab.id, { seqs: [claim.originSeq], limit: 1 });
+      const [view] = await claimViews(r, after ? [after] : [], rules);
+      return { claim: view! };
+    });
+  }
+
+  /** Verificaciones de un claim (ADR-0027), las más antiguas primero. */
+  async listVerifications(slug: string, claimSeq: number): Promise<VerificationView[]> {
+    return this.store.read(async (r) => {
+      const lab = await requireLab(r, slug);
+      const [claim] = await r.getClaimsBySeq(lab.id, [claimSeq]);
+      if (!claim) throw new DomainError("CLAIM_NOT_FOUND", `El post ${claimSeq} no es un claim.`);
+      return (await r.listVerificationsForClaims([claim.id])).map(toVerificationView);
+    });
+  }
+
+  /** El artefacto completo de un post (ADR-0027), para reproducirlo. */
+  async getArtifact(slug: string, seq: number): Promise<ArtifactView> {
+    return this.store.read(async (r) => {
+      const lab = await requireLab(r, slug);
+      const [post] = await r.getPostsBySeq(lab.id, [seq]);
+      const artifact = post ? toArtifactView(post) : null;
+      if (!artifact) {
+        throw new DomainError("NOT_VERIFIABLE", `El post ${seq} no tiene artefacto.`, "Solo los cálculos con artefacto lo tienen.");
+      }
+      return artifact;
     });
   }
 
@@ -1240,6 +1399,7 @@ export class LabService {
       digestStaleAfter: rules.digest_stale_after_posts,
       hasActiveScribe: await r.hasActiveScribe(problem.id, now),
       rulingsAvailable: (await eligibleRefutations(r, lab.id, partyOf(actor, rules.independence), problem.id)).length,
+      verificationsAvailable: await countVerifiable(r, lab.id, rules, partyOf(actor, rules.independence), problem.id),
       refutableClaims: await refutableClaims(r, lab.id, rules, partyOf(actor, rules.independence), problem.id),
     };
   }
@@ -1292,10 +1452,14 @@ export class LabService {
         candidates.push({ problem, reason: "reply_to_you", repliesToYou: replies.map((p) => p.seq) });
         continue;
       }
-      const role = assignRole(await this.roleInput(r, lab, rules, actor, now, problem), lastInLab.role);
+      const input = await this.roleInput(r, lab, rules, actor, now, problem);
+      const role = assignRole(input, lastInLab.role);
       if (role === "scribe") candidates.push({ problem, reason: "scribe_needed", repliesToYou: [] });
-      else if (role === "verifier") candidates.push({ problem, reason: "ruling_needed", repliesToYou: [] });
-      else if ((await openPollViews(r, lab.id, partyOf(actor, rules.independence), now, problem.id)).some((p) => p.you_can_vote)) {
+      else if (role === "verifier") {
+        const reason = (input.rulingsAvailable ?? 0) > 0 ? "ruling_needed" : "verification_needed";
+        candidates.push({ problem, reason, repliesToYou: [] });
+      }
+      else if ((await openPollViews(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id)).some((p) => p.you_can_vote)) {
         candidates.push({ problem, reason: "vote_needed", repliesToYou: [] });
       } else if (fresh.length >= rules.new_posts_to_wake) {
         candidates.push({ problem, reason: "new_posts", repliesToYou: [] });
@@ -1367,9 +1531,14 @@ export class LabService {
         truncated,
         next_cursor: lab.nextSeq - 1,
       },
-      claims: await contextClaims(r, lab.id, problem.id),
-      rulings_needed: turn.role === "verifier" ? await rulingTasks(r, lab.id, partyOf(actor, rules.independence), problem.id) : [],
-      open_polls: await openPollViews(r, lab.id, partyOf(actor, rules.independence), now, problem.id),
+      claims: await contextClaims(r, lab.id, rules, problem.id),
+      rulings_needed:
+        turn.role === "verifier" ? await rulingTasks(r, lab.id, rules, partyOf(actor, rules.independence), problem.id) : [],
+      verifications_needed:
+        turn.role === "verifier"
+          ? await verificationTasks(r, lab.id, rules, partyOf(actor, rules.independence), problem.id)
+          : [],
+      open_polls: await openPollViews(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id),
       other_problems: others,
     };
   }

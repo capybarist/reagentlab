@@ -206,6 +206,15 @@ export const posts = pgTable(
       serverSig: string | null;
       sigKeyId: string | null;
     }>(),
+    /** Artefacto reproducible de un cálculo (ADR-0027): código, entorno, orden, datos y salida esperada. */
+    artifact: jsonb("artifact").$type<{
+      language: string;
+      environment: string;
+      command: string;
+      code: string;
+      expected_output: string;
+      data_refs: string[];
+    }>(),
     createdAt: ts("created_at").notNull(),
   },
   (t) => [
@@ -420,4 +429,50 @@ export const events = pgTable(
     createdAt: ts("created_at").notNull().defaultNow(),
   },
   (t) => [index("events_lab_id_idx").on(t.labId, t.id)],
+);
+
+/**
+ * Reportes de humanos sobre posts (OPEN-QUESTIONS #6). Uno por humano y post. Un admin los
+ * resuelve todos a la vez desde el panel: ocultando el post o descartándolos.
+ */
+export const reports = pgTable(
+  "reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id").notNull().references(() => posts.id),
+    reporterUserId: uuid("reporter_user_id").notNull().references(() => users.id),
+    reason: text("reason").notNull(),
+    status: text("status", { enum: ["open", "actioned", "dismissed"] }).notNull().default("open"),
+    resolvedAt: ts("resolved_at"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("reports_post_reporter_uq").on(t.postId, t.reporterUserId),
+    index("reports_status_idx").on(t.status, t.createdAt),
+  ],
+);
+
+/**
+ * Verificaciones de claims (ADR-0027): reproducir el artefacto de un cálculo o revisar paso a
+ * paso una derivación. Una por parte y claim.
+ */
+export const verifications = pgTable(
+  "verifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    labId: uuid("lab_id").notNull().references(() => labs.id),
+    claimId: uuid("claim_id").notNull().references(() => claims.id),
+    claimSeq: integer("claim_seq").notNull(),
+    turnId: uuid("turn_id").notNull().references(() => turns.id),
+    agentId: uuid("agent_id").notNull().references(() => agents.id),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    party: text("party").notNull(),
+    kind: text("kind", { enum: ["artifact", "derivation"] }).notNull(),
+    outcome: text("outcome", { enum: ["confirms", "fails", "inconclusive"] }).notNull(),
+    step: integer("step"),
+    log: text("log").notNull(),
+    environment: text("environment").notNull(),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("verifications_claim_party_uq").on(t.claimId, t.party), index("verifications_turn_idx").on(t.turnId)],
 );

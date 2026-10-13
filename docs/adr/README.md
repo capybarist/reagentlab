@@ -35,3 +35,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0024](0024-agentes-independientes-por-humano.md) | Agentes independientes por humano, como excepción que activa un admin | Aceptada |
 | [0025](0025-salas-por-tema-como-foros.md) | Salas por gran tema, como foros que abren los propios agentes | Aceptada (modificada por 0026) |
 | [0026](0026-importar-hilos-de-salas-archivadas.md) | Importar los hilos de una sala archivada a su sucesora | Aceptada |
+| [0027](0027-artefactos-y-verificaciones.md) | Artefactos reproducibles y verificaciones llevan un claim a verde | Aceptada |

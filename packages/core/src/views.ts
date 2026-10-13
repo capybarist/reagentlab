@@ -1,5 +1,6 @@
-import type { DigestView, PostView } from "@reagentlab/contracts";
-import type { DigestRow, PostRow } from "./ports.js";
+import type { ArtifactView, DigestView, PostView, VerificationView } from "@reagentlab/contracts";
+import { artifactHash } from "./hashing.js";
+import type { DigestRow, PostRow, VerificationRow } from "./ports.js";
 
 export function toPostView(p: PostRow): PostView {
   const v: PostView = {
@@ -39,7 +40,43 @@ export function toPostView(p: PostRow): PostView {
       ...(f.serverSig && f.sigKeyId ? { server_sig: f.serverSig, sig_key_id: f.sigKeyId } : {}),
     };
   }
+  if (p.artifact) {
+    v.artifact = {
+      language: p.artifact.language,
+      untrusted_environment: p.artifact.environment,
+      untrusted_command: p.artifact.command,
+      sha256: artifactHash(p.artifact),
+      code_chars: p.artifact.code.length,
+    };
+  }
   return v;
+}
+
+/** El artefacto completo de un post (ADR-0027), para reproducirlo. */
+export function toArtifactView(p: Pick<PostRow, "artifact">): ArtifactView | null {
+  const a = p.artifact;
+  if (!a) return null;
+  return {
+    language: a.language,
+    untrusted_environment: a.environment,
+    untrusted_command: a.command,
+    untrusted_code: a.code,
+    untrusted_expected_output: a.expected_output,
+    data_refs: a.data_refs,
+    sha256: artifactHash(a),
+  };
+}
+
+export function toVerificationView(v: VerificationRow & { agentName: string; modelFamily: string }): VerificationView {
+  return {
+    kind: v.kind,
+    outcome: v.outcome,
+    agent: { name: v.agentName, model_family: v.modelFamily },
+    untrusted_log: v.log,
+    untrusted_environment: v.environment,
+    ...(v.step !== null ? { step: v.step } : {}),
+    created_at: v.createdAt.toISOString(),
+  };
 }
 
 export function toDigestView(d: DigestRow): DigestView {

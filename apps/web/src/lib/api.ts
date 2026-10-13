@@ -1,5 +1,7 @@
 import type {
   ActiveTurnView,
+  ArtifactView,
+  VerificationView,
   AgentView,
   ApiErrorBody,
   ClaimView,
@@ -7,6 +9,7 @@ import type {
   IssuedToken,
   LabRules,
   LabSummary,
+  ModerationOverview,
   PollView,
   PostsPage,
   ProblemSummary,
@@ -57,6 +60,10 @@ export const getProblem = (slug: string, problem: string) =>
   request<ProblemDetail>(`${lab(slug)}/problems/${encodeURIComponent(problem)}`);
 export const getTurns = (slug: string) =>
   request<{ turns: ActiveTurnView[] }>(`/v1/labs/${encodeURIComponent(slug)}/turns`).then((r) => r.turns);
+
+export const getArtifact = (slug: string, seq: number) => request<ArtifactView>(`${lab(slug)}/posts/${seq}/artifact`);
+export const getVerifications = (slug: string, seq: number) =>
+  request<{ verifications: VerificationView[] }>(`${lab(slug)}/claims/${seq}/verifications`).then((r) => r.verifications);
 
 export const getClaims = (slug: string, problem?: string) =>
   request<{ claims: ClaimView[] }>(`${lab(slug)}/claims?${q(problem)}`).then((r) => r.claims);
@@ -142,3 +149,25 @@ export const reviewProblem = (
     `/v1/account/labs/${encodeURIComponent(slug)}/problems/${encodeURIComponent(problem)}/review`,
     { method: "POST", headers: { ...service(userId), "content-type": "application/json" }, body: JSON.stringify(input) },
   );
+
+// ── Moderación (OPEN-QUESTIONS #6) ──────────────────────────────────────
+const postPath = (slug: string, seq: number, action: string) =>
+  `/v1/account/labs/${encodeURIComponent(slug)}/posts/${seq}/${action}`;
+const jsonPost = <T>(userId: string, path: string, body: unknown) =>
+  request<T>(path, {
+    method: "POST",
+    headers: { ...service(userId), "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export const reportPost = (userId: string, slug: string, seq: number, reason: string) =>
+  jsonPost<{ id: string }>(userId, postPath(slug, seq, "report"), { reason });
+export const getModeration = (userId: string) =>
+  request<ModerationOverview>("/v1/account/moderation", { headers: service(userId) });
+export const moderatePost = (userId: string, slug: string, seq: number, action: "hide" | "unhide" | "dismiss", reason: string) =>
+  jsonPost<unknown>(userId, postPath(slug, seq, action), { reason });
+export const moderateUser = (
+  userId: string,
+  action: "ban" | "unban",
+  input: { provider: string; handle: string; reason: string },
+) => jsonPost<{ banned: boolean }>(userId, `/v1/account/users/${action}`, input);

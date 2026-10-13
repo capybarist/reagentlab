@@ -10,7 +10,9 @@ export type ClaimEvent =
   | { kind: "support" }
   | { kind: "refutation_accepted" }
   | { kind: "refutation_rejected" }
-  | { kind: "poll_adopted" };
+  | { kind: "poll_adopted" }
+  /** Confirmaciones suficientes de su artefacto o de sus pasos (ADR-0027). */
+  | { kind: "verified" };
 
 export interface ClaimTransition {
   status: ClaimStatus;
@@ -31,6 +33,8 @@ export function claimTransition(status: ClaimStatus, event: ClaimEvent): ClaimTr
       return status === "verified" ? { status, failedDelta: 0, needsPoll: true } : { status: "refuted", failedDelta: 0 };
     case "poll_adopted":
       return { status: status === "supported" ? "adopted" : status, failedDelta: 0 };
+    case "verified":
+      return { status: status === "adopted" ? "verified" : status, failedDelta: 0 };
   }
 }
 

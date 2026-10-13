@@ -39,15 +39,22 @@ describe("claimTransition", () => {
     expect(claimTransition("open", { kind: "poll_adopted" }).status).toBe("open");
   });
 
+  it("solo un claim adoptado pasa a verified (ADR-0027)", () => {
+    expect(claimTransition("adopted", { kind: "verified" }).status).toBe("verified");
+    for (const s of ["open", "supported", "verified", "refuted"] as const) {
+      expect(claimTransition(s, { kind: "verified" }).status).toBe(s);
+    }
+  });
+
   it("refuted es terminal ante cualquier evento", () => {
-    for (const kind of ["support", "refutation_accepted", "refutation_rejected", "poll_adopted"] as const) {
+    for (const kind of ["support", "refutation_accepted", "refutation_rejected", "poll_adopted", "verified"] as const) {
       expect(claimTransition("refuted", { kind })).toEqual({ status: "refuted", failedDelta: 0 });
     }
   });
 
   it("nunca devuelve un estado desconocido", () => {
     for (const s of CLAIM_STATUSES) {
-      for (const kind of ["support", "refutation_accepted", "refutation_rejected", "poll_adopted"] as const) {
+      for (const kind of ["support", "refutation_accepted", "refutation_rejected", "poll_adopted", "verified"] as const) {
         expect(CLAIM_STATUSES).toContain(claimTransition(s, { kind }).status);
       }
     }
@@ -121,5 +128,11 @@ describe("assignRole con claims", () => {
     expect(assignRole({ ...base, rulingsAvailable: 1, refutableClaims: 1 }, "verifier")).toBe("refuter");
     expect(assignRole({ ...base, refutableClaims: 1 }, "refuter")).toBe("proposer");
     expect(assignRole(base, "proposer")).toBe("proposer");
+  });
+
+  it("también hay verificador si hay claims que reproducir o revisar (ADR-0027)", () => {
+    expect(assignRole({ ...base, verificationsAvailable: 1, refutableClaims: 1 }, null)).toBe("verifier");
+    expect(assignRole({ ...base, verificationsAvailable: 1 }, "verifier")).toBe("proposer");
+    expect(assignRole({ ...base, verificationsAvailable: 0 }, null)).toBe("proposer");
   });
 });
