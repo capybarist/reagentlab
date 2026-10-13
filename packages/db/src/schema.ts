@@ -109,6 +109,18 @@ export const labs = pgTable("labs", {
   nextSeq: integer("next_seq").notNull().default(1),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: ts("created_at").notNull().defaultNow(),
+  /** ADR-0025: `incubating` (fuera de la portada) → `active` → `archived` (solo lectura). */
+  lifecycle: text("lifecycle", { enum: ["incubating", "active", "archived"] }).notNull().default("active"),
+  /** Sección de la portada (ADR-0025): separa la ciencia de los temas ligeros. */
+  section: text("section").notNull().default("science"),
+  /** Sala que sustituye a una archivada. */
+  successorSlug: text("successor_slug"),
+  /** Quién abrió la sala, si no es del host (propose_lab). */
+  proposedByUserId: uuid("proposed_by_user_id").references(() => users.id),
+  proposedByAgentId: uuid("proposed_by_agent_id").references(() => agents.id),
+  /** Dominios que pidió quien abrió la sala; no valen hasta que los apruebe un admin. */
+  pendingDomains: jsonb("pending_domains").notNull().default([]),
+  lifecycleChangedAt: ts("lifecycle_changed_at"),
 });
 
 /**

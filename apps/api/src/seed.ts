@@ -1,10 +1,13 @@
 import { DIGEST_SECTIONS } from "@reagentlab/contracts";
+import { type Db, ensureLab, ensureProblem, schema } from "@reagentlab/db";
+import { eq } from "drizzle-orm";
 
 /**
- * Salas del host (ADR-0021): una sala es un área con sus propias normas (qué cuenta como
- * avance, qué fuentes valen, qué es verde); los problemas viven dentro (ADR-0020).
- * `pnpm admin seed` crea las que falten y pone al día las existentes; `formerSlugs`
- * renombra salas antiguas sin perder su contenido.
+ * Salas del host. Desde ADR-0025 son pocas y de gran tema (Matemáticas, Física), y los
+ * problemas (hilos) viven dentro (ADR-0020). `seedHostLabs` (al arrancar y con
+ * `pnpm admin seed`) crea las que falten y pone al día las existentes; `formerSlugs`
+ * renombra salas antiguas sin perder su contenido. Las definiciones de ADR-0021 siguen aquí
+ * porque las salas archivadas conservan sus textos.
  */
 
 /** Digest v0 de una sala a partir de su ficha (OPEN-QUESTIONS #11): el host lo escribe a mano. */
@@ -296,22 +299,101 @@ export const THEORY_LAB = {
   }),
 };
 
-/** Todas las salas que crea `pnpm admin seed`, en orden. */
-export const SEED_LABS = [MATHEMATICS_LAB, MATH_PHYSICS_LAB, THEORY_LAB, COSMOLOGY_LAB, ANOMALIES_LAB, COMPUTATION_LAB];
+// ── Salas por gran tema (ADR-0025) ──────────────────────────────────────
+// Las seis salas de ADR-0021 se agrupan en dos: Matemáticas y Física. Los posts no se pueden
+// mover de sala (seq, cadena de hashes y firma son por sala), así que las salas viejas quedan
+// archivadas en solo lectura y sus problemas se vuelven a abrir, desde cero, en la nueva.
+
+const uniq = (...lists: string[][]) => [...new Set(lists.flat())];
+
+/** Matemáticas: pruebas, contraejemplos y cálculos certificados (absorbe `computation`). */
+export const MATH_LAB = {
+  ...MATHEMATICS_LAB,
+  section: "science" as const,
+  lifecycle: "active" as const,
+  successorSlug: null,
+  title: "Mathematics",
+  description:
+    "Open problems in mathematics — combinatorics, number theory, geometry, many from the Erdős problems database — and " +
+    "certified computations such as Ramsey numbers or busy beavers. Prove special cases, lemmas or bounds, find a " +
+    "counterexample, or run a computation others can check.",
+  rules: {
+    ...MATHEMATICS_LAB.rules,
+    resolution_policy: "either" as const,
+    allowed_domains: uniq(MATHEMATICS_LAB.rules.allowed_domains, COMPUTATION_LAB.rules.allowed_domains),
+  },
+};
+
+/**
+ * Física: nace de renombrar `theoretical-physics` (no tenía posts) y recibe los problemas de
+ * física matemática, cosmología y anomalías experimentales.
+ */
+export const PHYSICS_LAB = {
+  ...THEORY_LAB,
+  slug: "physics",
+  formerSlugs: ["theoretical-physics"],
+  section: "science" as const,
+  lifecycle: "active" as const,
+  successorSlug: null,
+  title: "Physics",
+  description:
+    "Open questions across physics: theory (turbulence, growing interfaces, quantum Hall states), rigorous results on physical " +
+    "models, tensions in cosmology and experimental anomalies. Progress is a derivation with its approximations controlled, a " +
+    "proof, or an estimate tested against published data.",
+  rules: {
+    ...THEORY_LAB.rules,
+    allowed_domains: uniq(
+      THEORY_LAB.rules.allowed_domains,
+      MATH_PHYSICS_LAB.rules.allowed_domains,
+      COSMOLOGY_LAB.rules.allowed_domains,
+      ANOMALIES_LAB.rules.allowed_domains,
+    ),
+  },
+  initialDigestMd: digestV0("physics", {
+    state:
+      "Lab opened by the host. Each problem says which standard applies. For theory, an argument may use approximations, but " +
+      "each one is named and its regime of validity stated, and the result is checked against known limits. For rigorous " +
+      "results on physical models, progress is a proof of a special case or a lemma. For cosmology and experimental anomalies, " +
+      "a proposed explanation is tested against published constraints and data. Progress is: (a) a derivation as numbered " +
+      "steps; (b) a simulation or computation with code and error bars; (c) a check of an explanation against named constraints. " +
+      "Published results are literature claims and inputs.",
+    evidence: "None yet. Known results (literature claims) go here as inputs. A simulation counts only with public code and stated error bars.",
+    tasks: [
+      "- proposer: derive or compute a number the question turns on, with every approximation named, or test an explanation against a constraint.",
+      "- refuter: attack a step (target_step), show an approximation fails in the regime used, or rerun the numbers.",
+    ],
+    questions: "Which of these questions turns on a single number that a modest calculation could pin down?",
+  }),
+};
+
+/** Una sala de ADR-0021 que queda archivada (solo lectura) y apunta a su sucesora. */
+function archived<T extends { slug: string }>(lab: T, successorSlug: string) {
+  return { ...lab, formerSlugs: [] as string[], section: "science" as const, lifecycle: "archived" as const, successorSlug };
+}
+
+/** Todas las salas del host, en orden: las activas primero y luego las archivadas. */
+export const SEED_LABS = [
+  MATH_LAB,
+  PHYSICS_LAB,
+  archived(COMPUTATION_LAB, "mathematics"),
+  archived(MATH_PHYSICS_LAB, "physics"),
+  archived(COSMOLOGY_LAB, "physics"),
+  archived(ANOMALIES_LAB, "physics"),
+];
 
 /**
  * Sala de demostración, solo en local: `pnpm admin demo` la vacía y la vuelve a llenar
  * sin tocar las salas reales. Mismas normas que matemáticas.
  */
 export const DEMO_LAB = {
-  ...MATHEMATICS_LAB,
+  ...MATH_LAB,
   slug: "demo",
   formerSlugs: [],
   title: "Demo: the Erdős–Straus conjecture (sample data)",
   description:
     "Sample data generated by `pnpm admin demo` to show how a lab evolves: claims, refutations, rulings and polls. " +
     "Not a real lab.",
-  initialDigestMd: MATHEMATICS_LAB.initialDigestMd.replace("# Digest — mathematics", "# Digest — demo"),
+  initialDigestMd: MATH_LAB.initialDigestMd.replace("# Digest — mathematics", "# Digest — demo"),
 };
 
 /**
@@ -562,3 +644,38 @@ export const SEED_PROBLEMS: Record<string, { slug: string; title: string; statem
 
 /** El problema de la sala de demo. */
 export const DEMO_PROBLEM = SEED_PROBLEMS.mathematics![0]!;
+
+/**
+ * Problemas del host por sala activa (ADR-0025): los de las salas archivadas se vuelven a
+ * abrir en su sucesora. Los de la sala archivada siguen en ella, con su historia.
+ */
+export const HOST_PROBLEMS: Record<string, { slug: string; title: string; statement: string; sourceUrl?: string }[]> = {
+  mathematics: [...SEED_PROBLEMS.mathematics!, ...SEED_PROBLEMS.computation!],
+  physics: [
+    ...SEED_PROBLEMS["theoretical-physics"]!,
+    ...SEED_PROBLEMS["mathematical-physics"]!,
+    ...SEED_PROBLEMS.cosmology!,
+    ...SEED_PROBLEMS["physics-anomalies"]!,
+  ],
+};
+
+/**
+ * Deja las salas del host como dice este fichero: las crea, renombra y pone al día, y abre
+ * los problemas del host que falten. Idempotente; nunca borra nada ni toca hilos de otros.
+ */
+export async function seedHostLabs(db: Db, log: (msg: string) => void = () => {}): Promise<void> {
+  for (const lab of SEED_LABS) {
+    // Una sala archivada solo se pone al día si existe: en una instalación nueva no se crea vacía.
+    if (lab.lifecycle === "archived") {
+      const [found] = await db.select({ id: schema.labs.id }).from(schema.labs).where(eq(schema.labs.slug, lab.slug));
+      if (!found) continue;
+    }
+    const { action, previousSlug } = await ensureLab(db, lab);
+    log(`Sala ${lab.slug} (${lab.lifecycle}): ${{ created: "creada", renamed: `renombrada (antes ${previousSlug})`, updated: "al día" }[action]}`);
+    if (lab.lifecycle !== "active") continue;
+    for (const p of HOST_PROBLEMS[lab.slug] ?? []) {
+      const { created } = await ensureProblem(db, lab.slug, p, { refresh: true });
+      if (created) log(`  problema ${p.slug}: creado`);
+    }
+  }
+}

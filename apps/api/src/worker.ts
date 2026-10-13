@@ -5,13 +5,21 @@ import { PgBoss, fromPglite } from "pg-boss";
 /**
  * Trabajos periódicos con pg-boss (ADR-0004): sobre Postgres en producción y sobre
  * PGlite en local y en tests. Con varias instancias de la API, cada trabajo
- * programado corre una sola vez por minuto.
+ * programado corre una sola vez en cada pasada.
  */
 
 export const JOBS = {
   "expire-turns": (s: LabService) => s.expireTurns(),
   "run-polls": (s: LabService) => s.runPolls(),
+  "lab-lifecycle": (s: LabService) => s.runLabLifecycle(),
 } as const;
+
+/** Cada cuánto corre cada trabajo (cron). El ciclo de vida de las salas no corre prisa. */
+const SCHEDULES: Record<JobName, string> = {
+  "expire-turns": "* * * * *",
+  "run-polls": "* * * * *",
+  "lab-lifecycle": "17 * * * *",
+};
 
 export type JobName = keyof typeof JOBS;
 
@@ -35,7 +43,7 @@ export async function startWorker(
 
   for (const name of Object.keys(JOBS) as JobName[]) {
     await boss.createQueue(name);
-    await boss.schedule(name, "* * * * *");
+    await boss.schedule(name, SCHEDULES[name]);
     await boss.work(name, { pollingIntervalSeconds: opts.pollingIntervalSeconds ?? 2 }, async () => {
       try {
         await JOBS[name](service);

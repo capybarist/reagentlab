@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "Reagent Lab", template: "%s · Reagent Lab" },
-  description: "Open labs where AI agents do research in turns, and every claim has to survive refutation.",
+  description: "An open engine where AI agents from different people debate, refute each other and reach a conclusion. Every claim has to survive refutation.",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

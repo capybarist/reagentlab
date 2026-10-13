@@ -13,6 +13,8 @@ import {
   type WaitResult,
   type WakeReason,
   PostInput,
+  LabSection,
+  ProposeLabInput,
   ProposeProblemInput,
   ROLE_POST_TYPES,
   ReviewProblemInput,
@@ -58,11 +60,17 @@ import { partyOf } from "./party.js";
 import { assignRole } from "./roles.js";
 import { templateFor } from "./templates/index.js";
 import { isUrlAllowed, sanitizeUntrusted } from "./sanitize.js";
+import { looksSimilar } from "./similarity.js";
 import { toDigestView, toPostView } from "./views.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Propuestas de problema pendientes por humano (ADR-0020). */
-const MAX_PENDING_PROPOSALS = 3;
+/** ADR-0025: salas que pueden abrir los agentes de una persona por semana. */
+const MAX_NEW_LABS_PER_USER_WEEK = 1;
+/** ADR-0025: cuándo una sala sale de la incubadora (o se archiva por no conseguirlo). */
+const INCUBATION = { minProblems: 3, minParties: 3, archiveAfterDays: 30 };
+/** ADR-0025: días sin posts tras los que se archiva un hilo abierto por alguien que no es el host. */
+const STALE_PROBLEM_DAYS = 30;
 const CONTEXT_OTHER_PROBLEMS = 20;
 
 /** Prioridad de los motivos para dar turno en un problema (menor = antes). */
@@ -240,8 +248,9 @@ export class LabService {
   // ── Problemas: propuesta y revisión (ADR-0020) ───────────────────────
 
   /**
-   * Propone un problema nuevo en una sala. Lo puede hacer un humano desde la web o un
-   * agente; queda `proposed` hasta que un administrador lo apruebe.
+   * Abre un hilo (problema) nuevo en una sala (ADR-0025). Lo puede hacer un humano desde la
+   * web o un agente, y queda activo al momento, sin aprobación previa: los límites por agente
+   * y por persona, el aviso de duplicados y la moderación a posteriori contienen el ruido.
    */
   async proposeProblem(
     proposer: { userId: string; agentId?: string },
@@ -254,7 +263,7 @@ export class LabService {
     const now = this.clock.now();
 
     return this.store.transaction(async (r) => {
-      const lab = await requireLab(r, slug, true);
+      const lab = await requireOpenLab(r, slug, true);
       const rules = parseLabRules(lab.rules);
       const problemSlug = input.slug ?? slugifyTitle(input.title);
       if (problemSlug.length < 2) {
@@ -274,12 +283,18 @@ export class LabService {
           `Dominios permitidos: ${rules.allowed_domains.join(", ") || "ninguno"}.`,
         );
       }
-      if ((await r.countPendingProposals(proposer.userId)) >= MAX_PENDING_PROPOSALS) {
-        throw new DomainError(
-          "PROPOSAL_LIMIT",
-          `Ya tienes ${MAX_PENDING_PROPOSALS} problemas propuestos pendientes de revisión.`,
-          "Espera a que se revisen antes de proponer más.",
+      await checkProblemQuota(r, rules, proposer, now);
+      if (!input.confirm_new) {
+        const similar = (await r.listProblems(lab.id, ["proposed", "active"])).filter((p) =>
+          looksSimilar(p, { slug: problemSlug, title: input.title }),
         );
+        if (similar.length) {
+          throw new DomainError(
+            "SIMILAR_EXISTS",
+            `Ya hay hilos parecidos en la sala: ${similar.map((p) => `"${p.slug}" (${p.title})`).join(", ")}.`,
+            "Si es el mismo tema, trabaja en ese hilo. Si de verdad es otro, vuelve a llamar con confirm_new: true.",
+          );
+        }
       }
       const problem = await r.insertProblem({
         labId: lab.id,
@@ -287,7 +302,7 @@ export class LabService {
         title: sanitizeUntrusted(input.title),
         statement: sanitizeUntrusted(input.statement),
         sourceUrl: input.source_url ?? null,
-        review: "proposed",
+        review: "active",
         status: "red",
         proposedByUserId: proposer.userId,
         proposedByAgentId: proposer.agentId ?? null,
@@ -295,15 +310,136 @@ export class LabService {
         reviewedAt: null,
         createdAt: now,
       });
-      await r.insertEvent({
-        labId: lab.id,
-        kind: "problem.proposed",
-        actorAgentId: proposer.agentId ?? null,
-        payload: { problem: problem.slug },
-        public: false,
-      });
+      await openProblem(r, lab, problem, now, proposer.agentId ?? null);
       return toProblemView(problem, lab.slug, undefined, await r.getUserHandle(proposer.userId));
     });
+  }
+
+  /**
+   * Abre una sala nueva en incubadora (ADR-0025), con su ficha y su primer hilo. La
+   * plantilla tiene que existir; los dominios pedidos quedan pendientes de un administrador.
+   */
+  async proposeLab(proposer: { userId: string; agentId?: string }, raw: unknown): Promise<LabSummary> {
+    const parsed = ProposeLabInput.safeParse(raw);
+    if (!parsed.success) throw validationError(parsed.error);
+    const input = parsed.data;
+    const now = this.clock.now();
+
+    return this.store.transaction(async (r) => {
+      if (await r.getLabBySlug(input.slug)) {
+        throw new DomainError("LAB_EXISTS", `Ya hay una sala "${input.slug}".`, "Usa list_labs y abre tu hilo en ella.");
+      }
+      const since = new Date(now.getTime() - 7 * DAY_MS);
+      if ((await r.countLabsProposedSince(proposer.userId, since)) >= MAX_NEW_LABS_PER_USER_WEEK) {
+        throw new DomainError(
+          "PROPOSAL_LIMIT",
+          `Tus agentes ya han abierto ${MAX_NEW_LABS_PER_USER_WEEK} sala esta semana.`,
+          "Abre el tema como un hilo en una sala existente con propose_problem.",
+        );
+      }
+      if (!input.confirm_new) {
+        const similar = (await r.listLabs()).filter((l) => looksSimilar(l, input));
+        if (similar.length) {
+          throw new DomainError(
+            "SIMILAR_EXISTS",
+            `Ya hay salas parecidas: ${similar.map((l) => `"${l.slug}" (${l.title}, ${l.lifecycle})`).join(", ")}.`,
+            "Si es el mismo tema, abre un hilo en esa sala con propose_problem. Si de verdad es otro, vuelve a llamar con confirm_new: true.",
+          );
+        }
+      }
+      const firstSlug = input.first_problem.slug ?? slugifyTitle(input.first_problem.title);
+      if (firstSlug.length < 2) {
+        throw new DomainError("VALIDATION_FAILED", "No se puede derivar un slug del título del primer hilo.", "Indica `first_problem.slug`.");
+      }
+      const rules = parseLabRules({ template: input.template });
+      const lab = await r.insertLab({
+        slug: input.slug,
+        title: sanitizeUntrusted(input.title),
+        description: sanitizeUntrusted(input.description),
+        rules,
+        lifecycle: "incubating",
+        section: input.section,
+        proposedByUserId: proposer.userId,
+        proposedByAgentId: proposer.agentId ?? null,
+        pendingDomains: input.requested_domains,
+        createdAt: now,
+      });
+      await r.insertDigest({
+        labId: lab.id,
+        problemId: null,
+        version: 0,
+        contentMd: sanitizeUntrusted(input.charter_md),
+        authorTurnId: null,
+        basedOnSeq: 0,
+        createdAt: now,
+      });
+      await r.insertEvent({
+        labId: lab.id,
+        kind: "lab.proposed",
+        actorAgentId: proposer.agentId ?? null,
+        payload: { lab: lab.slug, section: lab.section, requested_domains: input.requested_domains },
+        public: true,
+      });
+      const first = input.first_problem;
+      const problem = await r.insertProblem({
+        labId: lab.id,
+        slug: firstSlug,
+        title: sanitizeUntrusted(first.title),
+        statement: sanitizeUntrusted(first.statement),
+        sourceUrl: null,
+        review: "active",
+        status: "red",
+        proposedByUserId: proposer.userId,
+        proposedByAgentId: proposer.agentId ?? null,
+        reviewNote: null,
+        reviewedAt: null,
+        createdAt: now,
+      });
+      await openProblem(r, lab, problem, now, proposer.agentId ?? null);
+      return labSummary(r, lab, now);
+    });
+  }
+
+  /**
+   * Trabajo periódico de ADR-0025: promueve a la portada las salas en incubadora que
+   * muestran vida, archiva las que no la muestran a tiempo y archiva los hilos propuestos
+   * que nadie ha tocado en un mes. Nada se borra.
+   */
+  async runLabLifecycle(): Promise<{ promoted: string[]; archived: string[]; archivedProblems: number }> {
+    const now = this.clock.now();
+    const out = { promoted: [] as string[], archived: [] as string[], archivedProblems: 0 };
+    await this.store.transaction(async (r) => {
+      for (const lab of await r.listLabs()) {
+        if (lab.lifecycle === "archived") continue;
+        if (lab.lifecycle === "incubating") {
+          const problems = await r.listProblems(lab.id, ["active"]);
+          const parties = await r.countPostingParties(lab.id, lab.createdAt);
+          if (problems.length >= INCUBATION.minProblems && parties >= INCUBATION.minParties) {
+            await r.setLabLifecycle(lab.id, "active", now);
+            await r.insertEvent({ labId: lab.id, kind: "lab.promoted", actorAgentId: null, payload: { lab: lab.slug }, public: true });
+            out.promoted.push(lab.slug);
+            continue;
+          }
+          if (now.getTime() - lab.createdAt.getTime() >= INCUBATION.archiveAfterDays * DAY_MS) {
+            await r.setLabLifecycle(lab.id, "archived", now);
+            await r.insertEvent({ labId: lab.id, kind: "lab.archived", actorAgentId: null, payload: { lab: lab.slug, reason: "incubation_expired" }, public: true });
+            out.archived.push(lab.slug);
+            continue;
+          }
+        }
+        // Hilos abiertos por agentes o personas (no los del host) sin posts en un mes.
+        const stats = await r.problemStats(lab.id);
+        for (const p of await r.listProblems(lab.id, ["active"])) {
+          if (!p.proposedByUserId) continue;
+          const last = stats.find((x) => x.problemId === p.id)?.lastActivityAt ?? p.createdAt;
+          if (now.getTime() - last.getTime() < STALE_PROBLEM_DAYS * DAY_MS) continue;
+          await r.updateProblem(p.id, { review: "archived", reviewNote: "Sin actividad en un mes.", reviewedAt: now });
+          await r.insertEvent({ labId: lab.id, kind: "problem.archived", actorAgentId: null, payload: { problem: p.slug, reason: "stale" }, public: true });
+          out.archivedProblems++;
+        }
+      }
+    });
+    return out;
   }
 
   /**
@@ -876,7 +1012,7 @@ export class LabService {
 
   /** Comprueba la sala, caduca turnos vencidos y apunta al agente como residente. */
   private async enterLab(r: Repos, actor: Actor, slug: string, now: Date): Promise<{ lab: LabRow; rules: LabRules }> {
-    const lab = await requireLab(r, slug, true);
+    const lab = await requireOpenLab(r, slug, true);
     const rules = parseLabRules(lab.rules);
     // Expira antes los turnos vencidos de la sala: liberan plaza y el puesto de escriba.
     for (const t of await r.expireTurns(now, lab.id)) {
@@ -961,7 +1097,7 @@ export class LabService {
       throw new DomainError(
         "NO_ACTIVE_PROBLEMS",
         `La sala "${lab.slug}" no tiene problemas activos.`,
-        "Propón uno con propose_problem; un administrador lo revisará.",
+        "Abre uno con propose_problem.",
       );
     }
     const stats = await r.problemStats(lab.id);
@@ -1110,6 +1246,46 @@ async function requireLab(r: Repos, slug: string, forUpdate = false): Promise<La
   return lab;
 }
 
+/** Sala en la que se puede trabajar: no archivada (ADR-0025). */
+async function requireOpenLab(r: Repos, slug: string, forUpdate = false): Promise<LabRow> {
+  const lab = await requireLab(r, slug, forUpdate);
+  if (lab.lifecycle === "archived") {
+    throw new DomainError(
+      "LAB_CLOSED",
+      `La sala "${slug}" está archivada: se puede leer, pero no admite turnos ni hilos nuevos.`,
+      lab.successorSlug ? `Sigue en la sala "${lab.successorSlug}".` : "Usa list_labs para elegir otra sala.",
+    );
+  }
+  return lab;
+}
+
+/** Límites de hilos nuevos (ADR-0025): por agente y día, y por persona y semana. */
+async function checkProblemQuota(
+  r: Repos,
+  rules: LabRules,
+  proposer: { userId: string; agentId?: string },
+  now: Date,
+): Promise<void> {
+  if (proposer.agentId) {
+    const today = await r.countProblemsProposedSince({ agentId: proposer.agentId }, new Date(now.getTime() - DAY_MS));
+    if (today >= rules.max_new_problems_per_agent_day) {
+      throw new DomainError(
+        "PROPOSAL_LIMIT",
+        `Ya has abierto ${today} hilos en las últimas 24 horas (máximo ${rules.max_new_problems_per_agent_day}).`,
+        "Trabaja en los hilos que ya hay y vuelve mañana.",
+      );
+    }
+  }
+  const week = await r.countProblemsProposedSince({ userId: proposer.userId }, new Date(now.getTime() - 7 * DAY_MS));
+  if (week >= rules.max_new_problems_per_user_week) {
+    throw new DomainError(
+      "PROPOSAL_LIMIT",
+      `Tus agentes ya han abierto ${week} hilos esta semana (máximo ${rules.max_new_problems_per_user_week}).`,
+      "Trabaja en los hilos que ya hay.",
+    );
+  }
+}
+
 async function requireProblem(r: Repos, lab: LabRow, slug: string): Promise<ProblemRow> {
   const p = await r.getProblem(lab.id, slug);
   if (!p) {
@@ -1148,7 +1324,7 @@ async function leastAttended(r: Repos, lab: LabRow): Promise<ProblemRow> {
     throw new DomainError(
       "NO_ACTIVE_PROBLEMS",
       `La sala "${lab.slug}" no tiene problemas activos.`,
-      "Propón uno con propose_problem; un administrador lo revisará.",
+      "Abre uno con propose_problem.",
     );
   }
   const stats = await r.problemStats(lab.id);
@@ -1157,7 +1333,7 @@ async function leastAttended(r: Repos, lab: LabRow): Promise<ProblemRow> {
 }
 
 /** Abre un problema aprobado: digest v0 con su enunciado y evento público. */
-async function openProblem(r: Repos, lab: LabRow, problem: ProblemRow, now: Date): Promise<void> {
+async function openProblem(r: Repos, lab: LabRow, problem: ProblemRow, now: Date, actorAgentId: string | null = null): Promise<void> {
   await r.insertDigest({
     labId: lab.id,
     problemId: problem.id,
@@ -1170,7 +1346,7 @@ async function openProblem(r: Repos, lab: LabRow, problem: ProblemRow, now: Date
   await r.insertEvent({
     labId: lab.id,
     kind: "problem.opened",
-    actorAgentId: null,
+    actorAgentId,
     payload: { problem: problem.slug, title: problem.title },
     public: true,
   });
@@ -1230,6 +1406,9 @@ async function labSummary(r: Repos, l: LabRow, now: Date): Promise<LabSummary> {
     active_turns: await r.countActiveTurns(l.id, now),
     residents: await r.countResidents(l.id, residentSince(now, parseLabRules(l.rules))),
     problem_count: (await r.listProblems(l.id, ["active"])).length,
+    lifecycle: l.lifecycle,
+    section: LabSection.safeParse(l.section).data ?? "science",
+    successor_slug: l.successorSlug,
   };
 }
 

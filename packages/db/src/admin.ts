@@ -255,6 +255,10 @@ export async function createLab(
     datasets?: unknown[];
     initialDigestMd: string;
     createdBy?: string;
+    /** ADR-0025. */
+    lifecycle?: "incubating" | "active" | "archived";
+    section?: string;
+    successorSlug?: string | null;
   },
 ) {
   return db.transaction(async (tx) => {
@@ -267,6 +271,9 @@ export async function createLab(
         rules: l.rules,
         datasets: l.datasets ?? [],
         createdBy: l.createdBy,
+        lifecycle: l.lifecycle ?? "active",
+        section: l.section ?? "science",
+        successorSlug: l.successorSlug ?? null,
       })
       .returning();
     // Digest v0: lo escribe el host con la ficha de la sala (OPEN-QUESTIONS #11).
@@ -276,7 +283,7 @@ export async function createLab(
 }
 
 /**
- * Sala del host (seed, ADR-0021): la crea si falta; si existe (o existe con un slug antiguo
+ * Sala del host (seed, ADR-0021/0025): la crea si falta; si existe (o existe con un slug antiguo
  * de `formerSlugs`), la renombra y pone al día título, descripción, normas y los textos v0
  * que escribe el host (la ficha y el v0 de cada problema). No toca posts ni digests v1+.
  */
@@ -290,7 +297,15 @@ export async function ensureLab(
   return db.transaction(async (tx) => {
     const [lab] = await tx
       .update(labs)
-      .set({ slug: l.slug, title: l.title, description: l.description, rules: l.rules })
+      .set({
+        slug: l.slug,
+        title: l.title,
+        description: l.description,
+        rules: l.rules,
+        ...(l.section ? { section: l.section } : {}),
+        ...(l.successorSlug !== undefined ? { successorSlug: l.successorSlug } : {}),
+        ...(l.lifecycle && l.lifecycle !== current.lifecycle ? { lifecycle: l.lifecycle, lifecycleChangedAt: new Date() } : {}),
+      })
       .where(eq(labs.id, current.id))
       .returning();
     await tx
@@ -348,6 +363,40 @@ export async function ensureProblem(
       basedOnSeq: lab.nextSeq - 1,
     });
     return { problem: problem!, created: true };
+  });
+}
+
+/**
+ * Cambia el ciclo de vida de una sala a mano (ADR-0025): promover una sala en incubadora,
+ * archivarla o reabrirla. Deja evento público, como el trabajo automático.
+ */
+export async function setLabLifecycle(db: Db, slug: string, lifecycle: "incubating" | "active" | "archived") {
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .update(labs)
+      .set({ lifecycle, lifecycleChangedAt: new Date() })
+      .where(eq(labs.slug, slug))
+      .returning({ id: labs.id });
+    if (!rows.length) return false;
+    await tx.insert(events).values({ labId: rows[0]!.id, kind: `lab.${lifecycle}`, payload: { lab: slug, by: "admin" }, public: true });
+    return true;
+  });
+}
+
+/**
+ * Aprueba los dominios que pidió quien abrió la sala (ADR-0025): pasan a `allowed_domains`.
+ * Hasta entonces la sala funciona sin enlaces externos.
+ */
+export async function approveLabDomains(db: Db, slug: string) {
+  return db.transaction(async (tx) => {
+    const [lab] = await tx.select().from(labs).where(eq(labs.slug, slug));
+    if (!lab) return null;
+    const pending = (lab.pendingDomains as string[] | null) ?? [];
+    const rules = (lab.rules ?? {}) as { allowed_domains?: string[] };
+    const allowed = [...new Set([...(rules.allowed_domains ?? []), ...pending])];
+    await tx.update(labs).set({ rules: { ...rules, allowed_domains: allowed }, pendingDomains: [] }).where(eq(labs.id, lab.id));
+    await tx.insert(events).values({ labId: lab.id, kind: "admin.domains_approved", payload: { domains: pending }, public: false });
+    return pending;
   });
 }
 

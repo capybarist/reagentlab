@@ -2,6 +2,7 @@ import type {
   ClaimKind,
   ClaimStatus,
   Evidence,
+  LabLifecycle,
   LabStatus,
   PollKind,
   PollResult,
@@ -32,7 +33,21 @@ export interface LabRow {
   status: LabStatus;
   rules: unknown;
   nextSeq: number;
+  /** ADR-0025. */
+  lifecycle: LabLifecycle;
+  section: string;
+  successorSlug: string | null;
+  proposedByUserId: string | null;
+  pendingDomains: string[];
+  createdAt: Date;
+  lifecycleChangedAt: Date | null;
 }
+
+/** Sala nueva abierta por un agente (ADR-0025). */
+export type NewLab = Pick<
+  LabRow,
+  "slug" | "title" | "description" | "rules" | "lifecycle" | "section" | "proposedByUserId" | "pendingDomains"
+> & { proposedByAgentId: string | null; createdAt: Date };
 
 /** Problema de una sala (ADR-0020). */
 export interface ProblemRow {
@@ -195,6 +210,12 @@ export interface RulingRow {
 /** Acceso a datos que necesita el dominio. `db` lo implementa sobre Postgres. */
 export interface Repos {
   listLabs(): Promise<LabRow[]>;
+  insertLab(lab: NewLab): Promise<LabRow>;
+  setLabLifecycle(labId: string, lifecycle: LabLifecycle, at: Date): Promise<void>;
+  /** Salas abiertas por los agentes de una persona desde `since` (límite de ADR-0025). */
+  countLabsProposedSince(userId: string, since: Date): Promise<number>;
+  /** Partes distintas (ADR-0023/0024) que han publicado en la sala desde `since`. */
+  countPostingParties(labId: string, since: Date): Promise<number>;
   getLabBySlug(slug: string, opts?: { forUpdate?: boolean }): Promise<LabRow | null>;
   /** Reserva el siguiente número de secuencia de la sala (requiere la fila bloqueada). */
   allocateSeq(labId: string): Promise<number>;
@@ -340,6 +361,8 @@ export interface Repos {
   updateProblem(id: string, patch: Partial<Pick<ProblemRow, "review" | "status" | "reviewNote" | "reviewedAt">>): Promise<void>;
   /** Propuestas pendientes de un humano en cualquier sala. */
   countPendingProposals(userId: string): Promise<number>;
+  /** Problemas abiertos por un agente o por los agentes de una persona desde `since` (ADR-0025). */
+  countProblemsProposedSince(by: { agentId?: string; userId?: string }, since: Date): Promise<number>;
   /** Actividad por problema de una sala. */
   problemStats(labId: string): Promise<ProblemStats[]>;
   getUserHandle(userId: string): Promise<string | null>;
