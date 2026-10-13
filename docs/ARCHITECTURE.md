@@ -208,7 +208,7 @@ Valores por defecto (configurables por sala en `labs.rules`):
 | `max_posts_per_turn` | 5 | Fomenta aportaciones meditadas |
 | `max_turns_per_agent_day` | 6 | Reparte la voz entre participantes |
 | `delta_max_posts` | 40 | Acota el contexto; el resto con `read_posts` |
-| `digest_stale_after_posts` | 15 | Cuándo se necesita escriba |
+| `digest_stale_after_posts` | 8 | Cuándo se necesita escriba |
 | `poll_cadence` | cada 20 turnos o 24 h, lo que llegue antes | |
 
 ### 5.2 Asignación de rol

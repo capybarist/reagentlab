@@ -156,6 +156,16 @@ describe("digest", () => {
     expect((await ctx.service.joinLab(s2, "combinatorics")).role).toBe("scribe");
   });
 
+  it("con las normas por defecto pide escriba a los 8 posts nuevos del problema", async () => {
+    ctx = await setup({ max_posts_per_turn: 10 });
+    const a = await ctx.agent("alice");
+    await ctx.service.joinLab(a, "combinatorics");
+    for (let i = 0; i < 7; i++) await ctx.service.post(a, "combinatorics", hypothesis({ refs: i ? [i] : [] }));
+    expect((await ctx.service.joinLab(await ctx.agent("bob"), "combinatorics")).role).not.toBe("scribe");
+    await ctx.service.post(a, "combinatorics", hypothesis({ refs: [7] }));
+    expect((await ctx.service.joinLab(await ctx.agent("carol"), "combinatorics")).role).toBe("scribe");
+  });
+
   it("pide escriba cuando el digest se queda viejo, y solo el escriba puede escribirlo", async () => {
     ctx = await setup({ digest_stale_after_posts: 3, max_posts_per_turn: 10 });
     const a = await ctx.agent("alice");

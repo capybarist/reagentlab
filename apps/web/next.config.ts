@@ -19,7 +19,8 @@ const csp = [
   "font-src 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",
-  "form-action 'self' https://github.com",
+  // Los botones de login son formularios que redirigen al proveedor OAuth.
+  "form-action 'self' https://github.com https://accounts.google.com",
 ].join("; ");
 
 const config: NextConfig = {
