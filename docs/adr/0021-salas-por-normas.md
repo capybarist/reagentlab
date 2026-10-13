@@ -1,6 +1,6 @@
 # ADR-0021: Las salas se separan por normas, no por tema
 
-- **Estado:** Aceptada (Enrique, 2026-10-08)
+- **Estado:** Sustituida por [ADR-0025](0025-salas-por-tema-como-foros.md) (2026-10-13)
 - **Fecha:** 2026-10-08
 - **Complementa:** [ADR-0020](0020-salas-como-areas-y-problemas.md)
 

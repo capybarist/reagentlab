@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import {
   banUser,
   createAgentWithToken,
+  approveLabDomains,
   ensureLab,
   ensureProblem,
   generateToken,
@@ -11,19 +12,24 @@ import {
   revokeAgentTokens,
   schema,
   setIndependentAgents,
+  setLabLifecycle,
   upsertUser,
 } from "@reagentlab/db";
 import { generateSigningSeed } from "@reagentlab/core";
 import { loadConfig } from "./config.js";
 import { runDemo } from "./demo.js";
-import { DEMO_LAB, DEMO_PROBLEM, SEED_LABS, SEED_PROBLEMS } from "./seed.js";
+import { DEMO_LAB, DEMO_PROBLEM, seedHostLabs } from "./seed.js";
 import { bootstrapDevAgents } from "./dev-bootstrap.js";
 import { loadSigningKey } from "./signing-key.js";
 
 const HELP = `Uso: pnpm admin <comando> [opciones]
 
   migrate                                   Aplica las migraciones.
-  seed                                      Crea las salas que falten y pone al día las existentes.
+  seed                                      Crea las salas que falten y pone al día las existentes
+                                            (la API también lo hace al arrancar).
+  lab-lifecycle --lab <slug> --to <incubating|active|archived>
+                                            Promueve, archiva o reabre una sala (ADR-0025).
+  approve-domains --lab <slug>              Aprueba los dominios que pidió quien abrió la sala.
   create-agent --handle <h> --name <n> --model <familia>
                                             Da de alta (si hace falta) al humano y crea un agente.
                                             Imprime el token UNA sola vez.
@@ -71,6 +77,7 @@ const { values } = parseArgs({
     yes: { type: "boolean" },
     provider: { type: "string" },
     off: { type: "boolean" },
+    to: { type: "string" },
   },
 });
 
@@ -87,15 +94,26 @@ try {
 
     case "seed": {
       await database.migrate();
-      for (const lab of SEED_LABS) {
-        const { action, previousSlug } = await ensureLab(db, lab);
-        const label = { created: "creada", renamed: `renombrada (antes ${previousSlug})`, updated: "al día" }[action];
-        console.log(`Sala ${lab.slug}: ${label}`);
-        for (const p of SEED_PROBLEMS[lab.slug] ?? []) {
-          const { created } = await ensureProblem(db, lab.slug, p, { refresh: true });
-          console.log(`  problema ${p.slug}: ${created ? "creado" : "al día"}`);
-        }
+      await seedHostLabs(db, (m) => console.log(m));
+      break;
+    }
+
+    case "lab-lifecycle": {
+      const to = values.to;
+      if (!values.lab || (to !== "incubating" && to !== "active" && to !== "archived")) {
+        throw new Error("Faltan --lab o --to (incubating, active o archived).");
       }
+      await database.migrate();
+      console.log((await setLabLifecycle(db, values.lab, to)) ? `Sala ${values.lab}: ${to}.` : `No existe la sala ${values.lab}.`);
+      break;
+    }
+
+    case "approve-domains": {
+      if (!values.lab) throw new Error("Falta --lab.");
+      await database.migrate();
+      const approved = await approveLabDomains(db, values.lab);
+      if (approved === null) console.log(`No existe la sala ${values.lab}.`);
+      else console.log(approved.length ? `Aprobados: ${approved.join(", ")}.` : "No había dominios pendientes.");
       break;
     }
 
@@ -159,8 +177,8 @@ try {
     case "demo": {
       if (process.env.NODE_ENV === "production") throw new Error("demo no se ejecuta en producción.");
       await database.migrate();
-      for (const l of [...SEED_LABS, DEMO_LAB]) await ensureLab(db, l);
-      for (const l of SEED_LABS) for (const p of SEED_PROBLEMS[l.slug] ?? []) await ensureProblem(db, l.slug, p);
+      await seedHostLabs(db);
+      await ensureLab(db, DEMO_LAB);
       await ensureProblem(db, DEMO_LAB.slug, DEMO_PROBLEM);
       await resetLab(db, DEMO_LAB.slug);
       await runDemo(db, loadSigningKey(config.signingKey));

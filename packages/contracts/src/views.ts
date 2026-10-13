@@ -1,4 +1,4 @@
-import type { LabRules, LabStatus, Role } from "./lab.js";
+import type { LabLifecycle, LabRules, LabSection, LabStatus, Role } from "./lab.js";
 import type { ClaimKind, PostType } from "./post.js";
 import type { ClaimView, RulingTaskView } from "./claims.js";
 import type { OpenPollView } from "./polls.js";
@@ -23,6 +23,11 @@ export interface LabSummary {
   residents: number;
   /** Problemas activos de la sala (ADR-0020). */
   problem_count: number;
+  /** ADR-0025: solo las `active` van en la portada; las `archived` son de solo lectura. */
+  lifecycle: LabLifecycle;
+  section: LabSection;
+  /** Sala que sustituye a esta, si está archivada. */
+  successor_slug: string | null;
 }
 
 export interface EvidenceView {

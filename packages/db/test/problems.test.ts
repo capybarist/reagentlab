@@ -84,7 +84,7 @@ describe("problemas (ADR-0020)", () => {
     expect(pack.digest?.untrusted_content_md).toContain("Improve the bound");
   });
 
-  it("proponer, aprobar y rechazar problemas", async () => {
+  it("abrir hilos: se publican al momento, con aviso de duplicados y límites (ADR-0025)", async () => {
     ctx = await setup();
     const a = await ctx.agent("alice");
     const proposal = {
@@ -93,32 +93,47 @@ describe("problemas (ADR-0020)", () => {
       source_url: "https://arxiv.org/abs/1234.5678",
     };
     const p = await ctx.service.proposeProblem({ userId: a.userId, agentId: a.agentId }, LAB, proposal);
-    expect(p).toMatchObject({ slug: "ramsey-type-bound-for-this-graph-family", review: "proposed", proposed_by: { handle: "alice" } });
-    // Un problema propuesto no se trabaja ni aparece en la lista pública.
-    await expectCode(ctx.service.joinLab(a, LAB, p.slug), "PROBLEM_NOT_ACTIVE");
-    expect((await ctx.service.listProblems(LAB)).map((x) => x.slug)).toEqual(["main"]);
+    expect(p).toMatchObject({ slug: "ramsey-type-bound-for-this-graph-family", review: "active", proposed_by: { handle: "alice" } });
+    // Se trabaja al momento, con su digest v0, y sale en la lista pública.
+    const pack = await ctx.service.joinLab(a, LAB, p.slug);
+    expect(pack.problem.slug).toBe(p.slug);
+    expect(pack.digest?.untrusted_content_md).toContain("Ramsey-type bound");
+    expect(new Set((await ctx.service.listProblems(LAB)).map((x) => x.slug))).toEqual(new Set(["main", p.slug]));
+
     await expectCode(ctx.service.proposeProblem({ userId: a.userId }, LAB, proposal), "PROBLEM_EXISTS");
     await expectCode(
       ctx.service.proposeProblem({ userId: a.userId }, LAB, { ...proposal, title: "Other title", source_url: "https://evil.example/x" }),
       "URL_NOT_ALLOWED",
     );
+    // Un título casi igual: devuelve el hilo parecido, salvo que se confirme.
+    const similar = { ...proposal, title: "A Ramsey-type bound for this family of graphs" };
+    await expectCode(ctx.service.proposeProblem({ userId: a.userId, agentId: a.agentId }, LAB, similar), "SIMILAR_EXISTS");
+    await ctx.service.proposeProblem({ userId: a.userId, agentId: a.agentId }, LAB, { ...similar, confirm_new: true });
 
-    const approved = await ctx.service.reviewProblem(LAB, p.slug, { decision: "approve", note: "Clear and checkable." });
-    expect(approved).toMatchObject({ review: "active", review_note: "Clear and checkable." });
-    const pack = await ctx.service.joinLab(a, LAB, p.slug);
-    expect(pack.problem.slug).toBe(p.slug);
-    expect(pack.digest?.untrusted_content_md).toContain("Ramsey-type bound");
-    await expectCode(ctx.service.reviewProblem(LAB, p.slug, { decision: "reject" }), "PROBLEM_NOT_ACTIVE");
-
-    for (let i = 0; i < 3; i++) {
-      await ctx.service.proposeProblem({ userId: a.userId }, LAB, { ...proposal, title: `Pending proposal number ${i}` });
-    }
+    // Tercer hilo del agente hoy: vale; el cuarto, no.
+    await ctx.service.proposeProblem({ userId: a.userId, agentId: a.agentId }, LAB, { ...proposal, title: "Coloring lemma for sparse cases" });
     await expectCode(
-      ctx.service.proposeProblem({ userId: a.userId }, LAB, { ...proposal, title: "One too many proposals" }),
+      ctx.service.proposeProblem({ userId: a.userId, agentId: a.agentId }, LAB, { ...proposal, title: "Independent sets in hypercubes" }),
       "PROPOSAL_LIMIT",
     );
-    const rejected = await ctx.service.reviewProblem(LAB, "pending-proposal-number-0", { decision: "reject", note: "Duplicate." });
-    expect(rejected.review).toBe("rejected");
+    // Al día siguiente vuelve a poder, hasta el tope semanal de la persona.
+    ctx.clock.advance(25 * 60);
+    const b = await ctx.agent("alice-2", "gpt", "alice");
+    const c = await ctx.agent("alice-3", "gemini", "alice");
+    const titles = ["Turán numbers of paths", "Sidon sets in intervals", "Sum-free subsets", "Zarankiewicz small cases", "Van der Waerden W(3,5)", "Schur number S(6)", "Hadwiger small graphs"];
+    for (const [i, title] of titles.entries()) {
+      const who = i < 3 ? a : i < 6 ? b : c;
+      await ctx.service.proposeProblem({ userId: who.userId, agentId: who.agentId }, LAB, { ...proposal, title, confirm_new: true });
+    }
+    await expectCode(
+      ctx.service.proposeProblem({ userId: c.userId, agentId: c.agentId }, LAB, { ...proposal, title: "Erdős–Szekeres happy ending", confirm_new: true }),
+      "PROPOSAL_LIMIT",
+    );
+
+    // Moderación a posteriori: un admin lo archiva.
+    const archived = await ctx.service.reviewProblem(LAB, p.slug, { decision: "archive", note: "Off topic." });
+    expect(archived.review).toBe("archived");
+    await expectCode(ctx.service.reviewProblem(LAB, p.slug, { decision: "reject" }), "PROBLEM_NOT_ACTIVE");
   });
 
   it("el estado es de cada problema y la sala resume el mejor", async () => {

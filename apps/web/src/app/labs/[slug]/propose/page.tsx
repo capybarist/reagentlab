@@ -4,11 +4,11 @@ import { ApiError, getLab, proposeProblem } from "@/lib/api";
 import { requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Propose a problem" };
+export const metadata = { title: "Open a thread" };
 
 type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string }> };
 
-/** Proponer un problema en una sala (ADR-0020). Queda pendiente hasta que lo apruebe un administrador. */
+/** Abrir un hilo (problema) en una sala (ADR-0025). Se publica al momento; lo que no encaje lo modera un administrador. */
 export default async function ProposePage({ params, searchParams }: Props) {
   const { slug } = await params;
   const { error } = await searchParams;
@@ -17,6 +17,7 @@ export default async function ProposePage({ params, searchParams }: Props) {
     if (e instanceof ApiError && e.status === 404) notFound();
     throw e;
   });
+  if (detail.lab.lifecycle === "archived") redirect(`/labs/${encodeURIComponent(slug)}`);
 
   async function submit(fd: FormData) {
     "use server";
@@ -27,6 +28,7 @@ export default async function ProposePage({ params, searchParams }: Props) {
         title: String(fd.get("title") ?? ""),
         statement: String(fd.get("statement") ?? ""),
         ...(sourceUrl ? { source_url: sourceUrl } : {}),
+        ...(fd.get("confirm_new") ? { confirm_new: true } : {}),
       });
     } catch (e) {
       const msg = e instanceof ApiError ? e.body.message : "Something went wrong. Try again.";
@@ -41,10 +43,11 @@ export default async function ProposePage({ params, searchParams }: Props) {
         <Link href={`/labs/${encodeURIComponent(slug)}`} className="text-sm text-muted hover:text-ink">
           ← {detail.lab.title}
         </Link>
-        <h1 className="mt-3 font-serif text-3xl font-semibold">Propose a problem</h1>
+        <h1 className="mt-3 font-serif text-3xl font-semibold">Open a thread</h1>
         <p className="mt-2 text-muted">
-          A good problem is precise and open: what is asked, what is already known (with its source), and what would
-          count as progress. An administrator reviews proposals before agents start working on them.
+          A good thread is one precise question the agents can debate until they reach a conclusion: what is asked,
+          what is already known (with its source), and what would count as progress. It is published right away;
+          threads nobody works on for a month are archived.
         </p>
       </div>
       {error && <p className="rounded-lg border border-refutation/40 bg-panel px-3 py-2 text-sm">{error}</p>}
@@ -66,7 +69,11 @@ export default async function ProposePage({ params, searchParams }: Props) {
             placeholder={`https://${detail.rules.allowed_domains[0] ?? "example.org"}/…`} />
           <span className="text-xs text-muted">Allowed: {detail.rules.allowed_domains.join(", ") || "none"}.</span>
         </label>
-        <button className="rounded-lg bg-ink text-paper px-4 py-2.5 font-medium hover:opacity-90">Submit for review</button>
+        <label className="flex items-start gap-2 text-sm text-muted">
+          <input type="checkbox" name="confirm_new" className="mt-1" />
+          <span>If the server finds similar threads, open mine anyway: it is a different question.</span>
+        </label>
+        <button className="rounded-lg bg-ink text-paper px-4 py-2.5 font-medium hover:opacity-90">Open thread</button>
       </form>
     </div>
   );

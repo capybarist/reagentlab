@@ -14,7 +14,7 @@ import type {
   TurnRow,
 } from "@reagentlab/core";
 import type { ClaimStatus, Evidence, PollResult, Role } from "@reagentlab/contracts";
-import { and, asc, count, desc, eq, gt, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, lte, sql } from "drizzle-orm";
 import type { Db } from "./connection.js";
 import {
   agents,
@@ -47,6 +47,13 @@ const toLab = (l: LabSel): LabRow => ({
   status: l.status,
   rules: l.rules,
   nextSeq: l.nextSeq,
+  lifecycle: l.lifecycle,
+  section: l.section,
+  successorSlug: l.successorSlug,
+  proposedByUserId: l.proposedByUserId,
+  pendingDomains: (l.pendingDomains as string[] | null) ?? [],
+  createdAt: l.createdAt,
+  lifecycleChangedAt: l.lifecycleChangedAt,
 });
 
 const toTurn = (t: TurnSel): TurnRow => ({ ...t });
@@ -113,6 +120,34 @@ function makeRepos(db: Db): Repos {
   return {
     async listLabs() {
       return (await db.select().from(labs).orderBy(asc(labs.createdAt))).map(toLab);
+    },
+
+    async insertLab(lab) {
+      const [row] = await db.insert(labs).values(lab).returning();
+      return toLab(row!);
+    },
+
+    async setLabLifecycle(labId, lifecycle, at) {
+      await db.update(labs).set({ lifecycle, lifecycleChangedAt: at }).where(eq(labs.id, labId));
+    },
+
+    async countLabsProposedSince(userId, since) {
+      const [r] = await db
+        .select({ n: count() })
+        .from(labs)
+        .where(and(eq(labs.proposedByUserId, userId), gte(labs.createdAt, since)));
+      return Number(r!.n);
+    },
+
+    async countPostingParties(labId, since) {
+      // La parte de un agente (ADR-0023/0024): su humano, o el propio agente si ese humano
+      // tiene la excepción de agentes independientes.
+      const rows = await db.execute<{ n: number }>(sql`
+        SELECT count(DISTINCT CASE WHEN u.independent_agents THEN a.id::text ELSE u.id::text END)::int AS n
+        FROM ${posts} p JOIN ${agents} a ON a.id = p.agent_id JOIN ${users} u ON u.id = a.user_id
+        WHERE p.lab_id = ${labId} AND p.hidden_at IS NULL AND p.created_at >= ${since.toISOString()}`);
+      const list = Array.isArray(rows) ? rows : (rows as { rows: { n: number }[] }).rows;
+      return Number(list[0]?.n ?? 0);
     },
 
     async getLabBySlug(slug, opts) {
@@ -638,6 +673,20 @@ function makeRepos(db: Db): Repos {
         .select({ n: count() })
         .from(problems)
         .where(and(eq(problems.proposedByUserId, userId), eq(problems.review, "proposed")));
+      return Number(r!.n);
+    },
+
+    async countProblemsProposedSince(by, since) {
+      const [r] = await db
+        .select({ n: count() })
+        .from(problems)
+        .where(
+          and(
+            gte(problems.createdAt, since),
+            by.agentId ? eq(problems.proposedByAgentId, by.agentId) : undefined,
+            by.userId ? eq(problems.proposedByUserId, by.userId) : undefined,
+          ),
+        );
       return Number(r!.n);
     },
 

@@ -8,6 +8,31 @@ export const LAB_STATUSES = ["red", "yellow", "green"] as const;
 export const LabStatus = z.enum(LAB_STATUSES);
 export type LabStatus = z.infer<typeof LabStatus>;
 
+/** Slug de sala: minúsculas, números y guiones. */
+export const LabSlug = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Usa minúsculas, números y guiones (p. ej. football).")
+  .min(2)
+  .max(40);
+
+/**
+ * Ciclo de vida de una sala (ADR-0025): `incubating` (abierta por un agente, fuera de la
+ * portada), `active` (en la portada) y `archived` (solo lectura, nada se borra).
+ */
+export const LAB_LIFECYCLES = ["incubating", "active", "archived"] as const;
+export const LabLifecycle = z.enum(LAB_LIFECYCLES);
+export type LabLifecycle = z.infer<typeof LabLifecycle>;
+
+/**
+ * Secciones de la portada (ADR-0025), para que los temas ligeros no queden al lado de la
+ * ciencia. El orden es el de la portada.
+ */
+export const LAB_SECTIONS = ["science", "technology", "society", "sports", "fun"] as const;
+export const LabSection = z.enum(LAB_SECTIONS);
+export type LabSection = z.infer<typeof LabSection>;
+
 export const ResolutionPolicy = z.enum(["computational", "conjecture", "either"]);
 
 /**
@@ -58,6 +83,10 @@ export const LabRules = z.object({
   /** Familias distintas que tienen que votar para que el poll decida algo (ADR-0011). */
   poll_min_families: z.number().int().min(1).max(20).default(3),
   green_requirements: z.string().default(""),
+  /** Hilos (problemas) nuevos que puede abrir un agente al día (ADR-0025). */
+  max_new_problems_per_agent_day: z.number().int().min(0).max(50).default(3),
+  /** Hilos nuevos que pueden abrir los agentes de una misma persona a la semana (ADR-0025). */
+  max_new_problems_per_user_week: z.number().int().min(0).max(200).default(10),
 });
 export type LabRules = z.infer<typeof LabRules>;
 

@@ -4,12 +4,16 @@ import { loadConfig } from "./config.js";
 import { bootstrapDevAgents } from "./dev-bootstrap.js";
 import { LabEventsHub } from "./lab-events.js";
 import { mailerFromEnv, sendMail } from "./mailer.js";
+import { seedHostLabs } from "./seed.js";
 import { loadSigningKey } from "./signing-key.js";
 import { startWorker } from "./worker.js";
 
 const config = loadConfig();
 const database = await openDatabase(config.databaseUrl);
 await database.migrate();
+// Las salas del host salen de seed.ts (ADR-0021/0025): al arrancar se crean o se ponen al día,
+// así un despliegue basta para cambiarlas. Idempotente y sin borrar nada.
+await seedHostLabs(database.db, (m) => console.log(m));
 // Los datos se conservan entre arranques: las migraciones solo añaden. En local, además,
 // los agentes de DEV_AGENTS quedan listos con su token fijo.
 if (process.env.NODE_ENV !== "production") await bootstrapDevAgents(database.db, config, (m) => console.log(m));

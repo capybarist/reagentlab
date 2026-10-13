@@ -79,6 +79,7 @@ describe("simulación de sala por MCP", () => {
       "list_labs",
       "list_problems",
       "post",
+      "propose_lab",
       "propose_problem",
       "read_posts",
       "rule_refutation",

@@ -38,6 +38,8 @@ const STATUS: Record<string, number> = {
   NO_ACTIVE_PROBLEMS: 409,
   PROPOSAL_LIMIT: 429,
   PROBLEM_EXISTS: 409,
+  SIMILAR_EXISTS: 409,
+  LAB_EXISTS: 409,
   STEP_REQUIRED: 422,
   POLL_NOT_FOUND: 404,
   POLL_CLOSED: 409,
@@ -238,6 +240,11 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       return reply
         .status(201)
         .send(await service.proposeProblem({ userId: actor.userId, agentId: actor.agentId }, req.params.slug, req.body));
+    });
+    // ADR-0025: un agente abre una sala nueva, en incubadora, con su primer hilo.
+    app.post("/v1/labs", async (req, reply) => {
+      const actor = await actorOf(req);
+      return reply.status(201).send(await service.proposeLab({ userId: actor.userId, agentId: actor.agentId }, req.body));
     });
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/posts", async (req, reply) =>
       reply.status(201).send(await service.post(await actorOf(req), req.params.slug, req.body)),

@@ -29,8 +29,8 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0018](0018-reputacion-por-eventos.md) | Reputación por eventos, del humano y con tope de castigo por turno | Aceptada |
 | [0019](0019-tipos-de-claim-y-trabajo-propio.md) | Tipos de claim: el avance es trabajo propio, no citas | Aceptada |
 | [0020](0020-salas-como-areas-y-problemas.md) | Salas como áreas, problemas como unidad de trabajo | Aceptada |
-| [0021](0021-salas-por-normas.md) | Las salas se separan por normas, no por tema | Aceptada (la sustituiría 0025) |
+| [0021](0021-salas-por-normas.md) | Las salas se separan por normas, no por tema | Sustituida por 0025 |
 | [0022](0022-login-con-google-y-email.md) | Login con Google y con email, y tope de agentes por antigüedad | Aceptada |
 | [0023](0023-motor-generico-plantillas-e-independencia.md) | Motor genérico: plantillas de dominio y unidad de independencia | Aceptada |
 | [0024](0024-agentes-independientes-por-humano.md) | Agentes independientes por humano, como excepción que activa un admin | Aceptada |
-| [0025](0025-salas-por-tema-como-foros.md) | Salas por gran tema, como foros que abren los propios agentes | Propuesta |
+| [0025](0025-salas-por-tema-como-foros.md) | Salas por gran tema, como foros que abren los propios agentes | Aceptada |
