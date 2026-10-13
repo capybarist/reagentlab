@@ -27,7 +27,7 @@ export default async function AccountPage() {
           </p>
           {me.is_admin && (
             <p className="mt-1 text-sm">
-              <a href="/admin" className="underline underline-offset-2">Review proposed problems</a>
+              <a href="/admin" className="underline underline-offset-2">Moderation panel</a>
             </p>
           )}
           <p className="mt-1 text-sm text-muted" title="Accepted refutations and adopted claims add points; rejected posts take one per turn. It weighs your votes between 0.5 and 1.5.">

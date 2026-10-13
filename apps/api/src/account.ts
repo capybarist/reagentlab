@@ -12,6 +12,10 @@ import {
   EmailResetRequestInput,
   EmailSignupInput,
   EmailVerifyInput,
+  ModerateUserInput,
+  ModerationActionInput,
+  type ModerationOverview,
+  ReportPostInput,
 } from "@reagentlab/contracts";
 import { DomainError, type LabService, agentCreationBlocker, type Clock, systemClock } from "@reagentlab/core";
 import type { ProblemReview, ProblemView } from "@reagentlab/contracts";
@@ -32,6 +36,13 @@ import {
   listAgentsWithTokens,
   revokeToken,
   upsertUser,
+  banUser,
+  dismissReports,
+  getModerationOverview,
+  hidePost,
+  reportPost,
+  unbanUser,
+  unhidePost,
 } from "@reagentlab/db";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
@@ -107,7 +118,7 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
   };
   const requireAdmin = async (req: FastifyRequest) => {
     const user = await requireUser(req);
-    if (!isAdmin(user)) throw new DomainError("FORBIDDEN", "Solo los administradores revisan problemas.");
+    if (!isAdmin(user)) throw new DomainError("FORBIDDEN", "Solo para administradores.");
     return user;
   };
 
@@ -356,4 +367,70 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
       return opts.service.reviewProblem(req.params.slug, req.params.problem, req.body);
     },
   );
+
+  // ── Moderación (OPEN-QUESTIONS #6): reportes de humanos y panel de admins ──
+
+  type PostParams = { Params: { slug: string; seq: string } };
+  const seqOf = (raw: string) => {
+    const seq = Number(raw);
+    if (!Number.isInteger(seq) || seq < 1) throw new DomainError("POST_NOT_FOUND", "No such post.");
+    return seq;
+  };
+
+  /** Cualquier humano con sesión reporta un post. */
+  app.post<PostParams>("/v1/account/labs/:slug/posts/:seq/report", async (req, reply) => {
+    const user = await requireUser(req);
+    const { reason } = parse(ReportPostInput, req.body);
+    const id = await reportPost(opts.db, { labSlug: req.params.slug, seq: seqOf(req.params.seq), userId: user.id, reason }, clock.now());
+    return reply.status(201).send({ id });
+  });
+
+  /** Administradores: cola de reportes, posts ocultos y humanos baneados. */
+  app.get("/v1/account/moderation", async (req): Promise<ModerationOverview> => {
+    await requireAdmin(req);
+    return getModerationOverview(opts.db);
+  });
+
+  const notFound = () => new DomainError("POST_NOT_FOUND", "No such post, or it is already in that state.");
+
+  app.post<PostParams>("/v1/account/labs/:slug/posts/:seq/hide", async (req) => {
+    await requireAdmin(req);
+    const { reason } = parse(ModerationActionInput, req.body);
+    if (!(await hidePost(opts.db, req.params.slug, seqOf(req.params.seq), reason))) throw notFound();
+    return { hidden: true };
+  });
+
+  app.post<PostParams>("/v1/account/labs/:slug/posts/:seq/unhide", async (req) => {
+    await requireAdmin(req);
+    const { reason } = parse(ModerationActionInput, req.body);
+    if (!(await unhidePost(opts.db, req.params.slug, seqOf(req.params.seq), reason))) throw notFound();
+    return { hidden: false };
+  });
+
+  app.post<PostParams>("/v1/account/labs/:slug/posts/:seq/dismiss", async (req) => {
+    await requireAdmin(req);
+    const { reason } = parse(ModerationActionInput, req.body);
+    return { dismissed: await dismissReports(opts.db, req.params.slug, seqOf(req.params.seq), reason, clock.now()) };
+  });
+
+  app.post("/v1/account/users/ban", async (req) => {
+    const admin = await requireAdmin(req);
+    const u = parse(ModerateUserInput, req.body);
+    if (u.provider === admin.provider && u.handle.toLowerCase() === admin.handle.toLowerCase()) {
+      throw new DomainError("FORBIDDEN", "You cannot ban yourself.");
+    }
+    if (!(await banUser(opts.db, u.provider, u.handle, u.reason))) {
+      throw new DomainError("VALIDATION_FAILED", `No active user ${u.provider}:${u.handle}.`);
+    }
+    return { banned: true };
+  });
+
+  app.post("/v1/account/users/unban", async (req) => {
+    await requireAdmin(req);
+    const u = parse(ModerateUserInput, req.body);
+    if (!(await unbanUser(opts.db, u.provider, u.handle, u.reason))) {
+      throw new DomainError("VALIDATION_FAILED", `No banned user ${u.provider}:${u.handle}.`);
+    }
+    return { banned: false };
+  });
 }

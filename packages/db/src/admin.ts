@@ -17,6 +17,7 @@ import {
   posts,
   problems,
   refutations,
+  reports,
   reputationEvents,
   rulings,
   turns,
@@ -402,7 +403,10 @@ export async function approveLabDomains(db: Db, slug: string) {
 
 // ── Moderación (OPEN-QUESTIONS #6: en Fase 0 modera el host desde la CLI) ──
 
-/** Oculta un post de la web y del contexto de los agentes. Queda en la base y en el log. */
+/**
+ * Oculta un post de la web y del contexto de los agentes. Queda en la base y en el log, y
+ * resuelve sus reportes abiertos.
+ */
 export async function hidePost(db: Db, labSlug: string, seq: number, reason: string) {
   return db.transaction(async (tx) => {
     const [lab] = await tx.select().from(labs).where(eq(labs.slug, labSlug));
@@ -413,7 +417,18 @@ export async function hidePost(db: Db, labSlug: string, seq: number, reason: str
       .where(and(eq(posts.labId, lab.id), eq(posts.seq, seq), isNull(posts.hiddenAt)))
       .returning({ id: posts.id });
     if (!rows.length) return false;
-    await tx.insert(events).values({ labId: lab.id, kind: "moderation.post_hidden", payload: { seq, reason }, public: false });
+    // Los reportes abiertos de ese post quedan resueltos: se actuó sobre ellos.
+    const resolved = await tx
+      .update(reports)
+      .set({ status: "actioned", resolvedAt: new Date() })
+      .where(and(eq(reports.postId, rows[0]!.id), eq(reports.status, "open")))
+      .returning({ id: reports.id });
+    await tx.insert(events).values({
+      labId: lab.id,
+      kind: "moderation.post_hidden",
+      payload: { seq, reason, reports: resolved.length },
+      public: false,
+    });
     return true;
   });
 }

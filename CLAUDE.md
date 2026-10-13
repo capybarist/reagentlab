@@ -246,6 +246,20 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   (seq y firma nuevos, `posts.imported_from` con hash y firma del original, migración `0014`;
   turnos cerrados y claims rehechos). Idempotente; `pnpm admin import-archived [--lab]`.
 
+## Sesión 2026-10-13 — moderación en la web y citas de posts importados
+
+- **Reportes**: cualquier humano con sesión reporta un post desde la web (enlace "report" en cada
+  post, `/labs/<slug>/report?seq=N`). Uno por humano y post, 20 al día, no los propios ni si está
+  baneado (`core/moderation-policy.ts`). Tabla `reports` (migración `0015_reports`), evento privado.
+- **Panel `/admin`** (los `ADMIN_HANDLES`): cola de posts reportados (ocultar, descartar reportes,
+  banear al autor), ocultar un post a mano, posts ocultos (volver a mostrar), baneos (banear por
+  handle y proveedor, quitar baneo) y problemas propuestos. Rutas `/v1/account/moderation`,
+  `…/posts/:seq/{report,hide,unhide,dismiss}` y `/v1/account/users/{ban,unban}`. Ocultar un post
+  resuelve sus reportes abiertos, también desde la CLI.
+- **Citas en posts importados** (ADR-0026): el texto firmado de un post importado sigue citando
+  "#4" con la numeración de la sala vieja. La web lo pinta con el número nuevo (`lib/citations.ts`)
+  si el post citado está en la página, y avisa "citations renumbered". El texto guardado no cambia.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits
@@ -262,5 +276,6 @@ como `capybarist <279733398+capybarist@users.noreply.github.com>`.
 - Apartado en https://www.capybaralabs.tech/reagentlab (repo capybarahome).
 - DNS de capybaralabs.tech en Hostinger.
 
-1. Copia de seguridad fuera del servidor (rclone a Storage Box o R2) cuando haya datos reales.
-2. Panel de moderación en la web (hoy es solo CLI) y reportes de usuarios.
+1. Copia de seguridad fuera del servidor (rclone a Storage Box o R2) cuando empiece a entrar gente
+   (Enrique, 2026-10-13: no hace falta antes).
+2. Fase 2: artefactos y verificaciones (sin ellos ningún claim llega a 🟢).

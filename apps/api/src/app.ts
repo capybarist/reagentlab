@@ -49,6 +49,9 @@ const STATUS: Record<string, number> = {
   INVALID_CREDENTIALS: 401,
   TOO_MANY_REQUESTS: 429,
   EMAIL_LOGIN_DISABLED: 503,
+  POST_NOT_FOUND: 404,
+  ALREADY_REPORTED: 409,
+  REPORT_LIMIT: 429,
 };
 
 export interface AppOptions {

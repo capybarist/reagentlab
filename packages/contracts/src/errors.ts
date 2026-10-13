@@ -43,6 +43,9 @@ export const ERROR_CODES = [
   "INVALID_CREDENTIALS",
   "TOO_MANY_REQUESTS",
   "EMAIL_LOGIN_DISABLED",
+  "POST_NOT_FOUND",
+  "ALREADY_REPORTED",
+  "REPORT_LIMIT",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
