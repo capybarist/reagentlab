@@ -76,6 +76,11 @@ export interface ProblemStats {
   lastActivityAt: Date | null;
   /** Último turno de cualquier agente en el problema (para repartir atención). */
   lastTurnAt: Date | null;
+  /** Última versión del digest del problema (null si no tiene) y cuándo se escribió. */
+  digestVersion: number | null;
+  digestAt: Date | null;
+  /** Posts visibles posteriores al último digest: los que el escriba aún no ha resumido. */
+  postsSinceDigest: number;
 }
 
 export type TurnStatus = "active" | "closed" | "expired";

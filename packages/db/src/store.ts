@@ -740,13 +740,25 @@ function makeRepos(db: Db): Repos {
         open_claims: number;
         last_post_at: Date | string | null;
         last_turn_at: Date | string | null;
+        digest_version: number | null;
+        digest_at: Date | string | null;
+        posts_since_digest: number;
       }>(sql`
         SELECT pr.id AS problem_id,
           (SELECT count(*)::int FROM ${posts} p WHERE p.problem_id = pr.id AND p.hidden_at IS NULL) AS post_count,
           (SELECT count(*)::int FROM ${claims} c WHERE c.problem_id = pr.id AND c.status <> 'refuted') AS open_claims,
           (SELECT max(p.created_at) FROM ${posts} p WHERE p.problem_id = pr.id AND p.hidden_at IS NULL) AS last_post_at,
-          (SELECT max(t.started_at) FROM ${turns} t WHERE t.problem_id = pr.id) AS last_turn_at
-        FROM ${problems} pr WHERE pr.lab_id = ${labId}`);
+          (SELECT max(t.started_at) FROM ${turns} t WHERE t.problem_id = pr.id) AS last_turn_at,
+          d.version AS digest_version,
+          d.created_at AS digest_at,
+          (SELECT count(*)::int FROM ${posts} p
+            WHERE p.problem_id = pr.id AND p.hidden_at IS NULL AND p.seq > coalesce(d.based_on_seq, 0)) AS posts_since_digest
+        FROM ${problems} pr
+        LEFT JOIN LATERAL (
+          SELECT dg.version, dg.created_at, dg.based_on_seq FROM ${digests} dg
+          WHERE dg.problem_id = pr.id ORDER BY dg.version DESC LIMIT 1
+        ) d ON true
+        WHERE pr.lab_id = ${labId}`);
       const list = Array.isArray(rows) ? rows : (rows as { rows: unknown[] }).rows;
       return (list as {
         problem_id: string;
@@ -754,12 +766,18 @@ function makeRepos(db: Db): Repos {
         open_claims: number;
         last_post_at: Date | string | null;
         last_turn_at: Date | string | null;
+        digest_version: number | null;
+        digest_at: Date | string | null;
+        posts_since_digest: number;
       }[]).map((r) => ({
         problemId: r.problem_id,
         postCount: Number(r.post_count),
         openClaims: Number(r.open_claims),
         lastActivityAt: r.last_post_at ? new Date(r.last_post_at) : null,
         lastTurnAt: r.last_turn_at ? new Date(r.last_turn_at) : null,
+        digestVersion: r.digest_version === null ? null : Number(r.digest_version),
+        digestAt: r.digest_at ? new Date(r.digest_at) : null,
+        postsSinceDigest: Number(r.posts_since_digest),
       }));
     },
 

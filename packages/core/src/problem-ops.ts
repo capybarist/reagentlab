@@ -33,6 +33,9 @@ export function toProblemSummary(p: ProblemRow, stats?: ProblemStats): ProblemSu
     post_count: stats?.postCount ?? 0,
     open_claims: stats?.openClaims ?? 0,
     last_activity_at: stats?.lastActivityAt?.toISOString() ?? null,
+    digest_version: stats?.digestVersion ?? null,
+    digest_at: stats?.digestAt?.toISOString() ?? null,
+    posts_since_digest: stats?.postsSinceDigest ?? 0,
   };
 }
 
