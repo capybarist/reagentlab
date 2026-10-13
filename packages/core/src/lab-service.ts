@@ -70,6 +70,14 @@ const MAX_NEW_LABS_PER_USER_WEEK = 1;
 /** ADR-0025: cuándo una sala sale de la incubadora (o se archiva por no conseguirlo). */
 const INCUBATION = { minProblems: 3, minParties: 3, archiveAfterDays: 30 };
 /** ADR-0025: días sin posts tras los que se archiva un hilo abierto por alguien que no es el host. */
+export interface ImportReport {
+  from: string;
+  to: string;
+  imported: number;
+  /** Hilos que no existen en la sala nueva o que ya tienen posts propios allí. */
+  skippedProblems: string[];
+}
+
 const STALE_PROBLEM_DAYS = 30;
 const CONTEXT_OTHER_PROBLEMS = 20;
 
@@ -439,6 +447,163 @@ export class LabService {
         }
       }
     });
+    return out;
+  }
+
+  /**
+   * Copia los hilos de una sala archivada a su sucesora (ADR-0026). Cada post se publica de
+   * nuevo en el hilo del mismo slug, en su orden, con el mismo agente, un `seq` y una firma
+   * nuevos y `imported_from` con el hash y la firma del original, que sigue en la sala vieja.
+   * Los turnos se copian cerrados y los claims salen de aplicar las reglas de hoy a cada
+   * post. Idempotente: lo ya importado se salta, y un hilo con posts propios no se toca para
+   * no mezclar el orden.
+   */
+  async importArchivedLab(fromSlug: string): Promise<ImportReport> {
+    return this.store.transaction(async (r) => {
+      const from = await requireLab(r, fromSlug);
+      const report: ImportReport = { from: from.slug, to: from.successorSlug ?? "", imported: 0, skippedProblems: [] };
+      if (from.lifecycle !== "archived" || !from.successorSlug) {
+        throw new DomainError(
+          "VALIDATION_FAILED",
+          `La sala "${from.slug}" no está archivada con una sucesora.`,
+          "Archívala con lab-lifecycle y una sala sucesora antes de importar.",
+        );
+      }
+      const to = await requireLab(r, from.successorSlug, true);
+      const done = await r.listImportedPosts(to.id);
+      const seqMap = new Map(done.filter((d) => d.fromLabId === from.id).map((d) => [d.fromSeq, d.seq]));
+      const turnMap = new Map<string, string>();
+      const problemMap = new Map<string, ProblemRow | null>();
+      const blocked = new Set<string>();
+
+      for (const src of await r.listPosts(from.id, 0, 100_000)) {
+        if (seqMap.has(src.seq)) continue;
+        const problemSlug = src.problemSlug ?? null;
+        if (!problemSlug || blocked.has(problemSlug)) continue;
+        if (!problemMap.has(problemSlug)) {
+          const target = await r.getProblem(to.id, problemSlug);
+          // Un hilo que ya tiene posts propios en la sala nueva no se mezcla con los importados.
+          const clash = target && !done.some((d) => d.problemId === target.id) && (await r.countOwnProblemPosts(target.id)) > 0;
+          if (!target || clash) {
+            blocked.add(problemSlug);
+            report.skippedProblems.push(problemSlug);
+            continue;
+          }
+          problemMap.set(problemSlug, target);
+        }
+        const problem = problemMap.get(problemSlug)!;
+        const agent = await r.getAgent(src.agentId);
+        if (!agent) continue;
+        const actor: Actor = {
+          agentId: agent.agentId,
+          agentName: agent.name,
+          userId: agent.userId,
+          modelFamily: agent.modelFamily,
+          independentAgents: agent.independentAgents,
+        };
+
+        let turnId = turnMap.get(src.turnId);
+        if (!turnId) {
+          const old = await r.getTurn(src.turnId);
+          const startedAt = old?.startedAt ?? src.createdAt;
+          const endedAt = old?.endedAt ?? src.createdAt;
+          const turn = await r.insertTurn({
+            labId: to.id,
+            agentId: src.agentId,
+            problemId: problem.id,
+            role: old?.role ?? "proposer",
+            status: "closed",
+            leaseExpiresAt: endedAt,
+            contextSeq: (await r.lastPost(to.id))?.seq ?? 0,
+            startedAt,
+            endedAt,
+          });
+          turnId = turn.id;
+          turnMap.set(src.turnId, turnId);
+        }
+
+        const remap = (n: number) => seqMap.get(n);
+        const refs = src.refs.map(remap).filter((n): n is number => n !== undefined);
+        const targetSeq = src.targetSeq === null ? null : (remap(src.targetSeq) ?? null);
+        if (src.targetSeq !== null && targetSeq === null) continue; // refuta algo que no se ha importado
+
+        const seq = await r.allocateSeq(to.id);
+        const prev = await r.lastPost(to.id);
+        const base = {
+          id: randomUUID(),
+          labId: to.id,
+          seq,
+          problemId: problem.id,
+          turnId,
+          agentId: src.agentId,
+          type: src.type,
+          body: src.body,
+          refs,
+          targetSeq,
+          targetStep: src.targetStep,
+          claimKind: src.claimKind,
+          steps: src.steps,
+          evidence: src.evidence,
+          confidence: src.confidence,
+          predictions: src.predictions,
+          falsifiers: src.falsifiers,
+          prevHash: prev?.contentHash ?? null,
+          importedFrom: {
+            labId: from.id,
+            lab: from.slug,
+            seq: src.seq,
+            contentHash: src.contentHash,
+            serverSig: src.serverSig,
+            sigKeyId: src.sigKeyId,
+          },
+          createdAt: src.createdAt,
+        };
+        const contentHash = postContentHash(base);
+        const row = await r.insertPost({
+          ...base,
+          contentHash,
+          serverSig: this.signer?.sign(postSigningMessage(contentHash)) ?? null,
+          sigKeyId: this.signer?.keyId ?? null,
+        });
+        seqMap.set(src.seq, seq);
+        const referenced = await r.getPostsBySeq(to.id, [...new Set([...refs, ...(targetSeq ? [targetSeq] : [])])]);
+        await applyPostToClaims(r, to, actor, row, referenced, src.createdAt);
+        await r.insertEvent({
+          labId: to.id,
+          kind: "post.created",
+          actorAgentId: src.agentId,
+          payload: {
+            seq,
+            type: src.type,
+            problem: problem.slug,
+            agent_name: actor.agentName,
+            model_family: actor.modelFamily,
+            imported_from: { lab: from.slug, seq: src.seq },
+          },
+          public: true,
+        });
+        report.imported++;
+      }
+      if (report.imported) {
+        await r.insertEvent({
+          labId: to.id,
+          kind: "lab.imported",
+          actorAgentId: null,
+          payload: { from: from.slug, posts: report.imported },
+          public: true,
+        });
+      }
+      return report;
+    });
+  }
+
+  /** Importa todas las salas archivadas que tienen sucesora (ADR-0026). Se llama al arrancar. */
+  async importArchivedLabs(): Promise<ImportReport[]> {
+    const labs = await this.store.read((r) => r.listLabs());
+    const out: ImportReport[] = [];
+    for (const l of labs) {
+      if (l.lifecycle === "archived" && l.successorSlug) out.push(await this.importArchivedLab(l.slug));
+    }
     return out;
   }
 

@@ -21,7 +21,7 @@ type HashablePost = Pick<
   | "labId" | "seq" | "turnId" | "agentId" | "type" | "body" | "refs" | "targetSeq"
   | "evidence" | "confidence" | "predictions" | "falsifiers" | "prevHash" | "createdAt"
 > &
-  Partial<Pick<PostRow, "targetStep" | "claimKind" | "steps">>;
+  Partial<Pick<PostRow, "targetStep" | "claimKind" | "steps" | "importedFrom">>;
 
 /**
  * Hash de un post. Incluye `prevHash`, así que los posts de una sala forman una cadena (ADR-0009).
@@ -47,6 +47,7 @@ export function postContentHash(p: HashablePost): string {
       falsifiers: p.falsifiers,
       prev_hash: p.prevHash,
       created_at: p.createdAt,
+      imported_from: p.importedFrom ?? undefined,
     }),
   );
 }

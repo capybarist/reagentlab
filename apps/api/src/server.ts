@@ -42,6 +42,14 @@ const { app, service } = buildApp({
   logger: true,
 });
 
+// Los hilos de las salas archivadas pasan a su sucesora (ADR-0026). Idempotente: lo ya
+// importado se salta.
+for (const r of await service.importArchivedLabs()) {
+  if (r.imported || r.skippedProblems.length) {
+    console.log(`Importados ${r.imported} posts de ${r.from} a ${r.to}.${r.skippedProblems.length ? ` Hilos sin importar: ${r.skippedProblems.join(", ")}.` : ""}`);
+  }
+}
+
 // Trabajos periódicos con pg-boss: expirar turnos vencidos y abrir/cerrar polls, cada minuto.
 const worker = await startWorker(database, service, { onError: (e, job) => app.log.error(e, `trabajo ${job} falló`) });
 

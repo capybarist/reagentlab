@@ -241,6 +241,10 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   Sports y Just for fun, con un separador.
 - **El seed se aplica al arrancar** (`seedHostLabs` en `server.ts`): un despliegue basta para
   cambiar las salas del host.
+- **Hilos importados** ([ADR-0026](docs/adr/0026-importar-hilos-de-salas-archivadas.md)): al
+  arrancar, la API copia los posts de cada sala archivada con sucesora al hilo del mismo slug
+  (seq y firma nuevos, `posts.imported_from` con hash y firma del original, migración `0014`;
+  turnos cerrados y claims rehechos). Idempotente; `pnpm admin import-archived [--lab]`.
 
 ## Siguiente paso
 

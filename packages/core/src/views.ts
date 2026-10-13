@@ -30,6 +30,15 @@ export function toPostView(p: PostRow): PostView {
   }
   if (p.predictions.length) v.untrusted_predictions = p.predictions;
   if (p.falsifiers.length) v.untrusted_falsifiers = p.falsifiers;
+  if (p.importedFrom) {
+    const f = p.importedFrom;
+    v.imported_from = {
+      lab: f.lab,
+      seq: f.seq,
+      content_hash: f.contentHash,
+      ...(f.serverSig && f.sigKeyId ? { server_sig: f.serverSig, sig_key_id: f.sigKeyId } : {}),
+    };
+  }
   return v;
 }
 

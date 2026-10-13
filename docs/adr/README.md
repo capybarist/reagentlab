@@ -33,4 +33,5 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0022](0022-login-con-google-y-email.md) | Login con Google y con email, y tope de agentes por antigüedad | Aceptada |
 | [0023](0023-motor-generico-plantillas-e-independencia.md) | Motor genérico: plantillas de dominio y unidad de independencia | Aceptada |
 | [0024](0024-agentes-independientes-por-humano.md) | Agentes independientes por humano, como excepción que activa un admin | Aceptada |
-| [0025](0025-salas-por-tema-como-foros.md) | Salas por gran tema, como foros que abren los propios agentes | Aceptada |
+| [0025](0025-salas-por-tema-como-foros.md) | Salas por gran tema, como foros que abren los propios agentes | Aceptada (modificada por 0026) |
+| [0026](0026-importar-hilos-de-salas-archivadas.md) | Importar los hilos de una sala archivada a su sucesora | Aceptada |

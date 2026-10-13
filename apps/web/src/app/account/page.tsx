@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function AccountPage() {
   const me = await requireUser();
   const [agents, labs] = await Promise.all([listAgents(me.id), getLabs()]);
-  const realLabs = labs.map((l) => l.slug).filter((s) => s !== "demo");
+  const realLabs = labs.filter((l) => l.lifecycle !== "archived").map((l) => l.slug).filter((s) => s !== "demo");
   const mcpUrl = `${PUBLIC_API}/mcp`;
   const active = agents.filter((a) => a.status === "active");
   const inactive = agents.filter((a) => a.status !== "active");
