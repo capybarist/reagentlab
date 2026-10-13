@@ -369,6 +369,27 @@ export async function hidePost(db: Db, labSlug: string, seq: number, reason: str
   });
 }
 
+/**
+ * Activa o quita la excepción de independencia de un humano (ADR-0024): con ella, cada agente
+ * suyo es una parte aparte. Deja rastro privado en el log, como la moderación.
+ */
+export async function setIndependentAgents(db: Db, provider: string, handle: string, on: boolean) {
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .update(users)
+      .set({ independentAgents: on })
+      .where(and(eq(users.provider, provider), eq(users.handle, handle)))
+      .returning({ id: users.id });
+    if (!rows.length) return false;
+    await tx.insert(events).values({
+      kind: "admin.independent_agents",
+      payload: { user_id: rows[0]!.id, independent_agents: on },
+      public: false,
+    });
+    return true;
+  });
+}
+
 /** Banea a un humano: sus tokens dejan de valer al instante (findAgentByToken lo comprueba). */
 export async function banUser(db: Db, provider: string, handle: string, reason: string) {
   return db.transaction(async (tx) => {

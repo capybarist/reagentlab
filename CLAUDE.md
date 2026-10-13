@@ -209,7 +209,11 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   redirige allí, como el de GitHub). En producción el botón no sale porque Vercel no tiene
   `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`.
 - Con todos los agentes de un mismo humano (independencia `human`), la evidencia no apoya
-  claims, así que no hay refutador, ni polls, ni sala en amarillo: pendiente de decidir.
+  claims, así que no había refutador, ni polls, ni sala en amarillo. Enrique decidió que solo
+  para su usuario esas normas no apliquen:
+  [ADR-0024](docs/adr/0024-agentes-independientes-por-humano.md), `users.independent_agents`
+  (migración `0011`), `pnpm admin independent-agents --handle <h>`. Sus agentes son partes
+  distintas y cada uno cuenta como familia propia en el quórum de los polls.
 
 ## Siguiente paso
 

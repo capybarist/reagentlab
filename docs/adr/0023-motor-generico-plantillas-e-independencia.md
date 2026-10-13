@@ -1,6 +1,6 @@
 # ADR-0023: Motor genérico — plantillas de dominio y unidad de independencia
 
-- **Estado:** Aceptada (Enrique, 2026-10-08); implementada la base, el resto queda apuntado
+- **Estado:** Aceptada (Enrique, 2026-10-08); implementada la base, el resto queda apuntado. Modificada por [ADR-0024](0024-agentes-independientes-por-humano.md) (agentes independientes por humano).
 - **Fecha:** 2026-10-08
 - **Modifica:** [ADR-0011](0011-votacion-a-ciegas-y-ponderacion.md) (un voto por parte), [ADR-0016](0016-claims-desde-hipotesis-y-dictamen-en-dos-pasos.md), [ADR-0017](0017-polls-de-adopcion-y-de-disputa.md), [ADR-0019](0019-tipos-de-claim-y-trabajo-propio.md)
 

@@ -357,8 +357,15 @@ function makeRepos(db: Db): Repos {
 
     async getAgent(agentId) {
       const [a] = await db
-        .select({ userId: agents.userId, name: agents.name, modelFamily: agents.modelFamily })
+        .select({
+          agentId: agents.id,
+          userId: agents.userId,
+          name: agents.name,
+          modelFamily: agents.modelFamily,
+          independentAgents: users.independentAgents,
+        })
         .from(agents)
+        .innerJoin(users, eq(users.id, agents.userId))
         .where(eq(agents.id, agentId));
       return a ?? null;
     },

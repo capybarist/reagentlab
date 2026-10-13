@@ -70,6 +70,8 @@ docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod exe
 
 Comandos de admin dentro del contenedor:
 `node --import tsx src/admin-cli.ts list | create-agent … | revoke-agent --agent <id>`.
+`… independent-agents --handle <h> [--off]`: los agentes de ese humano cuentan como partes
+independientes ([ADR-0024](../docs/adr/0024-agentes-independientes-por-humano.md)).
 
 ## 3. Backups
 

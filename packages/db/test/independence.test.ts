@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { createStore, setIndependentAgents } from "../src/index.js";
 import { BODY, evidence, hypothesis, setup } from "./helpers.js";
 
 /** La unidad de independencia (ADR-0023): `human` por defecto, `model_family` para instalaciones privadas. */
@@ -61,5 +62,51 @@ describe("independencia por parte (ADR-0023)", () => {
     ctx.clock.advance(25 * 60);
     await ctx.service.runPolls();
     expect(await status(h.seq)).toBe("adopted");
+  });
+
+  it("ADR-0024: con independent_agents, los agentes de un mismo humano y modelo apoyan y votan como partes distintas", async () => {
+    ctx = await setup({ min_failed_refutations: 0, max_active_turns: 10 });
+    const store = createStore(ctx.db);
+    const raw = [];
+    for (const n of ["newton", "galileo", "einstein", "kepler"]) raw.push(await ctx.agent(n, "claude", "enrique"));
+    const stranger = await ctx.agent("other", "claude", "someone");
+    expect(await setIndependentAgents(ctx.db, "github", "enrique", true)).toBe(true);
+    // El flag viaja desde la base, como en authenticate().
+    const actors = [];
+    for (const x of raw) actors.push({ ...x, independentAgents: (await store.read((r) => r.getAgent(x.agentId)))!.independentAgents });
+    const [a, b, c, d] = actors;
+    expect(a!.independentAgents).toBe(true);
+
+    await ctx.service.joinLab(a!, LAB, "main");
+    const h = await ctx.service.post(a!, LAB, hypothesis());
+    await ctx.service.joinLab(b!, LAB, "main");
+    await ctx.service.post(b!, LAB, evidence([h.seq]));
+    expect(await status(h.seq)).toBe("supported");
+
+    await ctx.service.runPolls();
+    const [poll] = await ctx.service.listPolls(LAB, "main");
+    expect(poll).toBeTruthy();
+    // Solo el autor es parte del caso; los demás agentes de Enrique votan, cada uno como su propia "familia".
+    await expect(
+      ctx.service.castVote(a!, LAB, { poll_id: poll!.id, stance: "yes", reasoning: `${BODY} I wrote it.` }),
+    ).rejects.toMatchObject({ code: "CONFLICT_OF_INTEREST" });
+    for (const v of [b!, c!, d!]) {
+      await ctx.service.joinLab(v, LAB, "main");
+      await ctx.service.castVote(v, LAB, { poll_id: poll!.id, stance: "yes", reasoning: `${BODY} Checked independently.` });
+    }
+    ctx.clock.advance(25 * 60);
+    await ctx.service.runPolls();
+    expect(await status(h.seq)).toBe("adopted");
+
+    // Los demás humanos no cambian: un agente ajeno sigue siendo una parte normal.
+    expect((await store.read((r) => r.getAgent(stranger.agentId)))!.independentAgents).toBe(false);
+  });
+
+  it("ADR-0024: quitar la excepción vuelve a juntar los agentes en una parte", async () => {
+    ctx = await setup();
+    await ctx.agent("newton", "claude", "enrique");
+    expect(await setIndependentAgents(ctx.db, "github", "enrique", true)).toBe(true);
+    expect(await setIndependentAgents(ctx.db, "github", "enrique", false)).toBe(true);
+    expect(await setIndependentAgents(ctx.db, "github", "nobody", true)).toBe(false);
   });
 });

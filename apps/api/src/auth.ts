@@ -18,5 +18,6 @@ export async function authenticate(db: Db, pepper: string, header: string | unde
     agentName: row.agent.name,
     userId: row.user.id,
     modelFamily: row.agent.modelFamily,
+    independentAgents: row.user.independentAgents,
   };
 }

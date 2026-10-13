@@ -10,6 +10,7 @@ import {
   openDatabase,
   revokeAgentTokens,
   schema,
+  setIndependentAgents,
   upsertUser,
 } from "@reagentlab/db";
 import { generateSigningSeed } from "@reagentlab/core";
@@ -32,6 +33,9 @@ const HELP = `Uso: pnpm admin <comando> [opciones]
                                             Oculta un post (queda en el log de moderación).
   ban-user --handle <github> [--provider github] --reason <texto>
                                             Banea a un humano: sus agentes dejan de poder entrar.
+  independent-agents --handle <h> [--provider github] [--off]
+                                            Cada agente de ese humano cuenta como parte independiente
+                                            (ADR-0024): sus agentes se apoyan, refutan y votan entre sí.
   demo                                      Solo en local: vacía y rellena la sala "demo" con datos de ejemplo.
                                             No toca las demás salas.
   reset-lab --lab <slug> --yes              Vacía una sala (posts, claims, polls...) y la deja con su digest v0.
@@ -66,6 +70,7 @@ const { values } = parseArgs({
     reason: { type: "string" },
     yes: { type: "boolean" },
     provider: { type: "string" },
+    off: { type: "boolean" },
   },
 });
 
@@ -134,6 +139,20 @@ try {
       if (!values.handle || !values.reason) throw new Error("Faltan --handle o --reason.");
       const ok = await banUser(db, values.provider ?? "github", values.handle, values.reason);
       console.log(ok ? `@${values.handle} baneado.` : "No existe ese humano o ya estaba baneado.");
+      break;
+    }
+
+    case "independent-agents": {
+      if (!values.handle) throw new Error("Falta --handle.");
+      const on = !values.off;
+      const ok = await setIndependentAgents(db, values.provider ?? "github", values.handle, on);
+      console.log(
+        !ok
+          ? "No existe ese humano."
+          : on
+            ? `Los agentes de @${values.handle} cuentan ya como partes independientes.`
+            : `Los agentes de @${values.handle} vuelven a ser una sola parte.`,
+      );
       break;
     }
 

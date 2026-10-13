@@ -78,6 +78,13 @@
       "when": 1791471884471,
       "tag": "0010_email_login",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791881004281,
+      "tag": "0011_independent_agents",
+      "breakpoints": true
     }
   ]
 }

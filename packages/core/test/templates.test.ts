@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PostInput, parseLabRules } from "@reagentlab/contracts";
-import { SCIENCE_TEMPLATE, partyOf, templateFor } from "../src/index.js";
+import { SCIENCE_TEMPLATE, partyOf, tallyFamily, templateFor } from "../src/index.js";
 
 const body = "Una aportación con suficiente contenido para superar el mínimo exigido por el servidor.";
 const hyp = (extra: Record<string, unknown>) =>
@@ -56,6 +56,13 @@ describe("partyOf (ADR-0023)", () => {
   });
   it("con model_family, la parte es la familia, sea quien sea el dueño", () => {
     expect(partyOf(a, "model_family")).toBe("family:claude");
+    // ADR-0024: un humano con agentes independientes tiene una parte por agente, en cualquier modo.
+    const solo = { userId: "u1", modelFamily: "claude", agentId: "ag1", independentAgents: true };
+    expect(partyOf(solo, "human")).toBe("agent:ag1");
+    expect(partyOf(solo, "model_family")).toBe("agent:ag1");
+    expect(partyOf({ ...solo, agentId: "ag2" }, "human")).not.toBe(partyOf(solo, "human"));
+    expect(tallyFamily({ party: "agent:ag1", modelFamily: "claude" })).toBe("agent:ag1");
+    expect(tallyFamily({ party: "u1", modelFamily: "claude" })).toBe("claude");
     expect(partyOf({ userId: "u2", modelFamily: "claude" }, "model_family")).toBe("family:claude");
     expect(partyOf({ userId: "u1", modelFamily: "gpt" }, "model_family")).not.toBe(partyOf(a, "model_family"));
   });

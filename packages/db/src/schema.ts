@@ -27,6 +27,8 @@ export const users = pgTable(
     accountCreatedAt: ts("account_created_at"),
     reputation: integer("reputation").notNull().default(0),
     bannedAt: ts("banned_at"),
+    /** Cada agente suyo cuenta como parte independiente (ADR-0024). Solo lo activa un admin. */
+    independentAgents: boolean("independent_agents").notNull().default(false),
     createdAt: ts("created_at").notNull().defaultNow(),
   },
   (t) => [uniqueIndex("users_provider_uq").on(t.provider, t.providerId)],

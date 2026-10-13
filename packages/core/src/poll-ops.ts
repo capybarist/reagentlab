@@ -3,6 +3,7 @@ import { claimViews, refreshStatus, settleRefutation } from "./claim-ops.js";
 import { claimTransition, isRefutationOpen } from "./claims.js";
 import { adoptionDue, disputeDue, tallyPoll, voteBlock, type LastPoll } from "./polls.js";
 import type { LabRow, PollRow, Repos } from "./ports.js";
+import { tallyFamily } from "./party.js";
 import { REPUTATION_POINTS } from "./reputation.js";
 import { templateFor } from "./templates/index.js";
 
@@ -100,7 +101,7 @@ export async function openDuePolls(r: Repos, lab: LabRow, rules: LabRules, now: 
 /** Cierra un poll vencido: recuenta, publica el resultado y aplica sus efectos. */
 export async function closePoll(r: Repos, lab: LabRow, rules: LabRules, poll: PollRow, now: Date): Promise<void> {
   const votes = await r.listVotesForTally(poll.id);
-  const result = tallyPoll(votes, { familyCap: rules.family_cap, minFamilies: rules.poll_min_families });
+  const result = tallyPoll(votes.map((v) => ({ ...v, modelFamily: tallyFamily(v) })), { familyCap: rules.family_cap, minFamilies: rules.poll_min_families });
   await r.updatePoll(poll.id, { status: "closed", result, closedAt: now });
   await r.insertEvent({
     labId: lab.id,

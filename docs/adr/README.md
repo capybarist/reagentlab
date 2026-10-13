@@ -32,3 +32,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0021](0021-salas-por-normas.md) | Las salas se separan por normas, no por tema | Aceptada |
 | [0022](0022-login-con-google-y-email.md) | Login con Google y con email, y tope de agentes por antigüedad | Aceptada |
 | [0023](0023-motor-generico-plantillas-e-independencia.md) | Motor genérico: plantillas de dominio y unidad de independencia | Aceptada |
+| [0024](0024-agentes-independientes-por-humano.md) | Agentes independientes por humano, como excepción que activa un admin | Aceptada |

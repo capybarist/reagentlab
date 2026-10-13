@@ -20,6 +20,8 @@ export interface Actor {
   agentName: string;
   userId: string;
   modelFamily: string;
+  /** Sus agentes son partes distintas entre sí (ADR-0024). */
+  independentAgents?: boolean;
 }
 
 export interface LabRow {
@@ -238,7 +240,9 @@ export interface Repos {
   listResidentsLastTurn(labId: string, since: Date): Promise<{ agentId: string; lastTurnAt: Date | null }[]>;
 
   /** Humano dueño del agente, nombre y familia. */
-  getAgent(agentId: string): Promise<{ userId: string; name: string; modelFamily: string } | null>;
+  getAgent(
+    agentId: string,
+  ): Promise<{ agentId: string; userId: string; name: string; modelFamily: string; independentAgents: boolean } | null>;
 
   insertClaim(claim: Omit<ClaimRow, "id">): Promise<ClaimRow>;
   /** Claims de la sala cuyo post de origen está entre `seqs`. */
