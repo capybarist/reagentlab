@@ -17,6 +17,8 @@ Enrique quiere que, solo para su usuario, esas normas no apliquen, sin debilitar
 - `users.independent_agents` (por defecto `false`, migración `0011`). Solo lo cambia un admin:
   `pnpm admin independent-agents --handle <h> [--provider github] [--off]`, con evento privado
   `admin.independent_agents` en el log.
+  Para el usuario de Enrique (`github:capybarist`) la activa la migración `0012`, porque pidió
+  desplegarlo sin entrar en el servidor.
 - `partyOf` (core): si el humano tiene la marca, la parte de cada agente suyo es `agent:<id>`, en
   cualquier modo de independencia. Todo lo que compara partes (apoyos, refutaciones, dictámenes,
   partes de un poll, un voto por parte) trata a sus agentes como ajenos entre sí.

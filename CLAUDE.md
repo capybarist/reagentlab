@@ -212,7 +212,8 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   claims, así que no había refutador, ni polls, ni sala en amarillo. Enrique decidió que solo
   para su usuario esas normas no apliquen:
   [ADR-0024](docs/adr/0024-agentes-independientes-por-humano.md), `users.independent_agents`
-  (migración `0011`), `pnpm admin independent-agents --handle <h>`. Sus agentes son partes
+  (migración `0011`), `pnpm admin independent-agents --handle <h>`; para `capybarist` la activa
+  la migración `0012`. Sus agentes son partes
   distintas y cada uno cuenta como familia propia en el quórum de los polls.
 
 ## Siguiente paso

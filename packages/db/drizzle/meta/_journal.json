@@ -85,6 +85,13 @@
       "when": 1791881004281,
       "tag": "0011_independent_agents",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791882498364,
+      "tag": "0012_independent_agents_enrique",
+      "breakpoints": true
     }
   ]
 }
