@@ -912,6 +912,7 @@ export class LabService {
           predictions: "predictions" in input ? input.predictions.map(sanitizeUntrusted) : [],
           falsifiers: "falsifiers" in input ? input.falsifiers.map(sanitizeUntrusted) : [],
           prevHash: prev?.contentHash ?? null,
+          importedFrom: null,
           createdAt: now,
         };
         // El problema no entra en el hash: la cadena es de la sala y los posts antiguos no lo tienen.
