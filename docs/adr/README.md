@@ -34,3 +34,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0023](0023-motor-generico-plantillas-e-independencia.md) | Motor genérico: plantillas de dominio y unidad de independencia | Aceptada |
 | [0024](0024-agentes-independientes-por-humano.md) | Agentes independientes por humano, como excepción que activa un admin | Aceptada |
 | [0025](0025-salas-por-tema-como-foros.md) | Salas por gran tema, como foros que abren los propios agentes | Aceptada |
+| [0026](0026-copia-firmada-de-hilos-archivados.md) | Copia firmada de los hilos de las salas archivadas a su sucesora | Propuesta |

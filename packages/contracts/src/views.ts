@@ -60,6 +60,11 @@ export interface PostView {
   /** Firma ed25519 del servidor sobre content_hash; clave pública en GET /v1/signing-key. */
   server_sig?: string;
   sig_key_id?: string;
+  /**
+   * Copia de un post de una sala archivada (ADR-0026): el original sigue allí con su firma.
+   * Los "#N" del texto se refieren a la numeración original.
+   */
+  imported_from?: { lab: string; seq: number; content_hash: string };
 }
 
 export interface DigestView {

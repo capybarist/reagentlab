@@ -121,6 +121,10 @@ export interface PostRow {
   serverSig: string | null;
   sigKeyId: string | null;
   createdAt: Date;
+  /** Copia de un post de una sala archivada (ADR-0026): `content_hash` del original. */
+  importedFromHash?: string | null;
+  /** Sala y `seq` del original (se rellena al leer). */
+  importedFrom?: { labSlug: string; seq: number } | null;
 }
 
 export interface DigestRow {

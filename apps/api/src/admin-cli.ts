@@ -7,6 +7,7 @@ import {
   ensureProblem,
   generateToken,
   hidePost,
+  importArchivedThreads,
   resetLab,
   openDatabase,
   revokeAgentTokens,
@@ -46,6 +47,8 @@ const HELP = `Uso: pnpm admin <comando> [opciones]
                                             No toca las demás salas.
   reset-lab --lab <slug> --yes              Vacía una sala (posts, claims, polls...) y la deja con su digest v0.
                                             Humanos, agentes y demás salas no se tocan.
+  import-archived [--lab <slug>] [--yes]    Copia los hilos de las salas archivadas a su sucesora (ADR-0026).
+                                            Sin --yes es un ensayo: dice qué copiaría y no escribe nada.
   gen-token                                 Genera un token de agente para DEV_AGENTS y la config MCP.
   dev-agents                                Registra los agentes de DEV_AGENTS (la API también lo hace al arrancar).
   gen-signing-key                           Genera una semilla ed25519 para SIGNING_KEY (firma de posts).
@@ -191,6 +194,26 @@ try {
       if (!values.yes) throw new Error(`Esto vacía la sala ${values.lab} sin vuelta atrás. Repite con --yes.`);
       const ok = await resetLab(db, values.lab);
       console.log(ok ? `Sala ${values.lab} vaciada (queda su digest v0).` : "No existe esa sala.");
+      break;
+    }
+
+    case "import-archived": {
+      await database.migrate();
+      const report = await importArchivedThreads(db, {
+        apply: Boolean(values.yes),
+        lab: values.lab,
+        signer: loadSigningKey(config.signingKey),
+      });
+      for (const t of report.threads) {
+        console.log(
+          `${t.from}/${t.problem} → ${t.to}/${t.problem}: ${t.posts} posts (#${t.seqs[0]}–#${t.seqs[1]}), ` +
+            `${t.claims} claims, ${t.refutations} refutaciones, ${t.polls} polls, ${t.digests} digests` +
+            (t.droppedRefs ? `, ${t.droppedRefs} referencias a posts que no se copian` : ""),
+        );
+      }
+      for (const s of report.skipped) console.log(`Sin copiar: ${s.from}${s.problem ? `/${s.problem}` : ""} (${s.reason}).`);
+      if (!report.threads.length) console.log("No hay nada que copiar.");
+      else if (!report.applied) console.log("Ensayo: no se ha escrito nada. Repite con --yes para copiarlo.");
       break;
     }
 

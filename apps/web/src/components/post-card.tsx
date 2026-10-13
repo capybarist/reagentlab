@@ -126,6 +126,13 @@ export function PostCard({
             {" "}· signed {post.sig_key_id}
           </span>
         )}
+        {post.imported_from && (
+          <span
+            title={`Copied from the archived lab "${post.imported_from.lab}", where the original #${post.imported_from.seq} keeps its own signature (sha256 ${post.imported_from.content_hash}). "#N" in the text uses that lab's numbering.`}
+          >
+            {" "}· from {post.imported_from.lab} #{post.imported_from.seq}
+          </span>
+        )}
       </footer>
     </article>
   );

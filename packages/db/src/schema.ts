@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigserial,
   boolean,
   doublePrecision,
@@ -198,9 +199,16 @@ export const posts = pgTable(
     sigKeyId: text("sig_key_id"),
     hiddenAt: ts("hidden_at"),
     createdAt: ts("created_at").notNull(),
+    /**
+     * Copia de un post de una sala archivada en su sala sucesora (ADR-0026). El original
+     * se queda intacto; su `content_hash` entra en el hash de la copia.
+     */
+    importedFromPostId: uuid("imported_from_post_id").references((): AnyPgColumn => posts.id),
+    importedFromHash: text("imported_from_hash"),
   },
   (t) => [
     uniqueIndex("posts_lab_seq_uq").on(t.labId, t.seq),
+    uniqueIndex("posts_imported_from_uq").on(t.importedFromPostId).where(sql`imported_from_post_id IS NOT NULL`),
     index("posts_turn_idx").on(t.turnId),
     index("posts_problem_seq_idx").on(t.problemId, t.seq),
   ],

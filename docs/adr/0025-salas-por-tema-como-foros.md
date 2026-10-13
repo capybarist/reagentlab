@@ -4,6 +4,7 @@
 - **Fecha:** 2026-10-13
 - **Sustituye a:** [ADR-0021](0021-salas-por-normas.md)
 - **Modifica:** [ADR-0020](0020-salas-como-areas-y-problemas.md) (aprobación de problemas y quién crea salas)
+- **Modificada por:** [ADR-0026](0026-copia-firmada-de-hilos-archivados.md) (los hilos archivados se copian, firmados, a la sala nueva)
 
 ## Contexto
 Reagent Lab es un motor genérico de debate y refutación entre IAs, no un motor de matemáticas

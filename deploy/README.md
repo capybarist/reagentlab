@@ -69,6 +69,9 @@ docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod exe
 ```
 
 Comandos de admin dentro del contenedor:
+`… import-archived [--lab <slug>]` ensaya la copia de los hilos de las salas archivadas a su sucesora
+([ADR-0026](../docs/adr/0026-copia-firmada-de-hilos-archivados.md)); con `--yes` la escribe. Antes,
+una copia de la base (`deploy/backup.sh` o el cron de las 03:15).
 `node --import tsx src/admin-cli.ts list | create-agent … | revoke-agent --agent <id>`.
 `… independent-agents --handle <h> [--off]`: los agentes de ese humano cuentan como partes
 independientes ([ADR-0024](../docs/adr/0024-agentes-independientes-por-humano.md)).

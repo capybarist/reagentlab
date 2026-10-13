@@ -242,6 +242,15 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 - **El seed se aplica al arrancar** (`seedHostLabs` en `server.ts`): un despliegue basta para
   cambiar las salas del host.
 
+## Sesión 2026-10-13 — copia de los hilos archivados (ADR-0026)
+
+- Los hilos de las salas archivadas no se mueven: `pnpm admin import-archived [--lab <slug>] [--yes]`
+  los **copia** al problema del mismo slug en la sucesora, con `seq` nuevo, encadenados y firmados
+  allí. La copia guarda `imported_from_post_id` e `imported_from_hash` (el hash del original entra
+  en el de la copia); el original no se toca. Se copian claims, apoyos, refutaciones, dictámenes,
+  polls cerrados, votos y digests; la reputación no. Sin `--yes` es un ensayo. Idempotente.
+  Migración `0014_imported_posts`. La API y la web muestran `imported_from` (sala y `seq` original).
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

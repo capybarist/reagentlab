@@ -15,6 +15,7 @@ import type {
 } from "@reagentlab/core";
 import type { ClaimStatus, Evidence, PollResult, Role } from "@reagentlab/contracts";
 import { and, asc, count, desc, eq, gt, gte, inArray, lte, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { Db } from "./connection.js";
 import {
   agents,
@@ -68,11 +69,17 @@ const toProblem = (p: typeof problems.$inferSelect): ProblemRow => ({ ...p });
 
 const toRefutation = (r: typeof refutations.$inferSelect): RefutationRow => ({ ...r });
 
+// Original de una copia (ADR-0026).
+const importedPosts = alias(posts, "imported_posts");
+const importedLabs = alias(labs, "imported_labs");
+
 const postColumns = {
   post: posts,
   agentName: agents.name,
   modelFamily: agents.modelFamily,
   problemSlug: problems.slug,
+  importedLabSlug: importedLabs.slug,
+  importedSeq: importedPosts.seq,
 };
 
 function toPost(r: {
@@ -80,6 +87,8 @@ function toPost(r: {
   agentName: string;
   modelFamily: string;
   problemSlug: string | null;
+  importedLabSlug: string | null;
+  importedSeq: number | null;
 }): PostRow {
   const p = r.post;
   return {
@@ -108,6 +117,8 @@ function toPost(r: {
     serverSig: p.serverSig,
     sigKeyId: p.sigKeyId,
     createdAt: p.createdAt,
+    importedFromHash: p.importedFromHash,
+    importedFrom: r.importedLabSlug && r.importedSeq !== null ? { labSlug: r.importedLabSlug, seq: r.importedSeq } : null,
   };
 }
 
@@ -275,6 +286,8 @@ function makeRepos(db: Db): Repos {
         .from(posts)
         .innerJoin(agents, eq(agents.id, posts.agentId))
         .leftJoin(problems, eq(problems.id, posts.problemId))
+        .leftJoin(importedPosts, eq(importedPosts.id, posts.importedFromPostId))
+        .leftJoin(importedLabs, eq(importedLabs.id, importedPosts.labId))
         .where(eq(posts.id, post.id));
       return toPost(row!);
     },
@@ -285,6 +298,8 @@ function makeRepos(db: Db): Repos {
         .from(posts)
         .innerJoin(agents, eq(agents.id, posts.agentId))
         .leftJoin(problems, eq(problems.id, posts.problemId))
+        .leftJoin(importedPosts, eq(importedPosts.id, posts.importedFromPostId))
+        .leftJoin(importedLabs, eq(importedLabs.id, importedPosts.labId))
         .where(eq(posts.labId, labId))
         .orderBy(desc(posts.seq))
         .limit(1);
@@ -297,6 +312,8 @@ function makeRepos(db: Db): Repos {
         .from(posts)
         .innerJoin(agents, eq(agents.id, posts.agentId))
         .leftJoin(problems, eq(problems.id, posts.problemId))
+        .leftJoin(importedPosts, eq(importedPosts.id, posts.importedFromPostId))
+        .leftJoin(importedLabs, eq(importedLabs.id, importedPosts.labId))
         .where(
           and(visiblePosts(labId), gt(posts.seq, afterSeq), problemId ? eq(posts.problemId, problemId) : undefined),
         )
@@ -311,6 +328,8 @@ function makeRepos(db: Db): Repos {
         .from(posts)
         .innerJoin(agents, eq(agents.id, posts.agentId))
         .leftJoin(problems, eq(problems.id, posts.problemId))
+        .leftJoin(importedPosts, eq(importedPosts.id, posts.importedFromPostId))
+        .leftJoin(importedLabs, eq(importedLabs.id, importedPosts.labId))
         .where(and(eq(posts.problemId, problemId), sql`${posts.hiddenAt} IS NULL`))
         .orderBy(desc(posts.seq))
         .limit(limit);
@@ -376,6 +395,8 @@ function makeRepos(db: Db): Repos {
         .from(posts)
         .innerJoin(agents, eq(agents.id, posts.agentId))
         .leftJoin(problems, eq(problems.id, posts.problemId))
+        .leftJoin(importedPosts, eq(importedPosts.id, posts.importedFromPostId))
+        .leftJoin(importedLabs, eq(importedLabs.id, importedPosts.labId))
         .where(and(visiblePosts(labId), inArray(posts.seq, seqs)));
       return rows.map(toPost);
     },

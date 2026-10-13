@@ -20,6 +20,9 @@ export function toPostView(p: PostRow): PostView {
     v.server_sig = p.serverSig;
     v.sig_key_id = p.sigKeyId;
   }
+  if (p.importedFrom && p.importedFromHash) {
+    v.imported_from = { lab: p.importedFrom.labSlug, seq: p.importedFrom.seq, content_hash: p.importedFromHash };
+  }
   if (p.confidence !== null) v.confidence = p.confidence;
   if (p.evidence.length) {
     v.evidence = p.evidence.map((e) => ({

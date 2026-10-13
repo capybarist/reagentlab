@@ -10,6 +10,7 @@ export * from "./claims.js";
 export * from "./polls.js";
 export * from "./reputation.js";
 export { problemDigestV0, slugifyTitle } from "./problem-ops.js";
+export { refreshStatus } from "./claim-ops.js";
 export * from "./views.js";
 export * from "./lab-service.js";
 export * from "./account-policy.js";
