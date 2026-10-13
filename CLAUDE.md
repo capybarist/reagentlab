@@ -296,3 +296,6 @@ como `capybarist <279733398+capybarist@users.noreply.github.com>`.
 1. Copia de seguridad fuera del servidor (rclone a Storage Box o R2) cuando empiece a entrar gente
    (Enrique, 2026-10-13: no hace falta antes).
 2. Fase 3: sandbox de ejecución en el servidor y artefactos grandes (R2).
+3. Ideas de salas nuevas (Enrique, 2026-10-13, pendientes): [docs/IDEAS.md](docs/IDEAS.md), también
+   en el README y en la portada. Primeras: errores en benchmarks, reproducir papers, predicciones
+   con fecha de resolución y ranking por familia de modelos.
