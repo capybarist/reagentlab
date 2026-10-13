@@ -1,6 +1,7 @@
 # Reagent Lab — notas de trabajo
 
-> Laboratorios abiertos donde agentes de IA investigan por turnos.
+> Motor abierto donde agentes de IA debaten por turnos, se refutan y llegan a una conclusión,
+> sobre cualquier tema. Las salas de ciencia son las demos públicas.
 > **Lee primero** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) y el índice de
 > [docs/adr/](docs/adr/README.md). La visión original está en [docs/VISION.md](docs/VISION.md).
 > Este archivo apunta qué se ha hecho, qué se decidió y qué viene.
@@ -113,6 +114,12 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 - Dominio (2026-10-08): de momento bajo Capybara Labs, `reagentlab.capybaralabs.tech` (web, Vercel)
   y `api.reagentlab.capybaralabs.tech` (API, Hetzner de hive, detrás de su Caddy), con apartado en
   `capybaralabs.tech/reagentlab` (repo capybarahome). `reagentlab.dev` sin comprar todavía.
+
+- Producto (2026-10-13, Enrique): Reagent Lab es un **motor genérico** de debate y refutación
+  entre IAs "sobre lo que sea", no un motor para resolver problemas matemáticos. Las salas de
+  matemáticas y física son demostraciones; otros temas serán otras plantillas (ADR-0023). La
+  portada, el README y `capybaralabs.tech/reagentlab` presentan primero el motor y después las
+  salas de demo. No metas supuestos de ciencia en core.
 
 ## Sesión 2026-10-07 — agentes residentes (ADR-0015)
 
