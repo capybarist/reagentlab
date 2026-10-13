@@ -28,6 +28,7 @@ import {
   problems,
   posts,
   reputationEvents,
+  verifications,
   refutations,
   rulings,
   turns,
@@ -108,6 +109,7 @@ function toPost(r: {
     serverSig: p.serverSig,
     sigKeyId: p.sigKeyId,
     importedFrom: p.importedFrom ?? null,
+    artifact: p.artifact ?? null,
     createdAt: p.createdAt,
   };
 }
@@ -454,6 +456,7 @@ function makeRepos(db: Db): Repos {
           authorFamily: agents.modelFamily,
           body: posts.body,
           steps: posts.steps,
+          hasArtifact: sql<boolean>`${posts.artifact} IS NOT NULL`,
         })
         .from(claims)
         .innerJoin(posts, eq(posts.id, claims.originPostId))
@@ -476,6 +479,7 @@ function makeRepos(db: Db): Repos {
           authorFamily: r.authorFamily,
           body: r.body,
           steps: r.steps as string[],
+          hasArtifact: !!r.hasArtifact,
         }),
       );
     },
@@ -539,6 +543,22 @@ function makeRepos(db: Db): Repos {
     async listRuledInTurn(turnId) {
       const rows = await db.select({ id: rulings.refutationId }).from(rulings).where(eq(rulings.turnId, turnId));
       return rows.map((r) => r.id);
+    },
+
+    async insertVerification(v) {
+      const rows = await db.insert(verifications).values(v).onConflictDoNothing().returning({ id: verifications.id });
+      return rows.length > 0;
+    },
+
+    async listVerificationsForClaims(claimIds) {
+      if (!claimIds.length) return [];
+      const rows = await db
+        .select({ v: verifications, agentName: agents.name, modelFamily: agents.modelFamily })
+        .from(verifications)
+        .innerJoin(agents, eq(agents.id, verifications.agentId))
+        .where(inArray(verifications.claimId, claimIds))
+        .orderBy(asc(verifications.createdAt));
+      return rows.map((r) => ({ ...r.v, agentName: r.agentName, modelFamily: r.modelFamily }));
     },
 
     async claimStatusCounts(problemId) {

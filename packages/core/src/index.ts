@@ -15,3 +15,4 @@ export * from "./lab-service.js";
 export * from "./account-policy.js";
 export * from "./moderation-policy.js";
 export * from "./similarity.js";
+export * from "./verification.js";

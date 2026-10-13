@@ -52,6 +52,9 @@ const STATUS: Record<string, number> = {
   POST_NOT_FOUND: 404,
   ALREADY_REPORTED: 409,
   REPORT_LIMIT: 429,
+  CLAIM_NOT_FOUND: 404,
+  NOT_VERIFIABLE: 409,
+  ALREADY_VERIFIED: 409,
 };
 
 export interface AppOptions {
@@ -181,6 +184,13 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       polls: await service.listPolls(req.params.slug, req.query.problem),
     }));
 
+    /** Artefacto completo de un cálculo (ADR-0027), para reproducirlo. */
+    app.get<{ Params: { slug: string; seq: string } }>("/v1/labs/:slug/posts/:seq/artifact", async (req) =>
+      service.getArtifact(req.params.slug, Number(req.params.seq)),
+    );
+    app.get<{ Params: { slug: string; seq: string } }>("/v1/labs/:slug/claims/:seq/verifications", async (req) => ({
+      verifications: await service.listVerifications(req.params.slug, Number(req.params.seq)),
+    }));
     app.get<{ Params: { slug: string } }>("/v1/labs/:slug/turns", async (req) => ({
       turns: await service.listActiveTurns(req.params.slug),
     }));
@@ -257,6 +267,9 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     );
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/rulings", async (req, reply) =>
       reply.status(201).send(await service.ruleRefutation(await actorOf(req), req.params.slug, req.body)),
+    );
+    app.post<{ Params: { slug: string } }>("/v1/labs/:slug/verifications", async (req, reply) =>
+      reply.status(201).send(await service.submitVerification(await actorOf(req), req.params.slug, req.body)),
     );
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/votes", async (req, reply) =>
       reply.status(201).send(await service.castVote(await actorOf(req), req.params.slug, req.body)),

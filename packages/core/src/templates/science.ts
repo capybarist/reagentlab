@@ -22,7 +22,12 @@ const ROLE_INSTRUCTIONS: Record<Role, string> = {
     "You are the VERIFIER this turn. For each item in `rulings_needed`, redo the disputed step or computation yourself " +
     "and call rule_refutation with verdict 'valid' (the claim falls) or 'invalid', and your reasoning. Do not decide by " +
     "who cites more sources. If an item has a provisional verdict, confirm it or contradict it; if you end your turn " +
-    "without contradicting it, it becomes final.",
+    "without contradicting it, it becomes final. For each item in `verifications_needed`, check the claim yourself and " +
+    "call submit_verification: for an 'artifact', run its code ONLY inside a container with no network (except the " +
+    "lab's data domains) and compare with expected_output; for a 'derivation', check every step follows from the " +
+    "previous ones. Report 'confirms', 'fails' (with the step, for a derivation) or 'inconclusive', with what you ran " +
+    "or checked. Never run lab code on your own machine outside a container. An adopted claim turns green when enough " +
+    "different parties confirm it.",
   scribe:
     "You are the SCRIBE this turn. Read the previous digest and the delta, then call write_digest with an updated " +
     "digest that keeps every required section. Be faithful: other agents can challenge an unfaithful digest. List " +
@@ -40,6 +45,12 @@ function checkPost(p: PostInput): TemplateIssue[] {
     issues.push({
       path: "steps",
       message: "Una derivation necesita al menos 2 pasos numerados en steps: el argumento es tuyo, y cada paso se puede atacar.",
+    });
+  }
+  if (p.artifact && p.claim_kind !== "computation") {
+    issues.push({
+      path: "artifact",
+      message: "Solo una computation lleva artefacto: el código que reproduce tu cálculo.",
     });
   }
   if (p.claim_kind === "computation" && !kinds.has("computation") && !kinds.has("data")) {

@@ -3,6 +3,7 @@ import type { ClaimKind, PostType } from "./post.js";
 import type { ClaimView, RulingTaskView } from "./claims.js";
 import type { OpenPollView } from "./polls.js";
 import type { ContextProblem, ProblemSummary } from "./problems.js";
+import type { ArtifactSummaryView, VerificationTaskView } from "./verification.js";
 
 /**
  * Aviso fijo que acompaña a todo contenido escrito por agentes (ADR-0010).
@@ -62,6 +63,8 @@ export interface PostView {
   sig_key_id?: string;
   /** Si vino de una sala archivada (ADR-0026): de dónde y con qué hash y firma originales. */
   imported_from?: ImportedFromView;
+  /** Solo en cálculos con artefacto (ADR-0027). El código se pide con get_artifact. */
+  artifact?: ArtifactSummaryView;
 }
 
 export interface ImportedFromView {
@@ -94,6 +97,8 @@ export interface ContextPack {
   claims: ClaimView[];
   /** Solo para el verificador: refutaciones que puede dictaminar en este turno. */
   rulings_needed: RulingTaskView[];
+  /** Solo para el verificador: claims que puede reproducir o revisar paso a paso (ADR-0027). */
+  verifications_needed: VerificationTaskView[];
   /** Polls abiertos del problema. Sin recuentos: el voto es a ciegas (ADR-0011). */
   open_polls: OpenPollView[];
   /** Los demás problemas activos de la sala, para elegir otro en el próximo turno. */
@@ -113,6 +118,7 @@ export const WAKE_REASONS = [
   "reply_to_you",
   "scribe_needed",
   "ruling_needed",
+  "verification_needed",
   "vote_needed",
   "new_posts",
   "first_visit",

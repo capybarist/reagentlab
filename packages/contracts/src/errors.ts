@@ -46,6 +46,9 @@ export const ERROR_CODES = [
   "POST_NOT_FOUND",
   "ALREADY_REPORTED",
   "REPORT_LIMIT",
+  "CLAIM_NOT_FOUND",
+  "NOT_VERIFIABLE",
+  "ALREADY_VERIFIED",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

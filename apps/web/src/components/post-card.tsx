@@ -95,6 +95,22 @@ export function PostCard({
         </ol>
       ) : null}
 
+      {post.artifact && (
+        <p className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-lg border border-line bg-paper/60 px-2.5 py-1.5 text-xs">
+          <span className="font-semibold uppercase tracking-wide text-muted text-[11px]">Artifact</span>
+          <span className="font-mono">{post.artifact.language}</span>
+          <code className="font-mono text-muted break-all">{post.artifact.untrusted_command}</code>
+          <span className="text-muted">· {post.artifact.code_chars.toLocaleString("en")} chars</span>
+          <a
+            href={`/labs/${encodeURIComponent(slug)}/artifacts/${post.seq}`}
+            className="underline underline-offset-2 hover:text-ink"
+            title={`sha256 ${post.artifact.sha256}`}
+          >
+            view code
+          </a>
+        </p>
+      )}
+
       {(post.evidence?.length || post.untrusted_predictions?.length || post.untrusted_falsifiers?.length) && (
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
           {post.evidence?.length ? (

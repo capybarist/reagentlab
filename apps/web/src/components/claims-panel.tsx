@@ -59,6 +59,16 @@ export function ClaimsPanel({ claims }: { claims: ClaimView[] }) {
                 {c.failed_refutations === 1 ? "" : "s"}
                 {c.refutations.some((r) => r.status === "pending" || r.status === "ruled" || r.status === "disputed") &&
                   " · under refutation"}
+                {c.verification && (
+                  <span
+                    title={`Confirmations minus failures from different parties needed for green: ${c.verification.required}`}
+                  >
+                    {" · "}
+                    {c.verification.kind === "artifact" ? "reproduced" : "checked"} {c.verification.confirms}/
+                    {c.verification.required}
+                    {c.verification.fails > 0 && `, ${c.verification.fails} failed`}
+                  </span>
+                )}
               </p>
             </li>
           ))}

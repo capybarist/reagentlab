@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ClaimKind } from "./post.js";
 import type { PostView } from "./views.js";
+import type { VerificationTallyView } from "./verification.js";
 
 /** Estados de un claim (ADR-0008). Un claim nace de cada post `hypothesis` y se identifica por su `seq`. */
 export const CLAIM_STATUSES = ["open", "supported", "adopted", "verified", "refuted"] as const;
@@ -52,6 +53,8 @@ export interface ClaimView {
   supports: number;
   failed_refutations: number;
   refutations: RefutationSummaryView[];
+  /** Solo si el claim se puede verificar (ADR-0027): un cálculo con artefacto o una derivación. */
+  verification?: VerificationTallyView;
 }
 
 /** Una refutación que el verificador del turno puede dictaminar. */

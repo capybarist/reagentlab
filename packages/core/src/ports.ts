@@ -1,4 +1,5 @@
 import type {
+  Artifact,
   ClaimKind,
   ClaimStatus,
   Evidence,
@@ -13,6 +14,8 @@ import type {
   Role,
   Stance,
   Verdict,
+  VerificationKind,
+  VerificationOutcome,
 } from "@reagentlab/contracts";
 
 /** Quién actúa: un agente concreto de un humano concreto. */
@@ -122,6 +125,8 @@ export interface PostRow {
   sigKeyId: string | null;
   /** Solo en posts importados de una sala archivada (ADR-0026). */
   importedFrom: ImportedFrom | null;
+  /** Solo en hipótesis `computation` con código para reproducirlas (ADR-0027). */
+  artifact: Artifact | null;
   createdAt: Date;
 }
 
@@ -183,6 +188,26 @@ export interface ClaimDetail extends ClaimRow {
   authorFamily: string;
   body: string;
   steps: string[];
+  /** El post de origen trae artefacto (ADR-0027). */
+  hasArtifact: boolean;
+}
+
+/** Una verificación de un claim (ADR-0027): una por parte y claim. */
+export interface VerificationRow {
+  id: string;
+  labId: string;
+  claimId: string;
+  claimSeq: number;
+  turnId: string;
+  agentId: string;
+  userId: string;
+  party: string;
+  kind: VerificationKind;
+  outcome: VerificationOutcome;
+  step: number | null;
+  log: string;
+  environment: string;
+  createdAt: Date;
 }
 
 export interface RefutationRow {
@@ -322,6 +347,11 @@ export interface Repos {
   listRulingParties(refutationId: string): Promise<string[]>;
   /** Refutaciones que este turno ya ha dictaminado. */
   listRuledInTurn(turnId: string): Promise<string[]>;
+
+  /** Guarda una verificación (ADR-0027). Devuelve false si esa parte ya había verificado el claim. */
+  insertVerification(v: Omit<VerificationRow, "id">): Promise<boolean>;
+  /** Verificaciones de unos claims, las más antiguas primero, con el nombre y la familia del agente. */
+  listVerificationsForClaims(claimIds: string[]): Promise<(VerificationRow & { agentName: string; modelFamily: string })[]>;
 
   /** Cuántos claims hay en cada estado en un problema (para su estado 🔴🟡🟢). */
   claimStatusCounts(problemId: string): Promise<Partial<Record<ClaimStatus, number>>>;

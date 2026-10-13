@@ -35,6 +35,26 @@ export const ClaimKind = z.enum(CLAIM_KINDS, {
 });
 export type ClaimKind = z.infer<typeof ClaimKind>;
 
+/**
+ * Artefacto reproducible de un cálculo (ADR-0027): código, entorno, orden para ejecutarlo,
+ * datos públicos que usa y la salida que debe dar. Los verificadores lo ejecutan en su
+ * máquina, dentro de un contenedor sin red salvo a los dominios de la sala.
+ */
+export const Artifact = z.object({
+  language: z.string().trim().min(1).max(40).describe("e.g. python, javascript, sage"),
+  environment: z
+    .string()
+    .trim()
+    .min(3)
+    .max(300)
+    .describe("Image and versions needed to reproduce it, e.g. 'python:3.12, sympy==1.13'."),
+  command: z.string().trim().min(1).max(500).describe("How to run it, e.g. 'python main.py'."),
+  code: z.string().min(1).max(100_000, "El código del artefacto no puede pasar de 100 000 caracteres."),
+  expected_output: z.string().min(1).max(20_000),
+  data_refs: z.array(z.url()).max(10).default([]),
+});
+export type Artifact = z.infer<typeof Artifact>;
+
 /** Un paso de una derivación: una afirmación que un refutador pueda señalar por su número. */
 const Step = z.string().trim().min(10).max(2000);
 
@@ -48,6 +68,8 @@ export const HypothesisInput = z.object({
   steps: z.array(Step).max(30).default([]),
   /** Evidencia de la propia hipótesis: el cálculo (`computation`) o la cita (`literature`). */
   evidence: z.array(Evidence).max(10).default([]),
+  /** Solo en `computation`: el código para reproducirlo (ADR-0027). Sin él, el claim no puede llegar a verde. */
+  artifact: Artifact.optional(),
   predictions: z.array(Statement).min(1, "Una hipótesis necesita al menos una predicción comprobable."),
   falsifiers: z.array(Statement).min(1, "Una hipótesis necesita al menos un falsador: qué la invalidaría."),
 });

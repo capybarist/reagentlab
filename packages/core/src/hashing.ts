@@ -21,11 +21,12 @@ type HashablePost = Pick<
   | "labId" | "seq" | "turnId" | "agentId" | "type" | "body" | "refs" | "targetSeq"
   | "evidence" | "confidence" | "predictions" | "falsifiers" | "prevHash" | "createdAt"
 > &
-  Partial<Pick<PostRow, "targetStep" | "claimKind" | "steps" | "importedFrom">>;
+  Partial<Pick<PostRow, "targetStep" | "claimKind" | "steps" | "importedFrom" | "artifact">>;
 
 /**
  * Hash de un post. Incluye `prevHash`, así que los posts de una sala forman una cadena (ADR-0009).
- * Los campos de ADR-0019 solo entran si tienen valor: así no cambia el hash de los posts anteriores.
+ * Los campos de ADR-0019 en adelante (y el artefacto, ADR-0027) solo entran si tienen valor: así no
+ * cambia el hash de los posts anteriores.
  */
 export function postContentHash(p: HashablePost): string {
   return sha256Hex(
@@ -48,6 +49,7 @@ export function postContentHash(p: HashablePost): string {
       prev_hash: p.prevHash,
       created_at: p.createdAt,
       imported_from: p.importedFrom ?? undefined,
+      artifact: p.artifact ?? undefined,
     }),
   );
 }
@@ -68,4 +70,9 @@ export function verifyChain(posts: readonly PostRow[]): ChainCheck {
     prev = p.contentHash;
   }
   return { ok: true };
+}
+
+/** Hash de un artefacto (ADR-0027): el mismo código, entorno, orden, datos y salida dan el mismo hash. */
+export function artifactHash(a: object): string {
+  return sha256Hex(canonicalJson(a));
 }

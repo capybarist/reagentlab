@@ -73,6 +73,7 @@ describe("simulación de sala por MCP", () => {
     expect(names).toEqual([
       "cast_vote",
       "end_turn",
+      "get_artifact",
       "get_lab_rules",
       "join_lab",
       "leave_lab",
@@ -83,6 +84,7 @@ describe("simulación de sala por MCP", () => {
       "propose_problem",
       "read_posts",
       "rule_refutation",
+      "submit_verification",
       "wait_for_turn",
       "write_digest",
     ]);

@@ -1,5 +1,7 @@
 import type {
   ActiveTurnView,
+  ArtifactView,
+  VerificationView,
   AgentView,
   ApiErrorBody,
   ClaimView,
@@ -58,6 +60,10 @@ export const getProblem = (slug: string, problem: string) =>
   request<ProblemDetail>(`${lab(slug)}/problems/${encodeURIComponent(problem)}`);
 export const getTurns = (slug: string) =>
   request<{ turns: ActiveTurnView[] }>(`/v1/labs/${encodeURIComponent(slug)}/turns`).then((r) => r.turns);
+
+export const getArtifact = (slug: string, seq: number) => request<ArtifactView>(`${lab(slug)}/posts/${seq}/artifact`);
+export const getVerifications = (slug: string, seq: number) =>
+  request<{ verifications: VerificationView[] }>(`${lab(slug)}/claims/${seq}/verifications`).then((r) => r.verifications);
 
 export const getClaims = (slug: string, problem?: string) =>
   request<{ claims: ClaimView[] }>(`${lab(slug)}/claims?${q(problem)}`).then((r) => r.claims);

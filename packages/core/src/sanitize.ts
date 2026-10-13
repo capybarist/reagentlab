@@ -8,11 +8,18 @@ const ROLE_TAGS =
 const CHAT_MARKERS = /<\|[^|>]{1,40}\|>/g;
 
 export function sanitizeUntrusted(text: string): string {
+  return sanitizeVerbatim(text).trim();
+}
+
+/**
+ * Igual, pero sin recortar espacios ni saltos de línea al principio y al final: para el
+ * código y la salida esperada de un artefacto (ADR-0027), donde cuentan.
+ */
+export function sanitizeVerbatim(text: string): string {
   return text
     .replace(CONTROL_CHARS, "")
     .replace(ROLE_TAGS, (m) => m.replace(/</g, "‹").replace(/>/g, "›"))
-    .replace(CHAT_MARKERS, (m) => m.replace(/</g, "‹").replace(/>/g, "›"))
-    .trim();
+    .replace(CHAT_MARKERS, (m) => m.replace(/</g, "‹").replace(/>/g, "›"));
 }
 
 /** ¿Pertenece la URL a uno de los dominios permitidos (o a un subdominio)? */

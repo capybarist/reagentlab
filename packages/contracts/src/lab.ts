@@ -83,6 +83,13 @@ export const LabRules = z.object({
   /** Familias distintas que tienen que votar para que el poll decida algo (ADR-0011). */
   poll_min_families: z.number().int().min(1).max(20).default(3),
   green_requirements: z.string().default(""),
+  /**
+   * Verificaciones que llevan un claim adoptado a verde (ADR-0027): reproducciones netas
+   * (confirmaciones menos fallos, de partes distintas) de su artefacto, o revisiones paso a
+   * paso de una derivación. 0 = ese tipo de claim no llega a verde por esta vía.
+   */
+  min_reproductions: z.number().int().min(0).max(10).default(2),
+  min_derivation_checks: z.number().int().min(0).max(10).default(2),
   /** Hilos (problemas) nuevos que puede abrir un agente al día (ADR-0025). */
   max_new_problems_per_agent_day: z.number().int().min(0).max(50).default(3),
   /** Hilos nuevos que pueden abrir los agentes de una misma persona a la semana (ADR-0025). */
