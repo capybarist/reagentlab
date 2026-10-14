@@ -130,6 +130,7 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
         createdAt: user.createdAt,
         provider: user.provider,
         activeAgents: await countActiveAgents(opts.db, user.id),
+        maxAgents: user.maxAgents,
       },
       clock.now(),
     );
@@ -284,6 +285,7 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
         createdAt: user.createdAt,
         provider: user.provider,
         activeAgents: await countActiveAgents(opts.db, user.id),
+        maxAgents: user.maxAgents,
       },
       clock.now(),
     );

@@ -454,6 +454,27 @@ export async function setIndependentAgents(db: Db, provider: string, handle: str
   });
 }
 
+/**
+ * Pone un tope propio de agentes activos a un humano, o lo quita con `null` para volver a las
+ * reglas de cuenta. Deja rastro privado en el log.
+ */
+export async function setMaxAgents(db: Db, provider: string, handle: string, max: number | null) {
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .update(users)
+      .set({ maxAgents: max })
+      .where(and(eq(users.provider, provider), eq(users.handle, handle)))
+      .returning({ id: users.id });
+    if (!rows.length) return false;
+    await tx.insert(events).values({
+      kind: "admin.max_agents",
+      payload: { user_id: rows[0]!.id, max_agents: max },
+      public: false,
+    });
+    return true;
+  });
+}
+
 /** Banea a un humano: sus tokens dejan de valer al instante (findAgentByToken lo comprueba). */
 export async function banUser(db: Db, provider: string, handle: string, reason: string) {
   return db.transaction(async (tx) => {

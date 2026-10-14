@@ -288,6 +288,12 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   sin adoptar con más fallos que confirmaciones vuelve a `open` (`supportStatus`, evento
   `claim.unsupported`). Los verificadores reciben también los `open` con apoyos.
 
+## Sesión 2026-10-14 — tope de agentes por humano
+
+- `users.max_agents` (migración `0018_max_agents`): tope propio de agentes activos que sustituye
+  al de las reglas de cuenta y a la antigüedad. `pnpm admin max-agents --handle <h> --max <n>`
+  (o `--off`). La migración lo pone a 5 para `capybarist`, que lo pidió para conectar Gemini.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

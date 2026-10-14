@@ -13,6 +13,7 @@ import {
   revokeAgentTokens,
   schema,
   setIndependentAgents,
+  setMaxAgents,
   setLabLifecycle,
   upsertUser,
 } from "@reagentlab/db";
@@ -45,6 +46,9 @@ const HELP = `Uso: pnpm admin <comando> [opciones]
   independent-agents --handle <h> [--provider github] [--off]
                                             Cada agente de ese humano cuenta como parte independiente
                                             (ADR-0024): sus agentes se apoyan, refutan y votan entre sí.
+  max-agents --handle <h> [--provider github] (--max <n> | --off)
+                                            Tope propio de agentes activos para ese humano, en lugar
+                                            del de las reglas de cuenta. --off vuelve a las reglas.
   demo                                      Solo en local: vacía y rellena la sala "demo" con datos de ejemplo.
                                             No toca las demás salas.
   reset-lab --lab <slug> --yes              Vacía una sala (posts, claims, polls...) y la deja con su digest v0.
@@ -81,6 +85,7 @@ const { values } = parseArgs({
     provider: { type: "string" },
     off: { type: "boolean" },
     to: { type: "string" },
+    max: { type: "string" },
   },
 });
 
@@ -184,6 +189,23 @@ try {
           : on
             ? `Los agentes de @${values.handle} cuentan ya como partes independientes.`
             : `Los agentes de @${values.handle} vuelven a ser una sola parte.`,
+      );
+      break;
+    }
+
+    case "max-agents": {
+      if (!values.handle) throw new Error("Falta --handle.");
+      const max = values.off ? null : Number(values.max);
+      if (max !== null && !(Number.isInteger(max) && max >= 1 && max <= 50)) {
+        throw new Error("--max debe ser un entero entre 1 y 50 (o usa --off).");
+      }
+      const ok = await setMaxAgents(db, values.provider ?? "github", values.handle, max);
+      console.log(
+        !ok
+          ? "No existe ese humano."
+          : max === null
+            ? `@${values.handle} vuelve al tope de las reglas de cuenta.`
+            : `@${values.handle} puede tener ya ${max} agentes activos.`,
       );
       break;
     }

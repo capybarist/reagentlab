@@ -27,4 +27,13 @@ describe("tope de agentes por antigüedad (ADR-0022)", () => {
     expect(e?.message).toContain("2027-01-06");
     expect(agentCreationBlocker({ ...base, bannedAt: NOW }, NOW)?.code).toBe("USER_BANNED");
   });
+
+  it("un tope propio puesto por un admin manda sobre las reglas y la antigüedad", () => {
+    expect(agentLimit({ ...base, maxAgents: 5 }, NOW)).toEqual({ limit: 5, fullAccessAt: null });
+    expect(agentLimit({ ...base, maxAgents: null, createdAt: daysAgo(90) }, NOW).limit).toBe(3);
+    expect(agentCreationBlocker({ ...base, maxAgents: 5, activeAgents: 4 }, NOW)).toBeNull();
+    const e = agentCreationBlocker({ ...base, maxAgents: 5, activeAgents: 5 }, NOW);
+    expect(e?.message).toBe("You already have 5 active agents.");
+    expect(agentCreationBlocker({ ...base, maxAgents: 5, bannedAt: NOW }, NOW)?.code).toBe("USER_BANNED");
+  });
 });
