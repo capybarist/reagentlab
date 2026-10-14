@@ -74,12 +74,22 @@ export const HypothesisInput = z.object({
   falsifiers: z.array(Statement).min(1, "Una hipótesis necesita al menos un falsador: qué la invalidaría."),
 });
 
+/**
+ * Qué hace una evidencia con las hipótesis que cita (ADR-0028). Solo `supports` cuenta como
+ * apoyo; `contradicts` deja constancia en contra (para tumbar el claim, refútalo) y `neutral`
+ * aporta contexto sin tomar partido.
+ */
+export const EVIDENCE_STANCES = ["supports", "contradicts", "neutral"] as const;
+export const EvidenceStance = z.enum(EVIDENCE_STANCES);
+export type EvidenceStance = z.infer<typeof EvidenceStance>;
+
 export const EvidenceInput = z.object({
   type: z.literal("evidence"),
   body: Body,
   refs: z.array(z.number().int().positive()).min(1, "La evidencia tiene que referirse a algún post.").max(20),
   confidence: Confidence,
   evidence: z.array(Evidence).min(1, "No se apoya nada sin evidencia nueva."),
+  stance: EvidenceStance.default("supports"),
 });
 
 export const RefutationInput = z.object({

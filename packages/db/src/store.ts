@@ -99,6 +99,7 @@ function toPost(r: {
     targetSeq: p.targetSeq,
     targetStep: p.targetStep,
     claimKind: p.claimKind,
+    stance: p.stance ?? null,
     steps: p.steps as string[],
     evidence: p.evidence as Evidence[],
     confidence: p.confidence,
@@ -487,6 +488,11 @@ function makeRepos(db: Db): Repos {
     async addClaimSupport(support) {
       const rows = await db.insert(claimSupports).values(support).onConflictDoNothing().returning();
       return rows.length > 0;
+    },
+
+    async listClaimSupportParties(claimId) {
+      const rows = await db.select({ party: claimSupports.party }).from(claimSupports).where(eq(claimSupports.claimId, claimId));
+      return rows.map((r) => r.party);
     },
 
     async insertRefutation(ref) {

@@ -277,6 +277,17 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   el contexto lleva `verifications_needed`. La ejecución es del agente (contenedor sin red); el
   sandbox del servidor queda para la Fase 3.
 
+## Sesión 2026-10-14 — evidencias en contra no cuentan como apoyo (ADR-0028)
+
+- Bug: toda `evidence` de otra parte que citaba una hipótesis la apoyaba, aunque trajera un
+  contraejemplo (#40 sobre #38 en `mathematics/erdos-straus`, que salía `supported`).
+- `evidence` lleva `stance` (`supports` por defecto, `contradicts`, `neutral`); solo `supports`
+  apoya. Columna `posts.stance` (migración `0017_evidence_stance`, que además recalcula apoyos y
+  estado de los claims existentes), en hash y firma solo si tiene valor.
+- Una verificación `fails` retira el apoyo de esa parte y le impide apoyar después; un claim
+  sin adoptar con más fallos que confirmaciones vuelve a `open` (`supportStatus`, evento
+  `claim.unsupported`). Los verificadores reciben también los `open` con apoyos.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

@@ -1,10 +1,11 @@
 import { type ClaimView, type LabRules, type RulingTaskView, type Verdict, parseLabRules } from "@reagentlab/contracts";
-import { claimTransition, isRefutationOpen, rulingBlock, settleBySilence, type RefutationState } from "./claims.js";
+import { claimTransition, isRefutationOpen, rulingBlock, settleBySilence, supportStatus, type RefutationState } from "./claims.js";
 import { partyOf } from "./party.js";
 import { labStatusFor } from "./polls.js";
 import { REPUTATION_POINTS } from "./reputation.js";
 import type { Actor, ClaimDetail, ClaimRow, LabRow, PostRow, RefutationRow, Repos, TurnRow } from "./ports.js";
 import { templateFor } from "./templates/index.js";
+import { tally } from "./verification.js";
 import { tallyView } from "./verification-ops.js";
 import { toPostView } from "./views.js";
 
@@ -52,17 +53,24 @@ export async function applyPostToClaims(
   if (!hypothesisSeqs.length) return;
 
   if (post.type === "evidence") {
+    // Solo la evidencia a favor apoya (ADR-0028); las anteriores a la postura no la tienen y apoyaban.
+    if (post.stance !== null && post.stance !== "supports") return;
     // Solo apoya otra parte distinta de la del autor, y cada parte cuenta una vez (ADR-0023).
     const targets = (await r.getClaimsBySeq(lab.id, post.refs.filter((s) => hypothesisSeqs.includes(s)))).filter(
       (c) => c.authorParty !== party && c.status !== "refuted",
     );
+    const verifs = await r.listVerificationsForClaims(targets.map((c) => c.id));
     for (const claim of targets) {
+      const own = verifs.filter((v) => v.claimId === claim.id);
+      // Quien vio fallar el claim al verificarlo no lo apoya después (ADR-0028).
+      if (own.some((v) => v.party === party && v.outcome === "fails")) continue;
       if (!(await r.addClaimSupport({ claimId: claim.id, userId: actor.userId, party, postId: post.id, createdAt: now }))) continue;
-      const next = claimTransition(claim.status, { kind: "support" });
-      await r.updateClaim(claim.id, { status: next.status, supportCount: claim.supportCount + 1, updatedAt: now });
-      if (next.status !== claim.status) {
+      const supportCount = claim.supportCount + 1;
+      const next = supportStatus(claimTransition(claim.status, { kind: "support" }).status, supportCount, tally(own));
+      await r.updateClaim(claim.id, { status: next, supportCount, updatedAt: now });
+      if (next !== claim.status) {
         await r.insertEvent(
-          claimEvent(lab, actor, "claim.supported", { claim_seq: claim.originSeq, status: next.status, by_seq: post.seq }),
+          claimEvent(lab, actor, "claim.supported", { claim_seq: claim.originSeq, status: next, by_seq: post.seq }),
         );
       }
     }

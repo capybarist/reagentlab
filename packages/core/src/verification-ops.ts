@@ -1,5 +1,5 @@
 import type { LabRules, VerificationTallyView, VerificationTaskView } from "@reagentlab/contracts";
-import { claimTransition } from "./claims.js";
+import { claimTransition, supportStatus } from "./claims.js";
 import { claimViews, refreshStatus } from "./claim-ops.js";
 import type { ClaimDetail, ClaimRow, LabRow, Repos, VerificationRow } from "./ports.js";
 import { REPUTATION_POINTS } from "./reputation.js";
@@ -12,8 +12,12 @@ import { toArtifactView, toPostView, toVerificationView } from "./views.js";
  */
 
 const TASKS_PER_TURN = 3;
-/** El verificador recibe trabajo de claims que alguien ya apoya: lo que va camino del verde. */
-const TASK_STATUSES = ["adopted", "supported"] as const;
+/**
+ * El verificador recibe trabajo de claims que alguien ya apoya: lo que va camino del verde.
+ * Incluye los `open` con apoyos, que una verificación fallida dejó sin apoyar (ADR-0028):
+ * otra confirmación puede levantarlos.
+ */
+const TASK_STATUSES = ["adopted", "supported", "open"] as const;
 
 export function kindOfClaim(c: Pick<ClaimDetail, "kind" | "hasArtifact">, rules: LabRules) {
   return verificationKindOf({ kind: c.kind, hasArtifact: c.hasArtifact }, rules);
@@ -34,10 +38,12 @@ async function verifiableClaims(r: Repos, labId: string, rules: LabRules, party:
   const claims = await r.listClaimDetails(labId, { statuses: [...TASK_STATUSES], problemId, limit: 200 });
   const verifs = await r.listVerificationsForClaims(claims.map((c) => c.id));
   const open = claims.filter((c) => {
+    if (c.status === "open" && c.supportCount === 0) return false;
     const parties = verifs.filter((v) => v.claimId === c.id).map((v) => v.party);
     return !verificationBlock({ status: c.status, authorParty: c.authorParty, kind: kindOfClaim(c, rules) }, party, parties);
   });
-  open.sort((a, b) => (a.status === b.status ? a.originSeq - b.originSeq : a.status === "adopted" ? -1 : 1));
+  const rank = (c: ClaimDetail) => TASK_STATUSES.indexOf(c.status as (typeof TASK_STATUSES)[number]);
+  open.sort((a, b) => rank(a) - rank(b) || a.originSeq - b.originSeq);
   return { claims: open, verifs };
 }
 
@@ -74,6 +80,37 @@ export async function verificationTasks(
     });
   }
   return tasks;
+}
+
+/**
+ * Tras una verificación (ADR-0028): si falla, la parte que la hizo deja de contar como apoyo
+ * (no se apoya lo que uno mismo vio fallar), y el claim cae a `open` si se queda sin apoyos o
+ * si sus verificaciones fallan más de lo que confirman; una confirmación posterior lo levanta.
+ */
+export async function applyVerificationToSupport(
+  r: Repos,
+  lab: Pick<LabRow, "id">,
+  claim: ClaimRow,
+  verification: { party: string; outcome: VerificationRow["outcome"] },
+  now: Date,
+  actorAgentId: string | null,
+): Promise<ClaimRow> {
+  const withdrawn =
+    verification.outcome === "fails" && (await r.listClaimSupportParties(claim.id)).includes(verification.party);
+  const supportCount = withdrawn ? Math.max(0, claim.supportCount - 1) : claim.supportCount;
+  const status = supportStatus(claim.status, supportCount, tally(await r.listVerificationsForClaims([claim.id])));
+  if (supportCount === claim.supportCount && status === claim.status) return claim;
+  await r.updateClaim(claim.id, { status, supportCount, updatedAt: now });
+  if (status !== claim.status) {
+    await r.insertEvent({
+      labId: lab.id,
+      kind: status === "supported" ? "claim.supported" : "claim.unsupported",
+      actorAgentId,
+      payload: { claim_seq: claim.originSeq, status, by: "verification" },
+      public: true,
+    });
+  }
+  return { ...claim, status, supportCount };
 }
 
 /**

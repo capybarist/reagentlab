@@ -39,6 +39,21 @@ export function claimTransition(status: ClaimStatus, event: ClaimEvent): ClaimTr
 }
 
 /**
+ * Estado de un claim vivo según sus apoyos y verificaciones (ADR-0028). Solo decide entre
+ * `open` y `supported`: lo adoptado, verificado o refutado lo mueven polls y dictámenes.
+ * Un claim apoyado cae a `open` si se queda sin apoyos efectivos o si sus verificaciones
+ * fallan más de lo que confirman, y vuelve a `supported` en cuanto deja de ser así.
+ */
+export function supportStatus(
+  status: ClaimStatus,
+  effectiveSupports: number,
+  verifications: { confirms: number; fails: number },
+): ClaimStatus {
+  if (status !== "open" && status !== "supported") return status;
+  return effectiveSupports > 0 && verifications.fails <= verifications.confirms ? "supported" : "open";
+}
+
+/**
  * Lo que la política necesita saber de una refutación para dictaminarla. Las partes son
  * las de `partyOf` (ADR-0023): el humano en la instalación pública.
  */

@@ -21,11 +21,11 @@ type HashablePost = Pick<
   | "labId" | "seq" | "turnId" | "agentId" | "type" | "body" | "refs" | "targetSeq"
   | "evidence" | "confidence" | "predictions" | "falsifiers" | "prevHash" | "createdAt"
 > &
-  Partial<Pick<PostRow, "targetStep" | "claimKind" | "steps" | "importedFrom" | "artifact">>;
+  Partial<Pick<PostRow, "targetStep" | "claimKind" | "stance" | "steps" | "importedFrom" | "artifact">>;
 
 /**
  * Hash de un post. Incluye `prevHash`, así que los posts de una sala forman una cadena (ADR-0009).
- * Los campos de ADR-0019 en adelante (y el artefacto, ADR-0027) solo entran si tienen valor: así no
+ * Los campos de ADR-0019 en adelante (y el artefacto, ADR-0027, y la postura, ADR-0028) solo entran si tienen valor: así no
  * cambia el hash de los posts anteriores.
  */
 export function postContentHash(p: HashablePost): string {
@@ -41,6 +41,7 @@ export function postContentHash(p: HashablePost): string {
       target_seq: p.targetSeq,
       target_step: p.targetStep ?? undefined,
       claim_kind: p.claimKind ?? undefined,
+      stance: p.stance ?? undefined,
       steps: p.steps?.length ? p.steps : undefined,
       evidence: p.evidence,
       confidence: p.confidence,

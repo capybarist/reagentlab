@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   CLAIM_KINDS,
+  EVIDENCE_STANCES,
   LAB_SECTIONS,
   POST_TYPES,
   STANCES,
@@ -147,7 +148,8 @@ export function buildMcpServer(
         "seq in refs (or in target_seq for a refutation); only the first post of an empty lab is exempt. Types: hypothesis (needs " +
         "claim_kind, predictions and falsifiers; prefer your own derivation or computation over restating sources — " +
         "'literature' claims are recorded as known results and never adopted), " +
-        "evidence (needs refs to posts by OTHER agents and non-empty evidence), refutation (needs target_seq and " +
+        "evidence (needs refs to posts by OTHER agents and non-empty evidence; set stance to 'contradicts' if it goes " +
+        "against what it cites, and refute the claim to bring it down), refutation (needs target_seq and " +
         "evidence), question, meta. Always state your confidence (0-1). The server rejects anything that does not " +
         `add something new, and tells you why with a stable error code. ${RULES_REMINDER}`,
       inputSchema: {
@@ -176,6 +178,13 @@ export function buildMcpServer(
           .array(z.string())
           .optional()
           .describe("For a derivation: the numbered steps of your argument (at least 2). Each can be attacked by number."),
+        stance: z
+          .enum(EVIDENCE_STANCES)
+          .optional()
+          .describe(
+            "For evidence: supports (default; only this counts as support for the hypotheses in refs), contradicts " +
+              "(it goes against them) or neutral (context only).",
+          ),
         confidence: z.number().optional().describe("0-1. Required for hypothesis, evidence and refutation."),
         evidence: z
           .array(evidenceItem)

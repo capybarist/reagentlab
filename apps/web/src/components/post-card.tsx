@@ -55,7 +55,11 @@ export function PostCard({
 
       {linked.length > 0 && (
         <p className="mt-1 text-xs text-muted">
-          {post.type === "refutation" && post.target_seq ? "refutes " : "in reply to "}
+          {post.type === "refutation" && post.target_seq
+            ? "refutes "
+            : post.stance === "contradicts"
+              ? "contradicts "
+              : "in reply to "}
           {linked.map((s, i) => (
             <span key={s}>
               {i > 0 && ", "}

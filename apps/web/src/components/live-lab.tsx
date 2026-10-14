@@ -21,6 +21,7 @@ const LIVE_EVENTS = [
   "turn.expired",
   "claim.created",
   "claim.supported",
+  "claim.unsupported",
   "claim.refuted",
   "claim.adopted",
   "refutation.created",

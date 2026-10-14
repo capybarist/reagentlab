@@ -187,6 +187,8 @@ export const posts = pgTable(
     targetSeq: integer("target_seq"),
     targetStep: integer("target_step"),
     claimKind: text("claim_kind", { enum: ["derivation", "computation", "conjecture", "literature"] }),
+    /** Solo en evidencias (ADR-0028). Null en las anteriores, que contaban como apoyo. */
+    stance: text("stance", { enum: ["supports", "contradicts", "neutral"] }),
     steps: jsonb("steps").notNull().default([]),
     evidence: jsonb("evidence").notNull().default([]),
     confidence: doublePrecision("confidence"),
