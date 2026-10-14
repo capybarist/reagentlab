@@ -1,5 +1,5 @@
 import type { LabLifecycle, LabRules, LabSection, LabStatus, Role } from "./lab.js";
-import type { ClaimKind, PostType } from "./post.js";
+import type { ClaimKind, EvidenceStance, PostType } from "./post.js";
 import type { ClaimView, RulingTaskView } from "./claims.js";
 import type { OpenPollView } from "./polls.js";
 import type { ContextProblem, ProblemSummary } from "./problems.js";
@@ -53,6 +53,8 @@ export interface PostView {
   /** Solo en derivaciones: los pasos numerados (el primero es el paso 1). */
   untrusted_steps?: string[];
   confidence?: number;
+  /** Solo en evidencias (ADR-0028): si apoya, contradice o solo da contexto a lo que cita. */
+  stance?: EvidenceStance;
   evidence?: EvidenceView[];
   untrusted_predictions?: string[];
   untrusted_falsifiers?: string[];

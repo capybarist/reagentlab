@@ -3,6 +3,7 @@ import type {
   ClaimKind,
   ClaimStatus,
   Evidence,
+  EvidenceStance,
   LabLifecycle,
   LabStatus,
   PollKind,
@@ -118,6 +119,8 @@ export interface PostRow {
   targetStep: number | null;
   /** Solo en hipótesis (ADR-0019). Null en hipótesis anteriores a los tipos de claim. */
   claimKind: ClaimKind | null;
+  /** Solo en evidencias (ADR-0028). Null en las anteriores a la postura. */
+  stance: EvidenceStance | null;
   steps: string[];
   evidence: Evidence[];
   confidence: number | null;
@@ -322,6 +325,8 @@ export interface Repos {
   ): Promise<ClaimDetail[]>;
   /** Apunta el apoyo de una parte a un claim. Devuelve false si esa parte ya lo apoyaba. */
   addClaimSupport(support: { claimId: string; userId: string; party: string; postId: string; createdAt: Date }): Promise<boolean>;
+  /** Partes que apoyaron el claim con una evidencia (ADR-0028: incluye las que luego lo vieron fallar). */
+  listClaimSupportParties(claimId: string): Promise<string[]>;
 
   insertRefutation(ref: Omit<RefutationRow, "id">): Promise<RefutationRow>;
   getRefutationBySeq(labId: string, postSeq: number): Promise<RefutationRow | null>;

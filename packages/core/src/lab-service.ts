@@ -67,7 +67,7 @@ import { isUrlAllowed, sanitizeUntrusted, sanitizeVerbatim } from "./sanitize.js
 import { looksSimilar } from "./similarity.js";
 import { toArtifactView, toDigestView, toPostView, toVerificationView } from "./views.js";
 import { verificationBlock } from "./verification.js";
-import { countVerifiable, kindOfClaim, maybeVerify, verificationTasks } from "./verification-ops.js";
+import { applyVerificationToSupport, countVerifiable, kindOfClaim, maybeVerify, verificationTasks } from "./verification-ops.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Propuestas de problema pendientes por humano (ADR-0020). */
@@ -550,6 +550,7 @@ export class LabService {
           targetSeq,
           targetStep: src.targetStep,
           claimKind: src.claimKind,
+          stance: src.stance,
           steps: src.steps,
           evidence: src.evidence,
           confidence: src.confidence,
@@ -926,6 +927,7 @@ export class LabService {
           targetSeq,
           targetStep,
           claimKind: isHypothesis ? input.claim_kind : null,
+          stance: input.type === "evidence" ? input.stance : null,
           steps: isHypothesis ? input.steps.map(sanitizeUntrusted) : [],
           evidence,
           confidence: "confidence" in input ? input.confidence : null,
@@ -1169,7 +1171,8 @@ export class LabService {
         },
         public: true,
       });
-      await maybeVerify(r, lab, rules, claim, now, actor.agentId);
+      const updated = await applyVerificationToSupport(r, lab, claim, { party, outcome: input.outcome }, now, actor.agentId);
+      await maybeVerify(r, lab, rules, updated, now, actor.agentId);
       await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
 
       const [after] = await r.listClaimDetails(lab.id, { seqs: [claim.originSeq], limit: 1 });

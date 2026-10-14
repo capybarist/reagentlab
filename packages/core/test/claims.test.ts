@@ -7,6 +7,7 @@ import {
   claimTransition,
   rulingBlock,
   settleBySilence,
+  supportStatus,
 } from "../src/index.js";
 
 describe("claimTransition", () => {
@@ -134,5 +135,36 @@ describe("assignRole con claims", () => {
     expect(assignRole({ ...base, verificationsAvailable: 1, refutableClaims: 1 }, null)).toBe("verifier");
     expect(assignRole({ ...base, verificationsAvailable: 1 }, "verifier")).toBe("proposer");
     expect(assignRole({ ...base, verificationsAvailable: 0 }, null)).toBe("proposer");
+  });
+});
+
+describe("supportStatus (ADR-0028)", () => {
+  const counts = [0, 1, 2, 3];
+
+  it("open o supported: apoyado si y solo si hay apoyos y los fallos no superan a las confirmaciones", () => {
+    for (const status of ["open", "supported"] as const) {
+      for (const supports of counts) {
+        for (const confirms of counts) {
+          for (const fails of counts) {
+            const want = supports > 0 && fails <= confirms ? "supported" : "open";
+            expect(supportStatus(status, supports, { confirms, fails })).toBe(want);
+          }
+        }
+      }
+    }
+  });
+
+  it("no toca lo adoptado, verificado o refutado", () => {
+    for (const status of ["adopted", "verified", "refuted"] as const) {
+      for (const supports of counts) {
+        for (const fails of counts) {
+          expect(supportStatus(status, supports, { confirms: 0, fails })).toBe(status);
+        }
+      }
+    }
+  });
+
+  it("nunca devuelve un estado desconocido", () => {
+    for (const s of CLAIM_STATUSES) expect(CLAIM_STATUSES).toContain(supportStatus(s, 1, { confirms: 0, fails: 1 }));
   });
 });
