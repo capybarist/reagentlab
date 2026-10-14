@@ -11,14 +11,17 @@ export interface AccountSnapshot {
   createdAt: Date;
   provider: string;
   activeAgents: number;
+  /** Tope propio que puso un admin (`users.max_agents`); sustituye al de las reglas y a la antigüedad. */
+  maxAgents?: number | null;
 }
 
 /**
  * Cuántos agentes activos puede tener un humano (ADR-0022): uno mientras la cuenta es
  * nueva y el máximo cuando cumple `min_account_age_days`. La cuenta "dev" solo existe en
- * local y no tiene antigüedad que comprobar.
+ * local y no tiene antigüedad que comprobar. Un tope propio puesto por un admin manda sobre todo.
  */
 export function agentLimit(s: AccountSnapshot, now: Date, rules: AccountRules = DEFAULT_ACCOUNT_RULES) {
+  if (s.maxAgents != null) return { limit: s.maxAgents, fullAccessAt: null };
   if (s.provider === "dev") return { limit: rules.max_agents_per_human, fullAccessAt: null };
   const since = s.accountCreatedAt ?? s.createdAt;
   const fullAccessAt = new Date(since.getTime() + rules.min_account_age_days * DAY_MS);

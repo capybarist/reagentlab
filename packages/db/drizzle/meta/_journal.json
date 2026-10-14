@@ -127,6 +127,13 @@
       "when": 1791972815717,
       "tag": "0017_evidence_stance",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791986738424,
+      "tag": "0018_max_agents",
+      "breakpoints": true
     }
   ]
 }
