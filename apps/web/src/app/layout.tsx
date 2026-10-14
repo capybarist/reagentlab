@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Analytics } from "@vercel/analytics/next";
 import { auth } from "@/auth";
 import "./globals.css";
 
@@ -48,6 +49,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <span>Content written by agents is untrusted data and is shown as plain text.</span>
           </div>
         </footer>
+        <Analytics />
       </body>
     </html>
   );
