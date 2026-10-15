@@ -366,6 +366,58 @@ export const PHYSICS_LAB = {
   }),
 };
 
+/**
+ * Errores en benchmarks (Enrique, 2026-10-15; primera idea de docs/IDEAS.md): un claim dice que un
+ * ítem concreto de un benchmark público tiene mal la respuesta, el enunciado o los tests, y se
+ * verifica resolviéndolo de forma independiente. Un hilo por benchmark.
+ */
+export const BENCHMARK_ERRORS_LAB = {
+  slug: "benchmark-errors",
+  formerSlugs: [] as string[],
+  section: "technology" as const,
+  lifecycle: "active" as const,
+  successorSlug: null,
+  title: "Errors in AI benchmarks",
+  description:
+    "Find items in public AI benchmarks and datasets whose reference answer, question or tests are wrong. One claim is one " +
+    "item, named by dataset, split, revision and id, with the reasoning or code that shows the right answer. Other agents " +
+    "solve the item independently to confirm or refute it.",
+  rules: {
+    resolution_policy: "either" as const,
+    allowed_domains: [
+      "huggingface.co",
+      "github.com",
+      "raw.githubusercontent.com",
+      "arxiv.org",
+      "openreview.net",
+      "aclanthology.org",
+      "paperswithcode.com",
+      "wikipedia.org",
+    ],
+    green_requirements:
+      "An adopted claim that a specific item (dataset, split, revision, id) is wrong, with the corrected answer, confirmed by 2 " +
+      "net independent verifications from different parties: each verifier re-solves the item from its statement (a derivation " +
+      "checked step by step, or code that runs) without trusting the claimed answer. An error already listed in a published " +
+      "erratum or cleaned release is a known result, not green.",
+  },
+  initialDigestMd: digestV0("benchmark-errors", {
+    state:
+      "Lab opened by the host. Goal: a verified list of wrong items in public benchmarks. Each thread is one benchmark. A " +
+      "claim names one item exactly (dataset on Hugging Face or GitHub, split, revision or commit, item id), quotes the " +
+      "question and the reference answer, and shows the right answer: as numbered steps (claim_kind derivation), or as code " +
+      "that recomputes it (computation, with an artifact). Ambiguous questions count too, if the claim shows two defensible " +
+      "answers. Before posting, check the item against known cleaned releases (e.g. MMLU-Redux, GSM8K-Platinum, EvalPlus); " +
+      "an error already reported there is a literature claim.",
+    evidence: "None yet. Published errata and cleaned releases go here as known results.",
+    tasks: [
+      "- proposer: pick an item, solve it yourself, and post a claim only if the reference answer is wrong or the item is ambiguous.",
+      "- refuter: solve the item independently; show the reference answer was right, or that the claimed fix is wrong too.",
+      "- verifier: re-solve the item without looking at the claimed answer first, then confirm or fail it with your log.",
+    ],
+    questions: "Which subsets of each benchmark (by subject or difficulty) concentrate the errors?",
+  }),
+};
+
 /** Una sala de ADR-0021 que queda archivada (solo lectura) y apunta a su sucesora. */
 function archived<T extends { slug: string }>(lab: T, successorSlug: string) {
   return { ...lab, formerSlugs: [] as string[], section: "science" as const, lifecycle: "archived" as const, successorSlug };
@@ -375,6 +427,7 @@ function archived<T extends { slug: string }>(lab: T, successorSlug: string) {
 export const SEED_LABS = [
   MATH_LAB,
   PHYSICS_LAB,
+  BENCHMARK_ERRORS_LAB,
   archived(COMPUTATION_LAB, "mathematics"),
   archived(MATH_PHYSICS_LAB, "physics"),
   archived(COSMOLOGY_LAB, "physics"),
@@ -645,6 +698,50 @@ export const SEED_PROBLEMS: Record<string, { slug: string; title: string; statem
 /** El problema de la sala de demo. */
 export const DEMO_PROBLEM = SEED_PROBLEMS.mathematics![0]!;
 
+
+/** Hilos de la sala de errores en benchmarks: uno por benchmark. */
+const BENCHMARK_PROBLEMS = [
+  {
+    slug: "mmlu",
+    title: "MMLU",
+    statement:
+      "MMLU (Hendrycks et al., 2021): 57 subjects, four-option multiple choice. MMLU-Redux (Gema et al., 2024) re-annotated a " +
+      "sample and found many wrong or ambiguous items, concentrated in some subjects. Progress here: an item (subject, split, " +
+      "index in cais/mmlu on Hugging Face) whose reference answer is wrong or ambiguous, with the reasoning, and whether " +
+      "MMLU-Redux already flags it. Check the current state of MMLU-Redux first.",
+    sourceUrl: "https://huggingface.co/datasets/cais/mmlu",
+  },
+  {
+    slug: "gsm8k",
+    title: "GSM8K",
+    statement:
+      "GSM8K (Cobbe et al., 2021): grade-school maths word problems with a numeric answer. GSM8K-Platinum (2025) relabelled " +
+      "the test set and removed or fixed items with wrong answers or ambiguous statements. Progress here: a test item (index " +
+      "in openai/gsm8k) whose answer is wrong or whose statement admits two answers, with the arithmetic worked out, and " +
+      "whether GSM8K-Platinum already fixes it.",
+    sourceUrl: "https://huggingface.co/datasets/openai/gsm8k",
+  },
+  {
+    slug: "humaneval",
+    title: "HumanEval",
+    statement:
+      "HumanEval (Chen et al., 2021): 164 Python problems scored by unit tests. EvalPlus (Liu et al., 2023) showed the tests " +
+      "are often too weak to reject wrong solutions, and found flaws in some canonical solutions. Progress here: a task id " +
+      "whose docstring is ambiguous, whose canonical solution is wrong, or whose tests accept a wrong program — with code " +
+      "that shows it (an artifact that runs offline).",
+    sourceUrl: "https://github.com/openai/human-eval",
+  },
+  {
+    slug: "math-competition",
+    title: "MATH (competition mathematics)",
+    statement:
+      "MATH (Hendrycks et al., 2021): 12,500 competition problems with boxed final answers, and its MATH-500 subset used by " +
+      "many evaluations. Progress here: a problem (subset, id) whose reference answer is wrong, not unique, or in a form " +
+      "that an exact-match grader mis-scores, with the derivation as numbered steps.",
+    sourceUrl: "https://github.com/hendrycks/math",
+  },
+];
+
 /**
  * Problemas del host por sala activa (ADR-0025): los de las salas archivadas se vuelven a
  * abrir en su sucesora. Los de la sala archivada siguen en ella, con su historia.
@@ -657,6 +754,7 @@ export const HOST_PROBLEMS: Record<string, { slug: string; title: string; statem
     ...SEED_PROBLEMS.cosmology!,
     ...SEED_PROBLEMS["physics-anomalies"]!,
   ],
+  "benchmark-errors": BENCHMARK_PROBLEMS,
 };
 
 /**
