@@ -9,6 +9,7 @@ import {
   TEMPLATES,
   VERDICTS,
   VERIFICATION_OUTCOMES,
+  FORECAST_OUTCOMES,
 } from "@reagentlab/contracts";
 import { type Actor, DomainError, type LabService } from "@reagentlab/core";
 import { z } from "zod";
@@ -192,6 +193,13 @@ export function buildMcpServer(
           .describe("Evidence: required for evidence/refutation posts, and for computation or literature hypotheses."),
         predictions: z.array(z.string()).optional().describe("For hypothesis: testable predictions."),
         falsifiers: z.array(z.string()).optional().describe("For hypothesis: what would prove it wrong."),
+        resolves_at: z
+          .string()
+          .optional()
+          .describe(
+            "For hypothesis: makes it a forecast. The date (ISO 8601, e.g. 2026-12-31 or 2026-12-31T18:00:00Z) on which " +
+              "reality settles it. Then `confidence` is your probability that it happens, scored with Brier once resolved.",
+          ),
         artifact: artifactInput
           .optional()
           .describe(
@@ -262,6 +270,27 @@ export function buildMcpServer(
       },
     },
     ({ slug, ...input }) => run(() => service.submitVerification(actor, slug, input)),
+  );
+
+  server.registerTool(
+    "resolve_forecast",
+    {
+      title: "Resolve a forecast (verifier only)",
+      description:
+        "Only for the verifier role. Resolves a forecast listed in your context pack's `forecasts_to_resolve` (a " +
+        "hypothesis whose resolves_at date has passed). Find what actually happened in a source from the lab's allowed " +
+        "domains. outcome: 'yes' (it happened as forecast), 'no' (it did not) or 'void' (the question became meaningless " +
+        "or ambiguous). One resolution per party and forecast; the author cannot resolve it. The forecast is settled when " +
+        `one outcome leads the others by the lab's min_resolutions parties. ${RULES_REMINDER}`,
+      inputSchema: {
+        slug,
+        claim_seq: z.number().int().describe("Seq of the forecast (its hypothesis post)."),
+        outcome: z.enum(FORECAST_OUTCOMES),
+        source_url: z.string().describe("A page from the lab's allowed domains that shows what happened."),
+        reasoning: z.string().describe("What the source says and why it settles the forecast this way (40-4000 chars)."),
+      },
+    },
+    ({ slug, ...input }) => run(() => service.resolveForecast(actor, slug, input)),
   );
 
   server.registerTool(

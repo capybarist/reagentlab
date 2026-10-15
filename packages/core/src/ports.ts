@@ -4,6 +4,7 @@ import type {
   ClaimStatus,
   Evidence,
   EvidenceStance,
+  ForecastOutcome,
   LabLifecycle,
   LabStatus,
   PollKind,
@@ -137,6 +138,8 @@ export interface PostRow {
   importedFrom: ImportedFrom | null;
   /** Solo en hipótesis `computation` con código para reproducirlas (ADR-0027). */
   artifact: Artifact | null;
+  /** Solo en pronósticos (ADR-0029). */
+  resolvesAt: Date | null;
   createdAt: Date;
 }
 
@@ -188,8 +191,29 @@ export interface ClaimRow {
   status: ClaimStatus;
   supportCount: number;
   failedRefutations: number;
+  /** Pronóstico (ADR-0029): null en las hipótesis que no lo son. */
+  resolvesAt: Date | null;
+  probability: number | null;
+  resolution: ForecastOutcome | null;
+  resolvedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** Una resolución de un pronóstico (ADR-0029): una por parte y claim. */
+export interface ForecastResolutionRow {
+  id: string;
+  labId: string;
+  claimId: string;
+  claimSeq: number;
+  turnId: string;
+  agentId: string;
+  userId: string;
+  party: string;
+  outcome: ForecastOutcome;
+  sourceUrl: string;
+  reasoning: string;
+  createdAt: Date;
 }
 
 /** Claim con lo necesario para pintarlo: autor y texto de la hipótesis. */
@@ -319,7 +343,10 @@ export interface Repos {
   insertClaim(claim: Omit<ClaimRow, "id">): Promise<ClaimRow>;
   /** Claims de la sala cuyo post de origen está entre `seqs`. */
   getClaimsBySeq(labId: string, seqs: number[]): Promise<ClaimRow[]>;
-  updateClaim(id: string, patch: Partial<Pick<ClaimRow, "status" | "supportCount" | "failedRefutations" | "updatedAt">>): Promise<void>;
+  updateClaim(
+    id: string,
+    patch: Partial<Pick<ClaimRow, "status" | "supportCount" | "failedRefutations" | "resolution" | "resolvedAt" | "updatedAt">>,
+  ): Promise<void>;
   /** Claims con autor y texto, los más recientes primero. `statuses` filtra; vacío = todos. */
   listClaimDetails(
     labId: string,
@@ -362,6 +389,13 @@ export interface Repos {
 
   /** Guarda una verificación (ADR-0027). Devuelve false si esa parte ya había verificado el claim. */
   insertVerification(v: Omit<VerificationRow, "id">): Promise<boolean>;
+  /** ADR-0029. False si esa parte ya resolvió el pronóstico. */
+  insertForecastResolution(v: Omit<ForecastResolutionRow, "id">): Promise<boolean>;
+  listForecastResolutionsForClaims(
+    claimIds: string[],
+  ): Promise<(ForecastResolutionRow & { agentName: string; modelFamily: string })[]>;
+  /** Seqs de los pronósticos vencidos y sin resolver, los más antiguos primero. */
+  listDueForecastSeqs(labId: string, now: Date, problemId?: string): Promise<number[]>;
   /** Verificaciones de unos claims, las más antiguas primero, con el nombre y la familia del agente. */
   listVerificationsForClaims(claimIds: string[]): Promise<(VerificationRow & { agentName: string; modelFamily: string })[]>;
 

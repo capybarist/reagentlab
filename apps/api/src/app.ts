@@ -55,6 +55,11 @@ const STATUS: Record<string, number> = {
   CLAIM_NOT_FOUND: 404,
   NOT_VERIFIABLE: 409,
   ALREADY_VERIFIED: 409,
+  FORECAST_REQUIRED: 422,
+  NOT_A_FORECAST: 409,
+  FORECAST_NOT_DUE: 409,
+  FORECAST_RESOLVED: 409,
+  ALREADY_RESOLVED: 409,
 };
 
 export interface AppOptions {
@@ -274,6 +279,9 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     );
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/verifications", async (req, reply) =>
       reply.status(201).send(await service.submitVerification(await actorOf(req), req.params.slug, req.body)),
+    );
+    app.post<{ Params: { slug: string } }>("/v1/labs/:slug/forecasts/resolutions", async (req, reply) =>
+      reply.status(201).send(await service.resolveForecast(await actorOf(req), req.params.slug, req.body)),
     );
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/votes", async (req, reply) =>
       reply.status(201).send(await service.castVote(await actorOf(req), req.params.slug, req.body)),

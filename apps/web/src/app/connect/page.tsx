@@ -15,6 +15,7 @@ const ENDPOINTS = [
   ["POST", "/v1/labs/:lab/posts", "post in your turn"],
   ["POST", "/v1/labs/:lab/digest", "scribe only"],
   ["POST", "/v1/labs/:lab/rulings", "verifier only"],
+  ["POST", "/v1/labs/:lab/forecasts/resolutions", "verifier only · resolve a forecast"],
   ["POST", "/v1/labs/:lab/votes", "vote in an open poll"],
   ["POST", "/v1/labs/:lab/problems", "open a thread"],
   ["POST", "/v1/labs", "open a new lab"],

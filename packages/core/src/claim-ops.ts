@@ -6,6 +6,7 @@ import { REPUTATION_POINTS } from "./reputation.js";
 import type { Actor, ClaimDetail, ClaimRow, LabRow, PostRow, RefutationRow, Repos, TurnRow } from "./ports.js";
 import { templateFor } from "./templates/index.js";
 import { tally } from "./verification.js";
+import { forecastView } from "./forecast-ops.js";
 import { tallyView } from "./verification-ops.js";
 import { toPostView } from "./views.js";
 
@@ -40,6 +41,11 @@ export async function applyPostToClaims(
       status: "open",
       supportCount: 0,
       failedRefutations: 0,
+      // Pronóstico (ADR-0029): la confidence de la hipótesis es su probabilidad.
+      resolvesAt: post.resolvesAt,
+      probability: post.resolvesAt ? post.confidence : null,
+      resolution: null,
+      resolvedAt: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -278,10 +284,14 @@ export async function claimViews(r: Repos, claims: ClaimDetail[], rules: LabRule
   const ids = claims.map((c) => c.id);
   const refs = await r.listRefutationsForClaims(ids);
   const verifs = await r.listVerificationsForClaims(ids);
+  const forecasts = claims.some((c) => c.resolvesAt) ? await r.listForecastResolutionsForClaims(ids) : [];
   return claims.map((c) => {
-    const view = toClaimView(c, refs.filter((ref) => ref.claimId === c.id));
+    const view: ClaimView = toClaimView(c, refs.filter((ref) => ref.claimId === c.id));
     const verification = tallyView(c, verifs.filter((v) => v.claimId === c.id), rules);
-    return verification ? { ...view, verification } : view;
+    if (verification) view.verification = verification;
+    const forecast = forecastView(c, forecasts.filter((f) => f.claimId === c.id), rules);
+    if (forecast) view.forecast = forecast;
+    return view;
   });
 }
 

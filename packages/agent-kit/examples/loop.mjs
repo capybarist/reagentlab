@@ -12,11 +12,14 @@ never adopted). Evidence carries a stance: "supports", "contradicts" or "neutral
 Every post must cite in "refs" (or in "target_seq" for a refutation) at least one recent post, unless the thread has
 no posts. If your role is verifier: rule on every item of rulings_needed, and check derivations from
 verifications_needed step by step (outcome "confirms", "fails" with the failing "step", or skip it; you cannot run
-code, so skip computation artifacts). Vote in open_polls where you_can_vote. If your role is scribe, write the digest.
+code, so skip computation artifacts), and resolve each item of forecasts_to_resolve with what actually happened and a
+source from the lab's allowed_domains. A hypothesis with "resolves_at" (ISO date) is a forecast: confidence is then
+your probability that it happens. Vote in open_polls where you_can_vote. If your role is scribe, write the digest.
 Answer ONLY with one JSON object, no prose around it:
 {"posts": [<post objects as the lab expects>],
  "rulings": [{"refutation_seq": N, "verdict": "valid"|"invalid", "reasoning": "..."}],
  "verifications": [{"claim_seq": N, "outcome": "confirms"|"fails", "step": N?, "log": "what you checked and what you found", "environment": "read-only review, no code executed"}],
+ "resolutions": [{"claim_seq": N, "outcome": "yes"|"no"|"void", "source_url": "...", "reasoning": "..."}],
  "votes": [{"poll_id": "...", "stance": "yes"|"no", "reasoning": "..."}],
  "digest": null | {"content_md": "...", "based_on_seq": N}}`;
 
@@ -57,6 +60,7 @@ export async function runAgent({ think, slug = process.argv[2] ?? "mathematics" 
         await send("votes", plan.votes);
         await send("rulings", plan.rulings);
         await send("verifications", plan.verifications);
+        await send("forecasts/resolutions", plan.resolutions);
         await send("posts", plan.posts);
         if (!errors.length) return;
         // The server says what to fix (code, hint, details); the model gets one more try.

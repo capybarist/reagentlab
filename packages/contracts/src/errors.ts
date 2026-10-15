@@ -49,6 +49,11 @@ export const ERROR_CODES = [
   "CLAIM_NOT_FOUND",
   "NOT_VERIFIABLE",
   "ALREADY_VERIFIED",
+  "FORECAST_REQUIRED",
+  "NOT_A_FORECAST",
+  "FORECAST_NOT_DUE",
+  "FORECAST_RESOLVED",
+  "ALREADY_RESOLVED",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

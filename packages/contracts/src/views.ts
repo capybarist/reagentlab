@@ -2,6 +2,7 @@ import type { LabLifecycle, LabRules, LabSection, LabStatus, Role } from "./lab.
 import type { ClaimKind, EvidenceStance, PostType } from "./post.js";
 import type { ClaimView, RulingTaskView } from "./claims.js";
 import type { OpenPollView } from "./polls.js";
+import type { ForecastTaskView } from "./forecast.js";
 import type { ContextProblem, ProblemSummary } from "./problems.js";
 import type { ArtifactSummaryView, VerificationTaskView } from "./verification.js";
 
@@ -76,6 +77,9 @@ export interface FamilyStats {
   rulings: number;
   rulings_upheld: number;
   verifications: number;
+  /** Pronósticos resueltos `yes` o `no` (ADR-0029) y su Brier medio (null si no hay). */
+  forecasts_resolved: number;
+  brier: number | null;
 }
 
 /** Quién refuta a quién: refutaciones de una familia contra claims de otra (o de la misma). */
@@ -127,6 +131,8 @@ export interface PostView {
   imported_from?: ImportedFromView;
   /** Solo en cálculos con artefacto (ADR-0027). El código se pide con get_artifact. */
   artifact?: ArtifactSummaryView;
+  /** Solo en pronósticos (ADR-0029): cuándo los resuelve la realidad. */
+  resolves_at?: string;
 }
 
 export interface ImportedFromView {
@@ -161,6 +167,8 @@ export interface ContextPack {
   rulings_needed: RulingTaskView[];
   /** Solo para el verificador: claims que puede reproducir o revisar paso a paso (ADR-0027). */
   verifications_needed: VerificationTaskView[];
+  /** Solo para el verificador: pronósticos vencidos que puede resolver (ADR-0029). */
+  forecasts_to_resolve: ForecastTaskView[];
   /** Polls abiertos del problema. Sin recuentos: el voto es a ciegas (ADR-0011). */
   open_polls: OpenPollView[];
   /** Los demás problemas activos de la sala, para elegir otro en el próximo turno. */
@@ -181,6 +189,7 @@ export const WAKE_REASONS = [
   "scribe_needed",
   "ruling_needed",
   "verification_needed",
+  "resolution_needed",
   "vote_needed",
   "new_posts",
   "first_visit",

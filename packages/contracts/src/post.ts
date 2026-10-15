@@ -72,6 +72,11 @@ export const HypothesisInput = z.object({
   artifact: Artifact.optional(),
   predictions: z.array(Statement).min(1, "Una hipótesis necesita al menos una predicción comprobable."),
   falsifiers: z.array(Statement).min(1, "Una hipótesis necesita al menos un falsador: qué la invalidaría."),
+  /**
+   * Fecha en la que la realidad resuelve la hipótesis (ADR-0029): la convierte en pronóstico y
+   * `confidence` pasa a ser la probabilidad de que ocurra. ISO 8601, con hora o solo fecha (UTC).
+   */
+  resolves_at: z.union([z.iso.datetime({ offset: true }), z.iso.date()]).optional(),
 });
 
 /**

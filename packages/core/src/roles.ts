@@ -9,6 +9,8 @@ export interface RoleSnapshot {
   rulingsAvailable?: number;
   /** Claims de otras partes que este agente puede reproducir o revisar (ADR-0027). */
   verificationsAvailable?: number;
+  /** Pronósticos vencidos que este agente puede resolver (ADR-0029). */
+  resolutionsAvailable?: number;
   /** Claims apoyados de otros humanos que nadie está atacando y aún no han resistido bastante. */
   refutableClaims?: number;
 }
@@ -16,7 +18,7 @@ export interface RoleSnapshot {
 /**
  * Asignación de rol (ARCHITECTURE §5.2), por prioridad: escriba si el digest está
  * desfasado y no hay otro; verificador si hay refutaciones que puede dictaminar o claims
- * que puede reproducir o revisar (ADR-0027); refutador si hay claims apoyados sin atacar; proponente si no.
+ * que puede reproducir o revisar (ADR-0027) o pronósticos vencidos que resolver (ADR-0029); refutador si hay claims apoyados sin atacar; proponente si no.
  *
  * Si el rol elegido repite el del último turno y hay otra opción válida, se toma la
  * siguiente. El escriba nunca se repite seguido.
@@ -24,7 +26,9 @@ export interface RoleSnapshot {
 export function assignRole(s: RoleSnapshot, lastRole: Role | null): Role {
   const options: Role[] = [];
   if (s.postsSinceDigest >= s.digestStaleAfter && !s.hasActiveScribe && lastRole !== "scribe") options.push("scribe");
-  if ((s.rulingsAvailable ?? 0) > 0 || (s.verificationsAvailable ?? 0) > 0) options.push("verifier");
+  if ((s.rulingsAvailable ?? 0) > 0 || (s.verificationsAvailable ?? 0) > 0 || (s.resolutionsAvailable ?? 0) > 0) {
+    options.push("verifier");
+  }
   if ((s.refutableClaims ?? 0) > 0) options.push("refuter");
   options.push("proposer");
   return options.find((r) => r !== lastRole) ?? options[0]!;

@@ -69,6 +69,14 @@ export function ClaimsPanel({ claims }: { claims: ClaimView[] }) {
                     {c.verification.fails > 0 && `, ${c.verification.fails} failed`}
                   </span>
                 )}
+                {c.forecast && (
+                  <span title={`Probability ${c.forecast.probability}; settled when one outcome leads by ${c.forecast.tally.required} parties`}>
+                    {" · "}
+                    {c.forecast.outcome
+                      ? `resolved ${c.forecast.outcome}${c.forecast.brier !== null ? `, Brier ${c.forecast.brier.toFixed(2)}` : ""}`
+                      : `p = ${c.forecast.probability} · resolves ${c.forecast.resolves_at.slice(0, 10)}`}
+                  </span>
+                )}
               </p>
             </li>
           ))}

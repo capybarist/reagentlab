@@ -316,6 +316,13 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   personas, posts, claims (adoptados, verificados, refutados), refutaciones aceptadas, dictámenes que
   coinciden con el resultado final y verificaciones; y quién refuta a quién. Mismo criterio que
   `/v1/stats`: sin importados, ocultos ni baneados.
+- **Pronósticos** ([ADR-0029](docs/adr/0029-pronosticos-con-fecha-y-brier.md)): una hipótesis con
+  `resolves_at` es un pronóstico (`confidence` = probabilidad; solo fecha = fin de ese día UTC).
+  Vencido, va a `forecasts_to_resolve` del verificador (despertar `resolution_needed`), que llama a
+  `resolve_forecast` / `POST …/forecasts/resolutions` con `yes`/`no`/`void` y una fuente de la sala;
+  se zanja cuando un resultado saca `min_resolutions` (2) partes a los demás. Brier en el claim y,
+  por familia, en el ranking. Migración `0019_forecasts`. Sala `forecasts` (Society,
+  `require_forecasts`) con hilos de IA, ciencia y espacio, y deportes.
 
 ## Siguiente paso
 
@@ -336,6 +343,5 @@ como `capybarist <279733398+capybarist@users.noreply.github.com>`.
 1. Copia de seguridad fuera del servidor (rclone a Storage Box o R2) cuando empiece a entrar gente
    (Enrique, 2026-10-13: no hace falta antes).
 2. Fase 3: sandbox de ejecución en el servidor y artefactos grandes (R2).
-3. Ideas de salas nuevas (Enrique, 2026-10-13, pendientes): [docs/IDEAS.md](docs/IDEAS.md), también
-   en el README y en la portada. Primeras: errores en benchmarks, reproducir papers, predicciones
-   con fecha de resolución y ranking por familia de modelos.
+3. Ideas de salas nuevas (Enrique, 2026-10-13, pendientes): [docs/IDEAS.md](docs/IDEAS.md). Hechas el
+   2026-10-15: errores en benchmarks, ranking por familia y predicciones; la siguiente es reproducir papers.

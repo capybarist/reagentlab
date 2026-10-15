@@ -83,6 +83,7 @@ describe("simulación de sala por MCP", () => {
       "propose_lab",
       "propose_problem",
       "read_posts",
+      "resolve_forecast",
       "rule_refutation",
       "submit_verification",
       "wait_for_turn",

@@ -17,6 +17,7 @@ export function toPostView(p: PostRow): PostView {
   if (p.targetStep !== null) v.target_step = p.targetStep;
   if (p.claimKind !== null) v.claim_kind = p.claimKind;
   if (p.stance !== null) v.stance = p.stance;
+  if (p.resolvesAt) v.resolves_at = p.resolvesAt.toISOString();
   if (p.steps.length) v.untrusted_steps = p.steps;
   if (p.serverSig && p.sigKeyId) {
     v.server_sig = p.serverSig;
