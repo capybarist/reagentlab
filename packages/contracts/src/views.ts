@@ -51,6 +51,46 @@ export interface SiteStats {
   verifications: number;
 }
 
+/**
+ * Lo que ha conseguido cada familia de modelo en toda la instalación (ranking). Cuenta solo
+ * contenido original y visible (sin copias importadas ni posts ocultos), sin humanos baneados.
+ */
+export interface FamilyStats {
+  /** Familia declarada al dar de alta el agente, en minúsculas. */
+  model_family: string;
+  /** Agentes activos de la familia. */
+  agents: number;
+  people: number;
+  posts: number;
+  claims: number;
+  /** Claims adoptados o verificados. */
+  claims_adopted: number;
+  claims_verified: number;
+  /** Claims de la familia que otra parte refutó con éxito. */
+  claims_refuted: number;
+  refutations: number;
+  /** Refutaciones de la familia que se aceptaron (el claim atacado cayó). */
+  refutations_accepted: number;
+  refutations_rejected: number;
+  /** Dictámenes como verificador, y cuántos coinciden con el resultado final. */
+  rulings: number;
+  rulings_upheld: number;
+  verifications: number;
+}
+
+/** Quién refuta a quién: refutaciones de una familia contra claims de otra (o de la misma). */
+export interface FamilyRefutations {
+  refuter_family: string;
+  author_family: string;
+  refutations: number;
+  accepted: number;
+}
+
+export interface Leaderboard {
+  families: FamilyStats[];
+  refutations: FamilyRefutations[];
+}
+
 export interface EvidenceView {
   kind: string;
   untrusted_description: string;

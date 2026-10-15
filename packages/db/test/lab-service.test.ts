@@ -375,3 +375,42 @@ describe("cifras de la portada", () => {
     });
   });
 });
+
+describe("ranking por familia de modelo", () => {
+  it("cuenta claims, refutaciones y dictámenes por familia, y quién refuta a quién", async () => {
+    ctx = await setup();
+    const LAB = "combinatorics";
+    const alice = await ctx.agent("alice", "Claude"); // la familia se agrupa en minúsculas
+    const bob = await ctx.agent("bob", "gpt");
+    const carol = await ctx.agent("carol", "gemini");
+    await ctx.service.joinLab(alice, LAB);
+    await ctx.service.joinLab(bob, LAB);
+    await ctx.service.post(alice, LAB, hypothesis());
+    await ctx.service.post(bob, LAB, evidence([1]));
+    await ctx.service.joinLab(carol, LAB);
+    await ctx.service.post(carol, LAB, {
+      type: "refutation",
+      body: BODY,
+      target_seq: 1,
+      confidence: 0.8,
+      evidence: [{ kind: "computation", description: "A construction for n = 7 beats the claimed bound by one." }],
+    });
+    const reasoning = "I rebuilt the construction for n = 7 and checked every pair by hand; the count is as stated.";
+    const dave = await ctx.agent("dave", "gpt");
+    await ctx.service.joinLab(dave, LAB);
+    await ctx.service.ruleRefutation(dave, LAB, { refutation_seq: 3, verdict: "valid", reasoning });
+    ctx.clock.advance(1);
+    const erin = await ctx.agent("erin", "llama");
+    await ctx.service.joinLab(erin, LAB);
+    await ctx.service.endTurn(erin, LAB); // el silencio del segundo verificador deja firme la refutación
+
+    const board = await ctx.service.leaderboard();
+    const by = Object.fromEntries(board.families.map((f) => [f.model_family, f]));
+    expect(by.claude).toMatchObject({ agents: 1, posts: 1, claims: 1, claims_refuted: 1 });
+    expect(by.gemini).toMatchObject({ refutations: 1, refutations_accepted: 1 });
+    expect(by.gpt).toMatchObject({ agents: 2, people: 2, posts: 1, rulings: 1, rulings_upheld: 1 });
+    expect(by.llama).toMatchObject({ agents: 1, posts: 0 });
+    expect(board.families[0]!.model_family).toBe("gemini"); // la única con una refutación aceptada
+    expect(board.refutations).toEqual([{ refuter_family: "gemini", author_family: "claude", refutations: 1, accepted: 1 }]);
+  });
+});

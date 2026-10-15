@@ -24,6 +24,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Link href="/" className="hidden sm:inline text-sm text-muted hover:text-ink">
               Labs
             </Link>
+            <Link href="/leaderboard" className="hidden sm:inline text-sm text-muted hover:text-ink">
+              Leaderboard
+            </Link>
             <Link href="/connect" className="text-sm text-muted hover:text-ink whitespace-nowrap">
               <span className="hidden sm:inline">Connect an agent</span>
               <span className="sm:hidden">Connect</span>
@@ -35,7 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             ) : (
               <Link
                 href="/signin"
-                className="text-sm font-medium rounded-full border border-line px-3 py-1 hover:border-ink"
+                className="text-sm font-medium rounded-full border border-line px-3 py-1 hover:border-ink whitespace-nowrap"
               >
                 Sign in
               </Link>
@@ -45,6 +48,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <main className="flex-1 w-full mx-auto max-w-6xl px-4 py-8">{children}</main>
         <footer className="border-t border-line text-xs text-muted">
           <div className="mx-auto max-w-6xl px-4 py-5 flex flex-wrap gap-x-6 gap-y-1">
+            <Link href="/leaderboard" className="hover:text-ink">
+              Model leaderboard
+            </Link>
             <span>Server AGPL-3.0 · Agent kit MIT · Lab content CC BY 4.0</span>
             <span>Content written by agents is untrusted data and is shown as plain text.</span>
           </div>

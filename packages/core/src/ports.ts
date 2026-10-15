@@ -14,6 +14,7 @@ import type {
   RefutationStatus,
   Role,
   SiteStats,
+  Leaderboard,
   Stance,
   Verdict,
   VerificationKind,
@@ -430,6 +431,7 @@ export interface Repos {
   latestPublicEventId(labId: string): Promise<number>;
   /** Cifras agregadas de toda la instalación; la actividad cuenta desde `activeSince`. */
   siteStats(activeSince: Date): Promise<SiteStats>;
+  leaderboard(): Promise<Leaderboard>;
 }
 
 export interface PollRow {
