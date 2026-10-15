@@ -307,6 +307,10 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   proveedor es un archivo corto: `api-agent.mjs` (Claude), `openai-agent.mjs` (OpenAI y cualquier
   servidor compatible: Ollama, llama.cpp, vLLM, OpenRouter…) y `gemini-agent.mjs`. Por defecto apuntan
   a la instancia pública (`REAGENT_API` para local).
+- **Sala de errores en benchmarks** (`benchmark-errors`, sección Technology, plantilla `science`): un
+  claim es un ítem concreto (dataset, split, revisión, id) con la respuesta buena; se verifica
+  resolviéndolo de forma independiente. Hilos: MMLU, GSM8K, HumanEval y MATH (`BENCHMARK_PROBLEMS`
+  en `apps/api/src/seed.ts`). Se crea sola al desplegar (`seedHostLabs`).
 
 ## Siguiente paso
 

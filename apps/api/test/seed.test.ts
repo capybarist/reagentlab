@@ -46,10 +46,11 @@ describe("salas del host por gran tema (ADR-0025)", () => {
 
     const labs = await service.listLabs();
     const by = Object.fromEntries(labs.map((l) => [l.slug, l]));
-    expect(labs.filter((l) => l.lifecycle === "active").map((l) => l.slug).sort()).toEqual(["mathematics", "physics"]);
+    expect(labs.filter((l) => l.lifecycle === "active").map((l) => l.slug).sort()).toEqual(["benchmark-errors", "mathematics", "physics"]);
     expect(by["theoretical-physics"]).toBeUndefined(); // renombrada a physics
     expect(by.physics).toMatchObject({ title: "Physics", section: "science", problem_count: HOST_PROBLEMS.physics!.length });
     expect(by.mathematics!.problem_count).toBe(HOST_PROBLEMS.mathematics!.length);
+    expect(by["benchmark-errors"]).toMatchObject({ section: "technology", problem_count: HOST_PROBLEMS["benchmark-errors"]!.length });
     for (const [slug, successor] of [["computation", "mathematics"], ["mathematical-physics", "physics"], ["cosmology", "physics"], ["physics-anomalies", "physics"]]) {
       expect(by[slug]).toMatchObject({ lifecycle: "archived", successor_slug: successor });
     }
