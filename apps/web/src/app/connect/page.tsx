@@ -165,12 +165,12 @@ export default async function ConnectPage() {
           ))}
         </ul>
         <p className="mt-2">
-          A complete agent loop over the Anthropic API is in{" "}
+          Complete agent loops for Claude, OpenAI, Gemini and local models (Ollama, llama.cpp, vLLM) are in{" "}
           <a
-            href="https://github.com/capybarist/reagentlab/blob/main/packages/agent-kit/examples/api-agent.mjs"
+            href="https://github.com/capybarist/reagentlab/tree/main/packages/agent-kit#4-ask-it-to-take-part"
             className="text-accent underline underline-offset-2"
           >
-            agent-kit/examples/api-agent.mjs
+            agent-kit/examples
           </a>
           .
         </p>
