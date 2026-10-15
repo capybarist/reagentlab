@@ -29,6 +29,7 @@ import {
   posts,
   reputationEvents,
   verifications,
+  forecastResolutions,
   refutations,
   rulings,
   turns,
@@ -111,6 +112,7 @@ function toPost(r: {
     sigKeyId: p.sigKeyId,
     importedFrom: p.importedFrom ?? null,
     artifact: p.artifact ?? null,
+    resolvesAt: p.resolvesAt ?? null,
     createdAt: p.createdAt,
   };
 }
@@ -567,6 +569,44 @@ function makeRepos(db: Db): Repos {
       return rows.map((r) => ({ ...r.v, agentName: r.agentName, modelFamily: r.modelFamily }));
     },
 
+    async insertForecastResolution(v) {
+      const rows = await db
+        .insert(forecastResolutions)
+        .values(v)
+        .onConflictDoNothing()
+        .returning({ id: forecastResolutions.id });
+      return rows.length > 0;
+    },
+
+    async listForecastResolutionsForClaims(claimIds) {
+      if (!claimIds.length) return [];
+      const rows = await db
+        .select({ v: forecastResolutions, agentName: agents.name, modelFamily: agents.modelFamily })
+        .from(forecastResolutions)
+        .innerJoin(agents, eq(agents.id, forecastResolutions.agentId))
+        .where(inArray(forecastResolutions.claimId, claimIds))
+        .orderBy(asc(forecastResolutions.createdAt));
+      return rows.map((r) => ({ ...r.v, agentName: r.agentName, modelFamily: r.modelFamily }));
+    },
+
+    async listDueForecastSeqs(labId, now, problemId) {
+      const rows = await db
+        .select({ seq: claims.originSeq })
+        .from(claims)
+        .innerJoin(posts, eq(posts.id, claims.originPostId))
+        .where(
+          and(
+            eq(claims.labId, labId),
+            sql`${posts.hiddenAt} IS NULL`,
+            sql`${claims.resolution} IS NULL`,
+            lte(claims.resolvesAt, now),
+            problemId ? eq(claims.problemId, problemId) : undefined,
+          ),
+        )
+        .orderBy(asc(claims.resolvesAt));
+      return rows.map((r) => r.seq);
+    },
+
     async claimStatusCounts(problemId) {
       const rows = await db
         .select({ status: claims.status, n: count() })
@@ -896,17 +936,24 @@ function makeRepos(db: Db): Repos {
                 OR (rf.status = 'rejected' AND x.verdict = 'invalid')) AS upheld
             FROM ${rulings} x JOIN rf ON rf.id = x.refutation_id JOIN fam g ON g.agent_id = x.agent_id GROUP BY g.family
           ),
-          v AS (SELECT g.family, count(*) AS n FROM ${verifications} x JOIN fam g ON g.agent_id = x.agent_id GROUP BY g.family)
+          v AS (SELECT g.family, count(*) AS n FROM ${verifications} x JOIN fam g ON g.agent_id = x.agent_id GROUP BY g.family),
+          fc AS (
+            SELECT g.family, count(*) AS n,
+              avg(power(x.probability - CASE WHEN x.resolution = 'yes' THEN 1 ELSE 0 END, 2)) AS brier
+            FROM ${claims} x JOIN op ON op.id = x.origin_post_id JOIN fam g ON g.agent_id = x.author_agent_id
+            WHERE x.resolution IN ('yes', 'no') AND x.probability IS NOT NULL GROUP BY g.family
+          )
           SELECT people.family, people.agents, people.people,
             coalesce(p.n, 0) AS posts, coalesce(c.n, 0) AS claims, coalesce(c.adopted, 0) AS claims_adopted,
             coalesce(c.verified, 0) AS claims_verified, coalesce(c.refuted, 0) AS claims_refuted,
             coalesce(r.n, 0) AS refutations, coalesce(r.accepted, 0) AS refutations_accepted,
             coalesce(r.rejected, 0) AS refutations_rejected, coalesce(ru.n, 0) AS rulings,
-            coalesce(ru.upheld, 0) AS rulings_upheld, coalesce(v.n, 0) AS verifications
+            coalesce(ru.upheld, 0) AS rulings_upheld, coalesce(v.n, 0) AS verifications,
+            coalesce(fc.n, 0) AS forecasts_resolved, fc.brier
           FROM people
           LEFT JOIN p ON p.family = people.family LEFT JOIN c ON c.family = people.family
           LEFT JOIN r ON r.family = people.family LEFT JOIN ru ON ru.family = people.family
-          LEFT JOIN v ON v.family = people.family
+          LEFT JOIN v ON v.family = people.family LEFT JOIN fc ON fc.family = people.family
           WHERE people.agents > 0 OR p.n > 0`),
       );
       const matrix = rowsOf<Record<string, string | number>>(
@@ -933,6 +980,8 @@ function makeRepos(db: Db): Repos {
         rulings: n(row, "rulings"),
         rulings_upheld: n(row, "rulings_upheld"),
         verifications: n(row, "verifications"),
+        forecasts_resolved: n(row, "forecasts_resolved"),
+        brier: row.brier === null || row.brier === undefined ? null : Number(row.brier),
       }));
       // Primero lo que ha resistido: verificados, adoptados, refutaciones aceptadas; luego actividad.
       stats.sort(

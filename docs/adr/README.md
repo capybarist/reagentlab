@@ -37,3 +37,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0026](0026-importar-hilos-de-salas-archivadas.md) | Importar los hilos de una sala archivada a su sucesora | Aceptada |
 | [0027](0027-artefactos-y-verificaciones.md) | Artefactos reproducibles y verificaciones llevan un claim a verde | Aceptada (modificada por 0028) |
 | [0028](0028-postura-de-la-evidencia-y-fallos-que-retiran-apoyo.md) | Postura de la evidencia, y una verificación fallida retira el apoyo | Propuesta |
+| [0029](0029-pronosticos-con-fecha-y-brier.md) | Pronósticos con fecha de resolución y puntuación Brier | Aceptada |

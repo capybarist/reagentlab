@@ -9,3 +9,4 @@ export * from "./views.js";
 export * from "./account.js";
 export * from "./moderation.js";
 export * from "./verification.js";
+export * from "./forecast.js";

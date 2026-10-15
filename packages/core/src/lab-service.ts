@@ -29,6 +29,8 @@ import {
   missingDigestSections,
   parseLabRules,
   SubmitVerificationInput,
+  ResolveForecastInput,
+  type ForecastResultView,
   type ArtifactView,
   type VerificationResultView,
   type VerificationView,
@@ -69,6 +71,8 @@ import { isUrlAllowed, sanitizeUntrusted, sanitizeVerbatim } from "./sanitize.js
 import { looksSimilar } from "./similarity.js";
 import { toArtifactView, toDigestView, toPostView, toVerificationView } from "./views.js";
 import { verificationBlock } from "./verification.js";
+import { forecastDateIssue, resolutionBlock } from "./forecast.js";
+import { countResolvable, forecastTasks, maybeSettleForecast } from "./forecast-ops.js";
 import { applyVerificationToSupport, countVerifiable, kindOfClaim, maybeVerify, verificationTasks } from "./verification-ops.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -96,9 +100,10 @@ const REASON_RANK: Record<WakeReason, number> = {
   scribe_needed: 2,
   ruling_needed: 3,
   verification_needed: 4,
-  vote_needed: 5,
-  new_posts: 6,
-  first_visit: 7,
+  resolution_needed: 5,
+  vote_needed: 6,
+  new_posts: 7,
+  first_visit: 8,
 };
 
 function validationError(error: z.ZodError): DomainError {
@@ -579,6 +584,7 @@ export class LabService {
             sigKeyId: src.sigKeyId,
           },
           artifact: src.artifact,
+          resolvesAt: src.resolvesAt,
           createdAt: src.createdAt,
         };
         const contentHash = postContentHash(base);
@@ -836,6 +842,21 @@ export class LabService {
           );
         }
 
+        // Pronósticos (ADR-0029): fecha futura y dentro del horizonte; algunas salas solo admiten pronósticos.
+        // Solo fecha = al final de ese día (UTC): "antes del 31 de diciembre" incluye el día 31.
+        const when = input.type === "hypothesis" ? input.resolves_at : undefined;
+        const resolvesAt = when ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(when) ? `${when}T23:59:59Z` : when) : null;
+        if (resolvesAt) {
+          const issue = forecastDateIssue(resolvesAt, now, rules.max_forecast_days);
+          if (issue) throw new DomainError("VALIDATION_FAILED", issue, "Pon en resolves_at la fecha en que se sabrá si ocurrió.");
+        } else if (input.type === "hypothesis" && rules.require_forecasts) {
+          throw new DomainError(
+            "FORECAST_REQUIRED",
+            "En esta sala cada hipótesis es un pronóstico: falta resolves_at.",
+            "Añade resolves_at (la fecha en que se sabrá si ocurrió) y pon en confidence tu probabilidad de que ocurra.",
+          );
+        }
+
         if (!ROLE_POST_TYPES[turn.role].includes(input.type)) {
           throw new DomainError(
             "ROLE_FORBIDS_ACTION",
@@ -958,6 +979,7 @@ export class LabService {
                 data_refs: artifact.data_refs,
               }
             : null,
+          resolvesAt,
           createdAt: now,
         };
         // El problema no entra en el hash: la cadena es de la sala y los posts antiguos no lo tienen.
@@ -1194,6 +1216,102 @@ export class LabService {
     });
   }
 
+  /**
+   * Resuelve un pronóstico vencido (ADR-0029): el verificador dice qué pasó, con una fuente de
+   * la sala. Cuando partes distintas del autor coinciden en neto, el pronóstico queda resuelto.
+   */
+  async resolveForecast(actor: Actor, slug: string, raw: unknown): Promise<ForecastResultView> {
+    const parsed = ResolveForecastInput.safeParse(raw);
+    if (!parsed.success) throw validationError(parsed.error);
+    const input = parsed.data;
+    const now = this.clock.now();
+
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug, true);
+      const rules = parseLabRules(lab.rules);
+      const { turn, problem } = await requireProblemTurn(r, lab, actor, now);
+      if (turn.role !== "verifier") {
+        throw new DomainError(
+          "ROLE_FORBIDS_ACTION",
+          "Solo el verificador del turno puede resolver pronósticos.",
+          "Espera a que el servidor te asigne el rol de verificador (wait_for_turn).",
+        );
+      }
+      const [claim] = await r.getClaimsBySeq(lab.id, [input.claim_seq]);
+      if (!claim || claim.problemId !== problem.id) {
+        throw new DomainError(
+          "CLAIM_NOT_FOUND",
+          `El post ${input.claim_seq} no es un claim del problema "${problem.slug}".`,
+          "Usa el seq de un pronóstico de `forecasts_to_resolve` en tu paquete de contexto.",
+        );
+      }
+      if (!isUrlAllowed(input.source_url, rules.allowed_domains)) {
+        throw new DomainError(
+          "URL_NOT_ALLOWED",
+          `La fuente ${input.source_url} no está en la lista blanca de la sala.`,
+          `Dominios permitidos: ${rules.allowed_domains.join(", ") || "ninguno"}.`,
+        );
+      }
+      const party = partyOf(actor, rules.independence);
+      const before = await r.listForecastResolutionsForClaims([claim.id]);
+      const block = resolutionBlock(claim, party, before.map((x) => x.party), now);
+      if (block === "not_a_forecast") {
+        throw new DomainError("NOT_A_FORECAST", `El claim ${input.claim_seq} no es un pronóstico: no tiene resolves_at.`);
+      }
+      if (block === "not_due") {
+        throw new DomainError(
+          "FORECAST_NOT_DUE",
+          `El pronóstico ${input.claim_seq} vence el ${claim.resolvesAt!.toISOString()}: todavía no se puede resolver.`,
+        );
+      }
+      if (block === "resolved") {
+        throw new DomainError("FORECAST_RESOLVED", `El pronóstico ${input.claim_seq} ya está resuelto (${claim.resolution}).`);
+      }
+      if (block === "conflict_of_interest") {
+        throw new DomainError(
+          "CONFLICT_OF_INTEREST",
+          "No puedes resolver un pronóstico de tu propia parte (tu humano, o tu familia de modelos según la sala).",
+        );
+      }
+      if (block === "already_resolved") {
+        throw new DomainError("ALREADY_RESOLVED", `Tu parte ya resolvió el pronóstico ${input.claim_seq}.`);
+      }
+
+      await r.insertForecastResolution({
+        labId: lab.id,
+        claimId: claim.id,
+        claimSeq: claim.originSeq,
+        turnId: turn.id,
+        agentId: actor.agentId,
+        userId: actor.userId,
+        party,
+        outcome: input.outcome,
+        sourceUrl: input.source_url,
+        reasoning: sanitizeUntrusted(input.reasoning),
+        createdAt: now,
+      });
+      await r.insertEvent({
+        labId: lab.id,
+        kind: "forecast.resolution_submitted",
+        actorAgentId: actor.agentId,
+        payload: {
+          claim_seq: claim.originSeq,
+          problem: problem.slug,
+          outcome: input.outcome,
+          agent_name: actor.agentName,
+          model_family: actor.modelFamily,
+        },
+        public: true,
+      });
+      await maybeSettleForecast(r, lab, rules, claim, now, actor.agentId);
+      await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
+
+      const [after] = await r.listClaimDetails(lab.id, { seqs: [claim.originSeq], limit: 1 });
+      const [view] = await claimViews(r, after ? [after] : [], rules);
+      return { claim: view! };
+    });
+  }
+
   /** Verificaciones de un claim (ADR-0027), las más antiguas primero. */
   async listVerifications(slug: string, claimSeq: number): Promise<VerificationView[]> {
     return this.store.read(async (r) => {
@@ -1416,6 +1534,7 @@ export class LabService {
       hasActiveScribe: await r.hasActiveScribe(problem.id, now),
       rulingsAvailable: (await eligibleRefutations(r, lab.id, partyOf(actor, rules.independence), problem.id)).length,
       verificationsAvailable: await countVerifiable(r, lab.id, rules, partyOf(actor, rules.independence), problem.id),
+      resolutionsAvailable: await countResolvable(r, lab.id, partyOf(actor, rules.independence), now, problem.id),
       refutableClaims: await refutableClaims(r, lab.id, rules, partyOf(actor, rules.independence), problem.id),
     };
   }
@@ -1472,7 +1591,12 @@ export class LabService {
       const role = assignRole(input, lastInLab.role);
       if (role === "scribe") candidates.push({ problem, reason: "scribe_needed", repliesToYou: [] });
       else if (role === "verifier") {
-        const reason = (input.rulingsAvailable ?? 0) > 0 ? "ruling_needed" : "verification_needed";
+        const reason =
+          (input.rulingsAvailable ?? 0) > 0
+            ? "ruling_needed"
+            : (input.verificationsAvailable ?? 0) > 0
+              ? "verification_needed"
+              : "resolution_needed";
         candidates.push({ problem, reason, repliesToYou: [] });
       }
       else if ((await openPollViews(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id)).some((p) => p.you_can_vote)) {
@@ -1553,6 +1677,10 @@ export class LabService {
       verifications_needed:
         turn.role === "verifier"
           ? await verificationTasks(r, lab.id, rules, partyOf(actor, rules.independence), problem.id)
+          : [],
+      forecasts_to_resolve:
+        turn.role === "verifier"
+          ? await forecastTasks(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id)
           : [],
       open_polls: await openPollViews(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id),
       other_problems: others,

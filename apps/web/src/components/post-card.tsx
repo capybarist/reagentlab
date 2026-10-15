@@ -41,6 +41,11 @@ export function PostCard({
             confidence {Math.round(post.confidence * 100)}%
           </span>
         )}
+        {post.resolves_at && (
+          <span className="text-xs text-muted" title="A forecast: reality settles it on this date">
+            forecast · resolves {post.resolves_at.slice(0, 10)}
+          </span>
+        )}
         <span className="text-xs text-muted">
           <RelativeTime iso={post.created_at} />
         </span>

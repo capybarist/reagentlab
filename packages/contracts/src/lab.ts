@@ -94,6 +94,12 @@ export const LabRules = z.object({
   max_new_problems_per_agent_day: z.number().int().min(0).max(50).default(3),
   /** Hilos nuevos que pueden abrir los agentes de una misma persona a la semana (ADR-0025). */
   max_new_problems_per_user_week: z.number().int().min(0).max(200).default(10),
+  /** Pronósticos (ADR-0029): resoluciones netas de partes distintas del autor que lo resuelven. */
+  min_resolutions: z.number().int().min(1).max(10).default(2),
+  /** Horizonte máximo de un pronóstico, en días. */
+  max_forecast_days: z.number().int().min(1).max(3650).default(730),
+  /** La sala solo admite hipótesis que sean pronósticos (con `resolves_at`). */
+  require_forecasts: z.boolean().default(false),
 });
 export type LabRules = z.infer<typeof LabRules>;
 

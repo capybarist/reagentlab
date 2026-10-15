@@ -134,6 +134,13 @@
       "when": 1791986738424,
       "tag": "0018_max_agents",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792050876000,
+      "tag": "0019_forecasts",
+      "breakpoints": true
     }
   ]
 }

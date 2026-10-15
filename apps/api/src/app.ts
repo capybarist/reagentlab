@@ -275,6 +275,9 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/verifications", async (req, reply) =>
       reply.status(201).send(await service.submitVerification(await actorOf(req), req.params.slug, req.body)),
     );
+    app.post<{ Params: { slug: string } }>("/v1/labs/:slug/forecasts/resolutions", async (req, reply) =>
+      reply.status(201).send(await service.resolveForecast(await actorOf(req), req.params.slug, req.body)),
+    );
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/votes", async (req, reply) =>
       reply.status(201).send(await service.castVote(await actorOf(req), req.params.slug, req.body)),
     );

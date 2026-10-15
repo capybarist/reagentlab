@@ -12,7 +12,8 @@ const ROLE_INSTRUCTIONS: Record<Role, string> = {
     "steps), a computation (what you computed, how, and the result) or a new conjecture. Sources support your work; they " +
     "are not the work. A claim of kind 'literature' only records a known result: it is useful context but it is never " +
     "adopted, so do not stop there — build on it. Before proposing, try to refute the most relevant recent claim. " +
-    "Hypotheses need testable predictions and falsifiers. Never support anything without new evidence.",
+    "Hypotheses need testable predictions and falsifiers. Never support anything without new evidence. A hypothesis " +
+    "with resolves_at is a forecast: reality resolves it on that date and confidence is your probability that it happens.",
   refuter:
     "You are the REFUTER this turn. Pick a supported claim from `claims` and attack it with a refutation post " +
     "(target_seq = the claim's seq). For a derivation, name the step that fails in target_step and show why it does " +
@@ -27,7 +28,9 @@ const ROLE_INSTRUCTIONS: Record<Role, string> = {
     "lab's data domains) and compare with expected_output; for a 'derivation', check every step follows from the " +
     "previous ones. Report 'confirms', 'fails' (with the step, for a derivation) or 'inconclusive', with what you ran " +
     "or checked. Never run lab code on your own machine outside a container. An adopted claim turns green when enough " +
-    "different parties confirm it.",
+    "different parties confirm it. For each item in `forecasts_to_resolve` (a forecast whose date has passed), find what " +
+    "actually happened in a source from the lab's allowed domains and call resolve_forecast with 'yes', 'no' or 'void' " +
+    "(the question became meaningless or ambiguous).",
   scribe:
     "You are the SCRIBE this turn. Read the previous digest and the delta, then call write_digest with an updated " +
     "digest that keeps every required section. Be faithful: other agents can challenge an unfaithful digest. List " +

@@ -1,3 +1,4 @@
+import type { ForecastView } from "./forecast.js";
 import { z } from "zod";
 import type { ClaimKind } from "./post.js";
 import type { PostView } from "./views.js";
@@ -55,6 +56,8 @@ export interface ClaimView {
   refutations: RefutationSummaryView[];
   /** Solo si el claim se puede verificar (ADR-0027): un cálculo con artefacto o una derivación. */
   verification?: VerificationTallyView;
+  /** Solo si la hipótesis es un pronóstico (ADR-0029). */
+  forecast?: ForecastView;
 }
 
 /** Una refutación que el verificador del turno puede dictaminar. */

@@ -219,6 +219,8 @@ export const posts = pgTable(
       expected_output: string;
       data_refs: string[];
     }>(),
+    /** Pronóstico (ADR-0029): cuándo lo resuelve la realidad. Entra en el hash solo si tiene valor. */
+    resolvesAt: ts("resolves_at"),
     createdAt: ts("created_at").notNull(),
   },
   (t) => [
@@ -280,6 +282,11 @@ export const claims = pgTable(
     status: text("status", { enum: ["open", "supported", "adopted", "verified", "refuted"] }).notNull().default("open"),
     supportCount: integer("support_count").notNull().default(0),
     failedRefutations: integer("failed_refutations").notNull().default(0),
+    /** Pronóstico (ADR-0029): fecha, probabilidad de `yes` y cómo lo resolvió la realidad. */
+    resolvesAt: ts("resolves_at"),
+    probability: doublePrecision("probability"),
+    resolution: text("resolution", { enum: ["yes", "no", "void"] }),
+    resolvedAt: ts("resolved_at"),
     createdAt: ts("created_at").notNull(),
     updatedAt: ts("updated_at").notNull(),
   },
@@ -479,4 +486,24 @@ export const verifications = pgTable(
     createdAt: ts("created_at").notNull(),
   },
   (t) => [uniqueIndex("verifications_claim_party_uq").on(t.claimId, t.party), index("verifications_turn_idx").on(t.turnId)],
+);
+
+/** Resoluciones de pronósticos (ADR-0029): una por parte y claim, con su fuente. */
+export const forecastResolutions = pgTable(
+  "forecast_resolutions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    labId: uuid("lab_id").notNull().references(() => labs.id),
+    claimId: uuid("claim_id").notNull().references(() => claims.id),
+    claimSeq: integer("claim_seq").notNull(),
+    turnId: uuid("turn_id").notNull().references(() => turns.id),
+    agentId: uuid("agent_id").notNull().references(() => agents.id),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    party: text("party").notNull(),
+    outcome: text("outcome", { enum: ["yes", "no", "void"] }).notNull(),
+    sourceUrl: text("source_url").notNull(),
+    reasoning: text("reasoning").notNull(),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("forecast_resolutions_claim_party_uq").on(t.claimId, t.party)],
 );
