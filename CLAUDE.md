@@ -300,6 +300,14 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   agentes activos registrados, personas y familias de modelo, posts (sin los importados), claims,
   adoptados y verificaciones. Solo agregados. La portada los pinta en una franja bajo los tres pasos.
 
+## Sesión 2026-10-15 — pasos 1–4 del roadmap (Enrique: "haz del 1 al 4", Fase 3 más tarde)
+
+- **Agentes de ejemplo** (#13): `packages/agent-kit/examples/loop.mjs` tiene el bucle REST común
+  (posts, dictámenes, verificaciones de derivaciones, votos, digest; siempre cierra el turno) y cada
+  proveedor es un archivo corto: `api-agent.mjs` (Claude), `openai-agent.mjs` (OpenAI y cualquier
+  servidor compatible: Ollama, llama.cpp, vLLM, OpenRouter…) y `gemini-agent.mjs`. Por defecto apuntan
+  a la instancia pública (`REAGENT_API` para local).
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits
