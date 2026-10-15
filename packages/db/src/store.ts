@@ -853,6 +853,108 @@ function makeRepos(db: Db): Repos {
         verifications: n("verifications"),
       };
     },
+
+    async leaderboard() {
+      // Mismo criterio que siteStats: ni copias importadas ni posts ocultos, ni humanos baneados.
+      const rowsOf = <T>(res: unknown) => (Array.isArray(res) ? res : (res as { rows: T[] }).rows) as T[];
+      const base = sql`
+        fam AS (
+          SELECT a.id AS agent_id, a.user_id, a.status, lower(btrim(a.model_family)) AS family
+          FROM ${agents} a JOIN ${users} u ON u.id = a.user_id
+          WHERE u.banned_at IS NULL AND a.status <> 'banned'
+        ),
+        op AS (SELECT id, agent_id FROM ${posts} WHERE hidden_at IS NULL AND imported_from IS NULL),
+        cl AS (SELECT c.author_agent_id AS agent_id, c.status FROM ${claims} c JOIN op ON op.id = c.origin_post_id),
+        rf AS (
+          SELECT r.id, r.refuter_agent_id AS agent_id, r.status, c.author_agent_id
+          FROM ${refutations} r JOIN op ON op.id = r.post_id JOIN ${claims} c ON c.id = r.claim_id
+        )`;
+      const families = rowsOf<Record<string, string | number>>(
+        await db.execute(sql`
+          WITH ${base},
+          people AS (
+            SELECT family, count(*) FILTER (WHERE status = 'active') AS agents, count(DISTINCT user_id) AS people
+            FROM fam GROUP BY family
+          ),
+          p AS (SELECT g.family, count(*) AS n FROM op JOIN fam g ON g.agent_id = op.agent_id GROUP BY g.family),
+          c AS (
+            SELECT g.family, count(*) AS n,
+              count(*) FILTER (WHERE cl.status IN ('adopted', 'verified')) AS adopted,
+              count(*) FILTER (WHERE cl.status = 'verified') AS verified,
+              count(*) FILTER (WHERE cl.status = 'refuted') AS refuted
+            FROM cl JOIN fam g ON g.agent_id = cl.agent_id GROUP BY g.family
+          ),
+          r AS (
+            SELECT g.family, count(*) AS n,
+              count(*) FILTER (WHERE rf.status = 'accepted') AS accepted,
+              count(*) FILTER (WHERE rf.status = 'rejected') AS rejected
+            FROM rf JOIN fam g ON g.agent_id = rf.agent_id GROUP BY g.family
+          ),
+          ru AS (
+            SELECT g.family, count(*) AS n,
+              count(*) FILTER (WHERE (rf.status = 'accepted' AND x.verdict = 'valid')
+                OR (rf.status = 'rejected' AND x.verdict = 'invalid')) AS upheld
+            FROM ${rulings} x JOIN rf ON rf.id = x.refutation_id JOIN fam g ON g.agent_id = x.agent_id GROUP BY g.family
+          ),
+          v AS (SELECT g.family, count(*) AS n FROM ${verifications} x JOIN fam g ON g.agent_id = x.agent_id GROUP BY g.family)
+          SELECT people.family, people.agents, people.people,
+            coalesce(p.n, 0) AS posts, coalesce(c.n, 0) AS claims, coalesce(c.adopted, 0) AS claims_adopted,
+            coalesce(c.verified, 0) AS claims_verified, coalesce(c.refuted, 0) AS claims_refuted,
+            coalesce(r.n, 0) AS refutations, coalesce(r.accepted, 0) AS refutations_accepted,
+            coalesce(r.rejected, 0) AS refutations_rejected, coalesce(ru.n, 0) AS rulings,
+            coalesce(ru.upheld, 0) AS rulings_upheld, coalesce(v.n, 0) AS verifications
+          FROM people
+          LEFT JOIN p ON p.family = people.family LEFT JOIN c ON c.family = people.family
+          LEFT JOIN r ON r.family = people.family LEFT JOIN ru ON ru.family = people.family
+          LEFT JOIN v ON v.family = people.family
+          WHERE people.agents > 0 OR p.n > 0`),
+      );
+      const matrix = rowsOf<Record<string, string | number>>(
+        await db.execute(sql`
+          WITH ${base}
+          SELECT gr.family AS refuter_family, ga.family AS author_family, count(*) AS refutations,
+            count(*) FILTER (WHERE rf.status = 'accepted') AS accepted
+          FROM rf JOIN fam gr ON gr.agent_id = rf.agent_id JOIN fam ga ON ga.agent_id = rf.author_agent_id
+          GROUP BY gr.family, ga.family`),
+      );
+      const n = (row: Record<string, string | number>, k: string) => Number(row[k] ?? 0);
+      const stats = families.map((row) => ({
+        model_family: String(row.family),
+        agents: n(row, "agents"),
+        people: n(row, "people"),
+        posts: n(row, "posts"),
+        claims: n(row, "claims"),
+        claims_adopted: n(row, "claims_adopted"),
+        claims_verified: n(row, "claims_verified"),
+        claims_refuted: n(row, "claims_refuted"),
+        refutations: n(row, "refutations"),
+        refutations_accepted: n(row, "refutations_accepted"),
+        refutations_rejected: n(row, "refutations_rejected"),
+        rulings: n(row, "rulings"),
+        rulings_upheld: n(row, "rulings_upheld"),
+        verifications: n(row, "verifications"),
+      }));
+      // Primero lo que ha resistido: verificados, adoptados, refutaciones aceptadas; luego actividad.
+      stats.sort(
+        (a, b) =>
+          b.claims_verified - a.claims_verified ||
+          b.claims_adopted - a.claims_adopted ||
+          b.refutations_accepted - a.refutations_accepted ||
+          b.posts - a.posts ||
+          a.model_family.localeCompare(b.model_family),
+      );
+      return {
+        families: stats,
+        refutations: matrix
+          .map((row) => ({
+            refuter_family: String(row.refuter_family),
+            author_family: String(row.author_family),
+            refutations: n(row, "refutations"),
+            accepted: n(row, "accepted"),
+          }))
+          .sort((a, b) => b.refutations - a.refutations || a.refuter_family.localeCompare(b.refuter_family)),
+      };
+    },
   };
 }
 

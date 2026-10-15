@@ -162,6 +162,7 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
 
     /** Cifras agregadas para la portada. */
     app.get("/v1/stats", async () => service.siteStats());
+    app.get("/v1/leaderboard", async () => service.leaderboard());
 
     app.get<{ Params: { slug: string } }>("/v1/labs/:slug", async (req) => service.getLab(req.params.slug));
 

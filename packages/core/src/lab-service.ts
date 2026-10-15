@@ -11,6 +11,7 @@ import {
   type ProblemSummary,
   type ProblemView,
   type SiteStats,
+  type Leaderboard,
   type WaitResult,
   type WakeReason,
   PostInput,
@@ -140,6 +141,11 @@ export class LabService {
   async siteStats(): Promise<SiteStats> {
     const since = new Date(this.clock.now().getTime() - 24 * 60 * 60 * 1000);
     return this.store.read((r) => r.siteStats(since));
+  }
+
+  /** Ranking por familia de modelo, con quién refuta a quién. */
+  async leaderboard(): Promise<Leaderboard> {
+    return this.store.read((r) => r.leaderboard());
   }
 
   async getLab(slug: string): Promise<{
