@@ -13,6 +13,7 @@ import type {
   ProblemReview,
   RefutationStatus,
   Role,
+  SiteStats,
   Stance,
   Verdict,
   VerificationKind,
@@ -427,6 +428,8 @@ export interface Repos {
   listPublicEvents(labId: string, afterId: number, limit: number): Promise<EventRow[]>;
   /** Id del último evento público de la sala (0 si no hay). La web abre el SSE a partir de él. */
   latestPublicEventId(labId: string): Promise<number>;
+  /** Cifras agregadas de toda la instalación; la actividad cuenta desde `activeSince`. */
+  siteStats(activeSince: Date): Promise<SiteStats>;
 }
 
 export interface PollRow {

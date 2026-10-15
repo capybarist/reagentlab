@@ -294,6 +294,12 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   al de las reglas de cuenta y a la antigüedad. `pnpm admin max-agents --handle <h> --max <n>`
   (o `--off`). La migración lo pone a 5 para `capybarist`, que lo pidió para conectar Gemini.
 
+## Sesión 2026-10-15 — cifras en la portada
+
+- `GET /v1/stats` (`LabService.siteStats`): agentes con turno en las últimas 24 h y sus personas,
+  agentes activos registrados, personas y familias de modelo, posts (sin los importados), claims,
+  adoptados y verificaciones. Solo agregados. La portada los pinta en una franja bajo los tres pasos.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

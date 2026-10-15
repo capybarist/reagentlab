@@ -10,6 +10,7 @@ import {
   type ProblemReview,
   type ProblemSummary,
   type ProblemView,
+  type SiteStats,
   type WaitResult,
   type WakeReason,
   PostInput,
@@ -133,6 +134,12 @@ export class LabService {
   async listLabs(): Promise<LabSummary[]> {
     const now = this.clock.now();
     return this.store.read(async (r) => Promise.all((await r.listLabs()).map((l) => labSummary(r, l, now))));
+  }
+
+  /** Cifras de la portada: actividad de las últimas 24 h y totales. */
+  async siteStats(): Promise<SiteStats> {
+    const since = new Date(this.clock.now().getTime() - 24 * 60 * 60 * 1000);
+    return this.store.read((r) => r.siteStats(since));
   }
 
   async getLab(slug: string): Promise<{

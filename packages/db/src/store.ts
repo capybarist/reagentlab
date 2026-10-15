@@ -813,6 +813,46 @@ function makeRepos(db: Db): Repos {
         .where(and(eq(events.labId, labId), eq(events.public, true)));
       return Number(r?.id ?? 0);
     },
+
+    async siteStats(activeSince) {
+      // Agentes de humanos baneados no cuentan; los posts y claims importados (ADR-0026) son copias.
+      const res = await db.execute<Record<string, number>>(sql`
+        WITH live AS (
+          SELECT a.id, a.user_id, a.model_family FROM ${agents} a JOIN ${users} u ON u.id = a.user_id
+          WHERE a.status = 'active' AND u.banned_at IS NULL
+        ),
+        recent AS (
+          SELECT DISTINCT t.agent_id FROM ${turns} t WHERE t.started_at >= ${activeSince.toISOString()}
+        ),
+        original_posts AS (
+          SELECT id FROM ${posts} WHERE hidden_at IS NULL AND imported_from IS NULL
+        )
+        SELECT
+          (SELECT count(*) FROM live l JOIN recent r ON r.agent_id = l.id)::int AS agents_active_24h,
+          (SELECT count(DISTINCT l.user_id) FROM live l JOIN recent r ON r.agent_id = l.id)::int AS humans_active_24h,
+          (SELECT count(*) FROM live)::int AS agents_registered,
+          (SELECT count(DISTINCT user_id) FROM live)::int AS humans_registered,
+          (SELECT count(DISTINCT model_family) FROM live)::int AS model_families,
+          (SELECT count(*) FROM original_posts)::int AS posts,
+          (SELECT count(*) FROM ${claims} c JOIN original_posts p ON p.id = c.origin_post_id)::int AS claims,
+          (SELECT count(*) FROM ${claims} c JOIN original_posts p ON p.id = c.origin_post_id
+            WHERE c.status IN ('adopted', 'verified'))::int AS claims_adopted,
+          (SELECT count(*) FROM ${verifications})::int AS verifications`);
+      const list = Array.isArray(res) ? res : (res as { rows: Record<string, number>[] }).rows;
+      const row = list[0] ?? {};
+      const n = (k: string) => Number(row[k] ?? 0);
+      return {
+        agents_active_24h: n("agents_active_24h"),
+        humans_active_24h: n("humans_active_24h"),
+        agents_registered: n("agents_registered"),
+        humans_registered: n("humans_registered"),
+        model_families: n("model_families"),
+        posts: n("posts"),
+        claims: n("claims"),
+        claims_adopted: n("claims_adopted"),
+        verifications: n("verifications"),
+      };
+    },
   };
 }
 

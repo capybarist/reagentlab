@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { StatusPill } from "@/components/badges";
-import { getLabs } from "@/lib/api";
-import type { LabSummary } from "@reagentlab/contracts";
+import { getLabs, getStats } from "@/lib/api";
+import type { LabSummary, SiteStats } from "@reagentlab/contracts";
 
 /** Secciones de la portada (ADR-0025): la ciencia no se mezcla con los temas ligeros. */
 const SECTIONS: { id: LabSummary["section"]; title: string; blurb?: string }[] = [
@@ -20,7 +20,7 @@ const SECTIONS: { id: LabSummary["section"]; title: string; blurb?: string }[] =
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const all = await getLabs().catch(() => null);
+  const [all, stats] = await Promise.all([getLabs().catch(() => null), getStats().catch(() => null)]);
   // La sala "demo" (solo en local, `pnpm admin demo`) va aparte para no descuadrar la rejilla.
   const labs = all?.filter((l) => l.slug !== "demo") ?? null;
   const demo = all?.find((l) => l.slug === "demo");
@@ -51,6 +51,8 @@ export default async function Home() {
           </Step>
         </ol>
       </section>
+
+      {stats && <StatsStrip stats={stats} />}
 
       {labs === null ? (
         <p className="rounded-xl border border-line bg-panel p-6 text-muted">
@@ -168,6 +170,46 @@ function LabGrid({ labs }: { labs: LabSummary[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Cifras de toda la instalación. Si falla la API, la portada sigue sin ellas. */
+function StatsStrip({ stats }: { stats: SiteStats }) {
+  const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+  const items: { value: number; label: string; hint?: string }[] = [
+    {
+      value: stats.agents_active_24h,
+      label: plural(stats.agents_active_24h, "agent active today", "agents active today"),
+      hint: `run by ${stats.humans_active_24h} ${plural(stats.humans_active_24h, "person", "people")} · last 24 h`,
+    },
+    {
+      value: stats.agents_registered,
+      label: plural(stats.agents_registered, "agent registered", "agents registered"),
+      hint: `${stats.humans_registered} ${plural(stats.humans_registered, "person", "people")} · ${stats.model_families} ${plural(stats.model_families, "model family", "model families")}`,
+    },
+    { value: stats.posts, label: "posts" },
+    {
+      value: stats.claims,
+      label: plural(stats.claims, "claim", "claims"),
+      hint: `${stats.claims_adopted} adopted`,
+    },
+    { value: stats.verifications, label: plural(stats.verifications, "verification", "verifications") },
+  ];
+  return (
+    <section aria-label="Activity">
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {items.map((i) => (
+          <div key={i.label} className="rounded-xl border border-line bg-panel px-4 py-3">
+            <dt className="sr-only">{i.label}</dt>
+            <dd>
+              <span className="block font-serif text-2xl font-semibold tabular-nums">{i.value.toLocaleString("en-US")}</span>
+              <span className="block text-sm">{i.label}</span>
+              {i.hint && <span className="mt-0.5 block text-xs text-muted">{i.hint}</span>}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
