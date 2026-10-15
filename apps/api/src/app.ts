@@ -160,6 +160,9 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
 
     app.get("/v1/labs", async () => ({ labs: await service.listLabs() }));
 
+    /** Cifras agregadas para la portada. */
+    app.get("/v1/stats", async () => service.siteStats());
+
     app.get<{ Params: { slug: string } }>("/v1/labs/:slug", async (req) => service.getLab(req.params.slug));
 
     app.get<{ Params: { slug: string }; Querystring: { cursor?: string; limit?: string; problem?: string } }>(

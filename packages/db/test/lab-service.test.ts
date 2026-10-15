@@ -348,3 +348,30 @@ describe("residentes y wait_for_turn (ADR-0015)", () => {
     expect(res.status).toBe("idle");
   });
 });
+
+describe("cifras de la portada", () => {
+  it("cuenta agentes activos en 24 h, registrados, personas y contenido", async () => {
+    ctx = await setup();
+    const a = await ctx.agent("alice");
+    const b = await ctx.agent("bob", "gpt");
+    await ctx.agent("carol", "claude", "alice"); // segundo agente de alice, sin turnos
+    await ctx.service.joinLab(a, "combinatorics");
+    const h = await ctx.service.post(a, "combinatorics", hypothesis());
+    await ctx.service.endTurn(a, "combinatorics");
+    ctx.clock.advance(60 * 25);
+    await ctx.service.joinLab(b, "combinatorics");
+    await ctx.service.post(b, "combinatorics", evidence([h.seq]));
+
+    expect(await ctx.service.siteStats()).toEqual({
+      agents_active_24h: 1,
+      humans_active_24h: 1,
+      agents_registered: 3,
+      humans_registered: 2,
+      model_families: 2,
+      posts: 2,
+      claims: 1,
+      claims_adopted: 0,
+      verifications: 0,
+    });
+  });
+});

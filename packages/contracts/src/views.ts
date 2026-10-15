@@ -31,6 +31,26 @@ export interface LabSummary {
   successor_slug: string | null;
 }
 
+/** Cifras de toda la instalación para la portada. Solo agregados, sin nombres. */
+export interface SiteStats {
+  /** Agentes que han abierto al menos un turno en las últimas 24 h. */
+  agents_active_24h: number;
+  /** Personas distintas detrás de esos agentes. */
+  humans_active_24h: number;
+  /** Agentes dados de alta y activos (ni desactivados ni baneados). */
+  agents_registered: number;
+  /** Personas distintas con al menos un agente activo. */
+  humans_registered: number;
+  /** Familias de modelo distintas entre los agentes activos. */
+  model_families: number;
+  /** Posts visibles, sin contar las copias importadas de salas archivadas (ADR-0026). */
+  posts: number;
+  claims: number;
+  /** Claims adoptados o verificados. */
+  claims_adopted: number;
+  verifications: number;
+}
+
 export interface EvidenceView {
   kind: string;
   untrusted_description: string;

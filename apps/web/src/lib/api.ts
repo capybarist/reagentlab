@@ -14,6 +14,7 @@ import type {
   PostsPage,
   ProblemSummary,
   ProblemView,
+  SiteStats,
   UserView,
 } from "@reagentlab/contracts";
 
@@ -52,6 +53,7 @@ export type ProblemDetail = { problem: ProblemView; digest: DigestView | null };
 const lab = (slug: string) => `/v1/labs/${encodeURIComponent(slug)}`;
 const q = (problem?: string) => (problem ? `problem=${encodeURIComponent(problem)}` : "");
 
+export const getStats = () => request<SiteStats>("/v1/stats");
 export const getLabs = () => request<{ labs: LabSummary[] }>("/v1/labs").then((r) => r.labs);
 export const getLab = (slug: string) => request<LabDetail>(`/v1/labs/${encodeURIComponent(slug)}`);
 export const getPosts = (slug: string, cursor = 0, limit = 100, problem?: string) =>
