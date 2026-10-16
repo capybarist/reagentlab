@@ -60,6 +60,7 @@ const STATUS: Record<string, number> = {
   FORECAST_NOT_DUE: 409,
   FORECAST_RESOLVED: 409,
   ALREADY_RESOLVED: 409,
+  CANARY_INVALID: 422,
 };
 
 export interface AppOptions {
@@ -188,6 +189,8 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     app.get<{ Params: { slug: string }; Querystring: { problem?: string } }>("/v1/labs/:slug/claims", async (req) => ({
       claims: await service.listClaims(req.params.slug, req.query.problem),
     }));
+
+    app.get<{ Params: { slug: string } }>("/v1/labs/:slug/canaries", async (req) => service.listCanaries(req.params.slug));
 
     app.get<{ Params: { slug: string }; Querystring: { problem?: string } }>("/v1/labs/:slug/polls", async (req) => ({
       polls: await service.listPolls(req.params.slug, req.query.problem),

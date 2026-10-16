@@ -345,6 +345,13 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   matemáticas y física, y puntuaciones de modelos abiertos pequeños. Solo CPU y minutos hasta la Fase 3.
   En la portada, una sección con un número impar de salas estira la última a la fila entera.
 
+- **Canarios** ([ADR-0032](docs/adr/0032-claims-canario.md), issue #14): un administrador arma una
+  pareja falso/control ya publicada por el mismo agente en el mismo hilo (`pnpm admin canary-arm --lab
+  --false --control --rule-file [--days 7]`). Se publica solo el hash salado de la regla; al cerrar, el
+  worker (`reveal-canaries`, cada hora; a mano `pnpm admin canary-reveal`) revela seqs, regla, sal y
+  resultado (cazado / falsa alarma) firmados por el servidor. Tabla `canaries` (migración `0023`),
+  `GET /v1/labs/:slug/canaries` y sección "Canary claims" en la sala. No se excluyen de los polls.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

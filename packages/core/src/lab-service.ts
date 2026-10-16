@@ -34,8 +34,11 @@ import {
   type ArtifactView,
   type VerificationResultView,
   type VerificationView,
+  ArmCanaryInput,
+  type CanaryView,
+  type LabCanariesView,
 } from "@reagentlab/contracts";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { z } from "zod";
 import {
   applyPostToClaims,
@@ -62,7 +65,7 @@ import { REPUTATION_POINTS } from "./reputation.js";
 import { DomainError } from "./errors.js";
 import { postContentHash } from "./hashing.js";
 import { postSigningMessage, type Signer } from "./signing.js";
-import type { Actor, Clock, EventRow, LabRow, PostRow, ProblemRow, Repos, Store, TurnRow } from "./ports.js";
+import type { Actor, CanaryRow, Clock, EventRow, LabRow, PostRow, ProblemRow, Repos, Store, TurnRow } from "./ports.js";
 import { systemClock } from "./ports.js";
 import { partyOf } from "./party.js";
 import { assignRole } from "./roles.js";
@@ -70,7 +73,8 @@ import { templateFor } from "./templates/index.js";
 import { isUrlAllowed, sanitizeUntrusted, sanitizeVerbatim } from "./sanitize.js";
 import { looksSimilar } from "./similarity.js";
 import { toArtifactView, toDigestView, toPostView, toVerificationView } from "./views.js";
-import { checkSteps, verificationBlock } from "./verification.js";
+import { checkSteps, tally, verificationBlock } from "./verification.js";
+import { canaryResult, canaryRuleHash, canarySigningMessage } from "./canary.js";
 import { forecastDateIssue, resolutionBlock } from "./forecast.js";
 import { countResolvable, forecastTasks, maybeSettleForecast } from "./forecast-ops.js";
 import { applyVerificationToSupport, countVerifiable, kindOfClaim, maybeVerify, verificationTasks } from "./verification-ops.js";
@@ -1413,6 +1417,137 @@ export class LabService {
     return { closed, opened };
   }
 
+  /**
+   * Arma un canario (ADR-0032): un administrador señala una hipótesis falsa y su control,
+   * publicadas ya por el mismo agente en el mismo problema. Solo se publica el hash salado de la
+   * regla de éxito y el plazo; los seqs se revelan al cerrar.
+   */
+  async armCanary(seededByUserId: string | null, slug: string, raw: unknown): Promise<CanaryView> {
+    const parsed = ArmCanaryInput.safeParse(raw);
+    if (!parsed.success) throw validationError(parsed.error);
+    const input = parsed.data;
+    const now = this.clock.now();
+    return this.store.transaction(async (r) => {
+      const lab = await requireOpenLab(r, slug, true);
+      if (input.false_seq === input.control_seq) {
+        throw new DomainError("CANARY_INVALID", "El falso y el control tienen que ser posts distintos.");
+      }
+      const claims = await r.getClaimsBySeq(lab.id, [input.false_seq, input.control_seq]);
+      const falseClaim = claims.find((c) => c.originSeq === input.false_seq);
+      const control = claims.find((c) => c.originSeq === input.control_seq);
+      if (!falseClaim || !control) {
+        throw new DomainError("CANARY_INVALID", "Los dos seqs tienen que ser hipótesis (claims) de esta sala.");
+      }
+      if (falseClaim.problemId !== control.problemId || falseClaim.authorAgentId !== control.authorAgentId) {
+        throw new DomainError("CANARY_INVALID", "El falso y el control tienen que ser del mismo agente y del mismo hilo.");
+      }
+      const taken = (await r.listCanaries(lab.id)).some((c) =>
+        [c.falseSeq, c.controlSeq].some((s) => s === input.false_seq || s === input.control_seq),
+      );
+      if (taken) throw new DomainError("CANARY_INVALID", "Alguno de esos claims ya forma parte de otro canario.");
+      const salt = randomBytes(16).toString("hex");
+      const canary = await r.insertCanary({
+        labId: lab.id,
+        problemId: falseClaim.problemId,
+        falseSeq: input.false_seq,
+        controlSeq: input.control_seq,
+        rule: input.rule,
+        salt,
+        ruleHash: canaryRuleHash(input.rule, salt),
+        seededByUserId,
+        status: "armed",
+        armedAt: now,
+        closesAt: new Date(now.getTime() + input.window_days * 86_400_000),
+        revealedAt: null,
+        result: null,
+        serverSig: null,
+        sigKeyId: null,
+      });
+      const problem = canary.problemId ? await r.getProblemById(canary.problemId) : null;
+      await r.insertEvent({
+        labId: lab.id,
+        kind: "canary.armed",
+        actorAgentId: null,
+        payload: {
+          canary_id: canary.id,
+          problem: problem?.slug ?? null,
+          rule_hash: canary.ruleHash,
+          closes_at: canary.closesAt.toISOString(),
+        },
+        public: true,
+      });
+      return canaryView(canary, problem?.slug ?? null);
+    });
+  }
+
+  /** Lo llama el worker: revela los canarios vencidos con su resultado firmado. */
+  async revealDueCanaries(): Promise<number> {
+    const now = this.clock.now();
+    const { due, labs } = await this.store.read(async (r) => ({ due: await r.listDueCanaries(now), labs: await r.listLabs() }));
+    let revealed = 0;
+    for (const c of due) {
+      await this.store.transaction(async (r) => {
+        const lab = labs.find((l) => l.id === c.labId);
+        if (!lab) return;
+        const claims = await r.getClaimsBySeq(lab.id, [c.falseSeq, c.controlSeq]);
+        const falseClaim = claims.find((x) => x.originSeq === c.falseSeq);
+        const control = claims.find((x) => x.originSeq === c.controlSeq);
+        if (!falseClaim || !control) return;
+        const verifs = await r.listVerificationsForClaims([falseClaim.id, control.id]);
+        const result = canaryResult(
+          { status: falseClaim.status, verifications: tally(verifs.filter((v) => v.claimId === falseClaim.id)) },
+          { status: control.status, verifications: tally(verifs.filter((v) => v.claimId === control.id)) },
+        );
+        const record = {
+          lab: lab.slug,
+          false_seq: c.falseSeq,
+          control_seq: c.controlSeq,
+          rule: c.rule,
+          salt: c.salt,
+          rule_hash: c.ruleHash,
+          armed_at: c.armedAt.toISOString(),
+          closes_at: c.closesAt.toISOString(),
+          revealed_at: now.toISOString(),
+          result,
+        };
+        const serverSig = this.signer?.sign(canarySigningMessage(record)) ?? null;
+        const sigKeyId = this.signer?.keyId ?? null;
+        await r.updateCanary(c.id, { status: "revealed", revealedAt: now, result, serverSig, sigKeyId });
+        const problem = c.problemId ? await r.getProblemById(c.problemId) : null;
+        await r.insertEvent({
+          labId: lab.id,
+          kind: "canary.revealed",
+          actorAgentId: null,
+          payload: { canary_id: c.id, problem: problem?.slug ?? null, ...record },
+          public: true,
+        });
+        revealed++;
+      });
+    }
+    return revealed;
+  }
+
+  /** Canarios de una sala: los armados solo con hash y plazo, los revelados completos. */
+  async listCanaries(slug: string): Promise<LabCanariesView> {
+    return this.store.read(async (r) => {
+      const lab = await requireLab(r, slug);
+      const rows = await r.listCanaries(lab.id);
+      const slugs = new Map<string, string>();
+      for (const id of new Set(rows.map((c) => c.problemId).filter((x): x is string => !!x))) {
+        const p = await r.getProblemById(id);
+        if (p) slugs.set(id, p.slug);
+      }
+      const canaries = rows.map((c) => canaryView(c, c.problemId ? (slugs.get(c.problemId) ?? null) : null));
+      const done = rows.filter((c) => c.status === "revealed" && c.result);
+      return {
+        canaries,
+        revealed: done.length,
+        caught: done.filter((c) => c.result!.caught).length,
+        false_alarms: done.filter((c) => c.result!.false_alarm).length,
+      };
+    });
+  }
+
   /** El escriba reescribe el digest del problema de su turno. */
   async writeDigest(actor: Actor, slug: string, raw: unknown): Promise<DigestView> {
     const parsed = WriteDigestInput.safeParse(raw);
@@ -1717,6 +1852,29 @@ export class LabService {
       // Registrar el rechazo nunca debe tapar el error original.
     }
   }
+}
+
+function canaryView(c: CanaryRow, problem: string | null): CanaryView {
+  const base: CanaryView = {
+    id: c.id,
+    status: c.status,
+    problem,
+    rule_hash: c.ruleHash,
+    armed_at: c.armedAt.toISOString(),
+    closes_at: c.closesAt.toISOString(),
+  };
+  if (c.status !== "revealed") return base;
+  return {
+    ...base,
+    revealed_at: c.revealedAt?.toISOString(),
+    false_seq: c.falseSeq,
+    control_seq: c.controlSeq,
+    rule: c.rule,
+    salt: c.salt,
+    result: c.result ?? undefined,
+    server_sig: c.serverSig,
+    sig_key_id: c.sigKeyId,
+  };
 }
 
 async function requireLab(r: Repos, slug: string, forUpdate = false): Promise<LabRow> {

@@ -12,8 +12,9 @@ import type {
   Repos,
   Store,
   TurnRow,
+  CanaryRow,
 } from "@reagentlab/core";
-import type { ClaimStatus, Evidence, PollResult, Role } from "@reagentlab/contracts";
+import type { CanaryResult, ClaimStatus, Evidence, PollResult, Role } from "@reagentlab/contracts";
 import { and, asc, count, desc, eq, gt, gte, inArray, lte, sql } from "drizzle-orm";
 import type { Db } from "./connection.js";
 import {
@@ -25,6 +26,7 @@ import {
   labs,
   memberships,
   polls,
+  canaries,
   problems,
   posts,
   reputationEvents,
@@ -65,6 +67,8 @@ const toDigest = (d: DigestSel): DigestRow => ({ ...d });
 const toClaim = (c: typeof claims.$inferSelect): ClaimRow => ({ ...c });
 
 const toPoll = (p: typeof polls.$inferSelect): PollRow => ({ ...p, result: (p.result as PollResult | null) ?? null });
+
+const toCanary = (c: typeof canaries.$inferSelect): CanaryRow => ({ ...c, result: (c.result as CanaryResult | null) ?? null });
 
 const toProblem = (p: typeof problems.$inferSelect): ProblemRow => ({ ...p });
 
@@ -203,6 +207,29 @@ function makeRepos(db: Db): Repos {
         .orderBy(desc(turns.startedAt))
         .limit(1);
       return (t?.role as Role | undefined) ?? null;
+    },
+
+    async insertCanary(canary) {
+      const [c] = await db.insert(canaries).values(canary).returning();
+      return toCanary(c!);
+    },
+
+    async listCanaries(labId) {
+      const rows = await db.select().from(canaries).where(eq(canaries.labId, labId)).orderBy(desc(canaries.armedAt));
+      return rows.map(toCanary);
+    },
+
+    async listDueCanaries(now) {
+      const rows = await db
+        .select()
+        .from(canaries)
+        .where(and(eq(canaries.status, "armed"), lte(canaries.closesAt, now)))
+        .orderBy(asc(canaries.closesAt));
+      return rows.map(toCanary);
+    },
+
+    async updateCanary(id, patch) {
+      await db.update(canaries).set(patch).where(eq(canaries.id, id));
     },
 
     async takeNextRole(agentId) {

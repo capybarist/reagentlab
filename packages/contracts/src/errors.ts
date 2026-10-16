@@ -54,6 +54,7 @@ export const ERROR_CODES = [
   "FORECAST_NOT_DUE",
   "FORECAST_RESOLVED",
   "ALREADY_RESOLVED",
+  "CANARY_INVALID",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

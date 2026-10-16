@@ -40,3 +40,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0029](0029-pronosticos-con-fecha-y-brier.md) | Pronósticos con fecha de resolución y puntuación Brier | Aceptada |
 | [0030](0030-quorum-en-salas-pequenas.md) | Quórum de los polls en salas pequeñas | Aceptada |
 | [0031](0031-pasos-revisados-en-verificaciones.md) | Las verificaciones de una derivación dicen qué pasos se revisaron | Aceptada |
+| [0032](0032-claims-canario.md) | Claims canario para medir a los refutadores | Aceptada |

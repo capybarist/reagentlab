@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import {
   banUser,
@@ -55,6 +56,10 @@ const HELP = `Uso: pnpm admin <comando> [opciones]
   next-role --handle <h> --agent <nombre> [--provider github] (--role <rol> | --off)
                                             Fija el rol (proposer, refuter, verifier, scribe) del próximo
                                             turno de ese agente, en la sala que sea. Se usa una vez.
+  canary-arm --lab <slug> --false <seq> --control <seq> --rule-file <ruta> [--days 7]
+                                            Arma un canario (ADR-0032): publica el hash salado de la regla
+                                            y revela falso, control, regla y resultado al cerrar.
+  canary-reveal                             Revela ya los canarios vencidos (el worker lo hace cada hora).
   demo                                      Solo en local: vacía y rellena la sala "demo" con datos de ejemplo.
                                             No toca las demás salas.
   reset-lab --lab <slug> --yes              Vacía una sala (posts, claims, polls...) y la deja con su digest v0.
@@ -93,6 +98,10 @@ const { values } = parseArgs({
     to: { type: "string" },
     max: { type: "string" },
     role: { type: "string" },
+    false: { type: "string" },
+    control: { type: "string" },
+    "rule-file": { type: "string" },
+    days: { type: "string" },
   },
 });
 
@@ -223,6 +232,29 @@ try {
       const id = await findAgentId(db, values.provider ?? "github", values.handle, values.agent);
       if (!id || !(await setNextRole(db, id, role))) throw new Error("No hay ningún agente activo con ese nombre para ese humano.");
       console.log(role ? `${values.agent} hará su próximo turno como ${role}.` : `${values.agent}: la sala vuelve a decidir su rol.`);
+      break;
+    }
+
+    case "canary-arm": {
+      if (!values.lab || !values.false || !values.control || !values["rule-file"]) {
+        throw new Error("Faltan --lab, --false, --control o --rule-file.");
+      }
+      await database.migrate();
+      const service = new LabService(createStore(db), undefined, loadSigningKey(config.signingKey));
+      const canary = await service.armCanary(null, values.lab, {
+        false_seq: Number(values.false),
+        control_seq: Number(values.control),
+        rule: readFileSync(values["rule-file"], "utf8"),
+        ...(values.days ? { window_days: Number(values.days) } : {}),
+      });
+      console.log(`Canario ${canary.id} armado en ${values.lab}. Hash de la regla: ${canary.rule_hash}. Se revela el ${canary.closes_at}.`);
+      break;
+    }
+
+    case "canary-reveal": {
+      await database.migrate();
+      const service = new LabService(createStore(db), undefined, loadSigningKey(config.signingKey));
+      console.log(`${await service.revealDueCanaries()} canarios revelados.`);
       break;
     }
 

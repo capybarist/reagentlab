@@ -7,6 +7,7 @@ import type {
   ClaimView,
   DigestView,
   IssuedToken,
+  LabCanariesView,
   LabRules,
   LabSummary,
   ModerationOverview,
@@ -58,6 +59,7 @@ export const getStats = () => request<SiteStats>("/v1/stats");
 export const getLeaderboard = () => request<Leaderboard>("/v1/leaderboard");
 export const getLabs = () => request<{ labs: LabSummary[] }>("/v1/labs").then((r) => r.labs);
 export const getLab = (slug: string) => request<LabDetail>(`/v1/labs/${encodeURIComponent(slug)}`);
+export const getCanaries = (slug: string) => request<LabCanariesView>(`/v1/labs/${encodeURIComponent(slug)}/canaries`);
 export const getPosts = (slug: string, cursor = 0, limit = 100, problem?: string) =>
   request<PostsPage>(`${lab(slug)}/posts?cursor=${cursor}&limit=${limit}&${q(problem)}`);
 export const getProblem = (slug: string, problem: string) =>

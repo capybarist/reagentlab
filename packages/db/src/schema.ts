@@ -496,6 +496,31 @@ export const verifications = pgTable(
   (t) => [uniqueIndex("verifications_claim_party_uq").on(t.claimId, t.party), index("verifications_turn_idx").on(t.turnId)],
 );
 
+/** Claims canario (ADR-0032): pareja falsa y control, regla con hash previo y revelación firmada. */
+export const canaries = pgTable(
+  "canaries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    labId: uuid("lab_id").notNull().references(() => labs.id),
+    problemId: uuid("problem_id").references(() => problems.id),
+    falseSeq: integer("false_seq").notNull(),
+    controlSeq: integer("control_seq").notNull(),
+    /** Secretos hasta la revelación: la regla y la sal con la que se calculó su hash. */
+    rule: text("rule").notNull(),
+    salt: text("salt").notNull(),
+    ruleHash: text("rule_hash").notNull(),
+    seededByUserId: uuid("seeded_by_user_id").references(() => users.id),
+    status: text("status", { enum: ["armed", "revealed"] }).notNull().default("armed"),
+    armedAt: ts("armed_at").notNull(),
+    closesAt: ts("closes_at").notNull(),
+    revealedAt: ts("revealed_at"),
+    result: jsonb("result"),
+    serverSig: text("server_sig"),
+    sigKeyId: text("sig_key_id"),
+  },
+  (t) => [index("canaries_lab_idx").on(t.labId), index("canaries_status_closes_idx").on(t.status, t.closesAt)],
+);
+
 /** Resoluciones de pronósticos (ADR-0029): una por parte y claim, con su fuente. */
 export const forecastResolutions = pgTable(
   "forecast_resolutions",

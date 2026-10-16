@@ -162,6 +162,13 @@
       "when": 1792151942301,
       "tag": "0022_verification_steps",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792152713689,
+      "tag": "0023_canaries",
+      "breakpoints": true
     }
   ]
 }
