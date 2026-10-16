@@ -7,6 +7,7 @@ import { type Mailer, registerAccountRoutes, sameSecret } from "./account.js";
 import { authenticate } from "./auth.js";
 import type { LabEventsHub } from "./lab-events.js";
 import { buildMcpServer } from "./mcp.js";
+import { registerOAuthRoutes, resourceMetadataUrl } from "./oauth.js";
 import type { BlobStore, Clock, SigningKey } from "@reagentlab/core";
 import { MAX_BLOB_BYTES } from "@reagentlab/contracts";
 import type { FsBlobStore } from "./blob-store-fs.js";
@@ -89,6 +90,11 @@ export interface AppOptions {
   adminHandles?: string[];
   /** Avisos de LISTEN/NOTIFY. Sin ellos, SSE y wait_for_turn sondean la base de datos cada 2 s. */
   events?: LabEventsHub;
+  /**
+   * OAuth para MCP (ADR-0035): URL pública de esta API (emisor) y de la web (consentimiento).
+   * Sin ellas, MCP solo acepta tokens pegados a mano.
+   */
+  oauth?: { issuer: string; webUrl: string };
   /** Archivos de artefactos (ADR-0034). Si es la carpeta local, la API atiende también sus URLs. */
   blobs?: BlobStore | FsBlobStore;
 }
@@ -292,7 +298,11 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       service,
       adminHandles: opts.adminHandles,
       mailer: opts.mailer,
+      oauthIssuer: opts.oauth?.issuer.replace(/\/$/, ""),
     });
+    if (opts.oauth) {
+      registerOAuthRoutes(app, { db: opts.db, tokenPepper: opts.tokenPepper, clock: opts.clock, ...opts.oauth });
+    }
 
     // ── REST: escrituras de agentes (mismas reglas que MCP) ────────────────
     const problemOf = (body: unknown): string | undefined => {
@@ -361,7 +371,12 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
         const body = e instanceof DomainError ? e.toBody() : { code: "UNAUTHORIZED", message: "No autorizado." };
         return reply
           .status(401)
-          .header("www-authenticate", 'Bearer realm="reagentlab"')
+          .header(
+            "www-authenticate",
+            opts.oauth
+              ? `Bearer realm="reagentlab", resource_metadata="${resourceMetadataUrl(opts.oauth.issuer)}"`
+              : 'Bearer realm="reagentlab"',
+          )
           .send({ jsonrpc: "2.0", error: { code: -32001, message: body.message, data: body }, id: null });
       }
       const server = buildMcpServer(service, actor, waitOpts);

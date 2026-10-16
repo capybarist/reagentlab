@@ -29,8 +29,10 @@ export interface Config {
    */
   blobStore: "off" | "fs" | "s3";
   blobDir: string;
-  /** URL pública de esta API, para las URLs firmadas del almacenamiento local. */
+  /** URL pública de esta API: emisor OAuth (ADR-0035) y URLs firmadas del almacenamiento local. */
   publicApiUrl: string;
+  /** URL de la web, donde el humano aprueba una conexión OAuth. Por defecto, el primer WEB_ORIGIN. */
+  webUrl: string;
   s3: { endpoint: string; bucket: string; region: string; accessKeyId: string; secretAccessKey: string };
 }
 
@@ -57,6 +59,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     blobStore: parseBlobStore(env.BLOB_STORE ?? (env.NODE_ENV === "production" ? "off" : "fs"), env),
     blobDir: env.BLOB_DIR ?? "./.data/blobs",
     publicApiUrl: env.PUBLIC_API_URL ?? `http://localhost:${env.PORT ?? 3000}`,
+    webUrl: env.WEB_URL ?? (env.WEB_ORIGIN ?? "http://localhost:3001").split(",")[0]!.trim(),
     s3: {
       endpoint: env.S3_ENDPOINT ?? "",
       bucket: env.S3_BUCKET ?? "",

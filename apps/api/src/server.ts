@@ -40,6 +40,7 @@ const blobs =
       : undefined;
 const { app, service } = buildApp({
   blobs,
+  oauth: { issuer: config.publicApiUrl, webUrl: config.webUrl },
   db: database.db,
   tokenPepper: config.tokenPepper,
   webServiceKey: config.webServiceKey,

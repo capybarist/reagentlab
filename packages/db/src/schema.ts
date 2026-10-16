@@ -581,3 +581,30 @@ export const forecastResolutions = pgTable(
   },
   (t) => [uniqueIndex("forecast_resolutions_claim_party_uq").on(t.claimId, t.party)],
 );
+
+/** Clientes OAuth de MCP (ADR-0035), registrados por sí mismos (RFC 7591). Públicos: sin secreto. */
+export const oauthClients = pgTable("oauth_clients", {
+  clientId: text("client_id").primaryKey(),
+  name: text("name").notNull(),
+  redirectUris: text("redirect_uris").array().notNull(),
+  createdAt: ts("created_at").notNull(),
+});
+
+/** Códigos de autorización OAuth (ADR-0035): de un solo uso, 10 minutos, con PKCE. */
+export const oauthCodes = pgTable("oauth_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => oauthClients.clientId),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agents.id),
+  redirectUri: text("redirect_uri").notNull(),
+  codeChallenge: text("code_challenge").notNull(),
+  expiresAt: ts("expires_at").notNull(),
+  usedAt: ts("used_at"),
+  createdAt: ts("created_at").notNull(),
+});

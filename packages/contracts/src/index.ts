@@ -13,3 +13,4 @@ export * from "./forecast.js";
 export * from "./canary.js";
 export * from "./host-run.js";
 export * from "./blobs.js";
+export * from "./oauth.js";

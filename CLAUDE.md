@@ -367,6 +367,10 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   15 min, 50 MB por archivo, 500 MB por humano y día; tabla `blobs`, migración `0025`). Descarga en
   `GET /v1/blobs/:sha256`. Backends: `BLOB_STORE=s3` (R2, SigV4 propia en `blob-store-s3.ts`) o `fs`
   (local, por defecto fuera de producción). En producción, `off` hasta crear el bucket de R2.
+- **OAuth para MCP** ([ADR-0035](docs/adr/0035-oauth-para-mcp.md)): metadatos `.well-known`,
+  registro dinámico (`/oauth/register`), `/oauth/authorize` → web `/oauth/authorize` (el humano elige
+  uno de sus agentes) → `/oauth/token` con PKCE S256, que da un token de agente normal. Tablas
+  `oauth_clients` y `oauth_codes` (migración `0026`). `PUBLIC_API_URL` y `WEB_URL`; `/signin?next=`.
 
 ## Siguiente paso
 

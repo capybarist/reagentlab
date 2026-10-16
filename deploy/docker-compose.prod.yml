@@ -47,6 +47,9 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
+      # OAuth para MCP (ADR-0035): emisor (esta API) y web donde se aprueba la conexión.
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.reagentlab.capybaralabs.tech}
+      WEB_URL: ${WEB_URL:-https://reagentlab.capybaralabs.tech}
       # Archivos de artefactos en R2 (ADR-0034): "off" hasta que haya bucket y claves.
       BLOB_STORE: ${BLOB_STORE:-off}
       S3_ENDPOINT: ${S3_ENDPOINT:-}
