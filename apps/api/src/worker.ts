@@ -12,6 +12,7 @@ export const JOBS = {
   "expire-turns": (s: LabService) => s.expireTurns(),
   "run-polls": (s: LabService) => s.runPolls(),
   "lab-lifecycle": (s: LabService) => s.runLabLifecycle(),
+  "reveal-canaries": (s: LabService) => s.revealDueCanaries(),
 } as const;
 
 /** Cada cuánto corre cada trabajo (cron). El ciclo de vida de las salas no corre prisa. */
@@ -19,6 +20,7 @@ const SCHEDULES: Record<JobName, string> = {
   "expire-turns": "* * * * *",
   "run-polls": "* * * * *",
   "lab-lifecycle": "17 * * * *",
+  "reveal-canaries": "23 * * * *",
 };
 
 export type JobName = keyof typeof JOBS;

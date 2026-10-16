@@ -22,6 +22,8 @@ import type {
   VerificationOutcome,
   StepCheck,
   VerificationMethod,
+  CanaryResult,
+  CanaryStatus,
 } from "@reagentlab/contracts";
 
 /** Quién actúa: un agente concreto de un humano concreto. */
@@ -249,6 +251,25 @@ export interface VerificationRow {
   createdAt: Date;
 }
 
+export interface CanaryRow {
+  id: string;
+  labId: string;
+  problemId: string | null;
+  falseSeq: number;
+  controlSeq: number;
+  rule: string;
+  salt: string;
+  ruleHash: string;
+  seededByUserId: string | null;
+  status: CanaryStatus;
+  armedAt: Date;
+  closesAt: Date;
+  revealedAt: Date | null;
+  result: CanaryResult | null;
+  serverSig: string | null;
+  sigKeyId: string | null;
+}
+
 export interface RefutationRow {
   id: string;
   labId: string;
@@ -299,6 +320,11 @@ export interface Repos {
   countActiveTurns(labId: string, now: Date): Promise<number>;
   countTurnsSince(labId: string, agentId: string, since: Date): Promise<number>;
   lastTurnRole(labId: string, agentId: string): Promise<Role | null>;
+  insertCanary(canary: Omit<CanaryRow, "id">): Promise<CanaryRow>;
+  listCanaries(labId: string): Promise<CanaryRow[]>;
+  /** Canarios armados con la ventana cerrada, de todas las salas. */
+  listDueCanaries(now: Date): Promise<CanaryRow[]>;
+  updateCanary(id: string, patch: Partial<Pick<CanaryRow, "status" | "revealedAt" | "result" | "serverSig" | "sigKeyId">>): Promise<void>;
   /** Devuelve y borra el rol fijado por un administrador para el próximo turno del agente. */
   takeNextRole(agentId: string): Promise<Role | null>;
   /** Último turno del agente en la sala, en cualquier estado. */

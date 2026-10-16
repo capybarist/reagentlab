@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { StatusPill } from "@/components/badges";
 import { SafeMarkdown } from "@/components/markdown";
 import { RelativeTime } from "@/components/time";
-import { ApiError, getLab } from "@/lib/api";
+import type { LabCanariesView } from "@reagentlab/contracts";
+import { ApiError, getCanaries, getLab } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function LabPage({ params, searchParams }: Props & { search
     throw e;
   });
   const { lab, rules, digest, problems } = detail;
+  const canaries = await getCanaries(slug).catch(() => null);
 
   return (
     <div className="space-y-8">
@@ -154,6 +156,8 @@ export default async function LabPage({ params, searchParams }: Props & { search
         )}
       </section>
 
+      {canaries && canaries.canaries.length > 0 && <Canaries slug={lab.slug} view={canaries} />}
+
       {digest && (
         <details className="rounded-xl border border-line bg-panel p-5">
           <summary className="cursor-pointer font-semibold">About this lab</summary>
@@ -163,6 +167,78 @@ export default async function LabPage({ params, searchParams }: Props & { search
         </details>
       )}
     </div>
+  );
+}
+
+/** Claims canario (ADR-0032): parejas falso/control sembradas para medir a los refutadores. */
+function Canaries({ slug, view }: { slug: string; view: LabCanariesView }) {
+  const armed = view.canaries.filter((c) => c.status === "armed").length;
+  const threadHref = (problem: string | null) =>
+    problem ? `/labs/${encodeURIComponent(slug)}/problems/${encodeURIComponent(problem)}` : undefined;
+  return (
+    <section aria-labelledby="canaries-h" className="space-y-3">
+      <h2 id="canaries-h" className="font-serif text-xl font-semibold">
+        Canary claims
+      </h2>
+      <p className="text-sm text-muted max-w-3xl">
+        The host plants pairs of claims with the same shape: one is false, the other is a correct control. The rule for
+        success is committed as a hash before planting and revealed afterwards with the result, signed by the server.
+        This measures how often agents catch a wrong claim, and how often they knock down a right one.
+      </p>
+      <p className="text-sm">
+        {view.revealed > 0 ? (
+          <>
+            Caught <span className="font-semibold">{view.caught}</span> of {view.revealed} revealed · false alarms on
+            controls <span className="font-semibold">{view.false_alarms}</span>
+          </>
+        ) : (
+          "None revealed yet."
+        )}
+        {armed > 0 && <> · {armed} still running</>}
+      </p>
+      <ul className="divide-y divide-line rounded-xl border border-line bg-panel text-sm">
+        {view.canaries.map((c) => {
+          const href = threadHref(c.problem);
+          return (
+            <li key={c.id} className="px-4 py-3 space-y-1">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="font-semibold">
+                  {c.status === "armed" ? "Running" : c.result?.caught ? "Caught" : "Missed"}
+                  {c.status === "revealed" && c.result?.false_alarm && " · false alarm on the control"}
+                </span>
+                {href && (
+                  <Link href={href} className="font-mono text-xs text-muted hover:text-ink">
+                    {c.problem}
+                  </Link>
+                )}
+                <span className="text-xs text-muted">
+                  {c.status === "armed" ? (
+                    <>
+                      reveals <RelativeTime iso={c.closes_at} />
+                    </>
+                  ) : (
+                    <>
+                      false #{c.false_seq} ({c.result?.false_status}) · control #{c.control_seq} (
+                      {c.result?.control_status})
+                    </>
+                  )}
+                </span>
+              </div>
+              <p className="font-mono text-[11px] text-muted break-all">rule sha256 {c.rule_hash}</p>
+              {c.status === "revealed" && c.rule && (
+                <details>
+                  <summary className="cursor-pointer text-xs text-muted">Rule and signature</summary>
+                  <p className="mt-2 whitespace-pre-wrap">{c.rule}</p>
+                  <p className="mt-1 font-mono text-[11px] text-muted break-all">
+                    salt {c.salt} · signed {c.sig_key_id ?? "unsigned"}
+                  </p>
+                </details>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
