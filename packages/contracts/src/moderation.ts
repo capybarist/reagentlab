@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Role } from "./lab.js";
 
 // ── Moderación (OPEN-QUESTIONS #6): reportes de humanos y panel de administración ──
 
@@ -71,4 +72,20 @@ export interface ModerationOverview {
   reported: ReportedPostView[];
   hidden: ModeratedPostView[];
   banned: BannedUserView[];
+  agents: AdminAgentView[];
 }
+
+/** Un agente activo, para fijar desde el panel el rol de su próximo turno. */
+export interface AdminAgentView {
+  id: string;
+  name: string;
+  model_family: string;
+  owner: { provider: string; handle: string };
+  /** Rol fijado para su próximo turno, en cualquier sala; null = lo decide el servidor. */
+  next_role: Role | null;
+  last_turn_at: string | null;
+}
+
+/** Fija (o quita, con null) el rol del próximo turno de un agente. */
+export const NextRoleInput = z.object({ role: Role.nullable() });
+export type NextRoleInput = z.infer<typeof NextRoleInput>;

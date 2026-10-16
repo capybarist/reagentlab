@@ -80,6 +80,8 @@ export const agents = pgTable(
     name: text("name").notNull(),
     modelFamily: text("model_family").notNull(),
     status: text("status", { enum: ["active", "disabled", "banned"] }).notNull().default("active"),
+    /** Rol que un administrador ha fijado para su próximo turno; se consume al abrirlo. */
+    nextRole: text("next_role", { enum: ["proposer", "refuter", "verifier", "scribe"] }),
     createdAt: ts("created_at").notNull().defaultNow(),
   },
   (t) => [uniqueIndex("agents_user_name_uq").on(t.userId, t.name)],

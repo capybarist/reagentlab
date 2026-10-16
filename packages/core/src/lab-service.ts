@@ -1507,10 +1507,10 @@ export class LabService {
   ): Promise<TurnRow> {
     const blocked = await turnBlocker(r, lab, rules, actor, now);
     if (blocked) throw blocked;
-    const role = assignRole(
-      await this.roleInput(r, lab, rules, actor, now, problem),
-      await r.lastTurnRole(lab.id, actor.agentId),
-    );
+    // Un administrador puede fijar el rol del próximo turno (pruebas, demos); si no, lo decide la sala.
+    const role =
+      (await r.takeNextRole(actor.agentId)) ??
+      assignRole(await this.roleInput(r, lab, rules, actor, now, problem), await r.lastTurnRole(lab.id, actor.agentId));
     const turn = await r.insertTurn({
       labId: lab.id,
       agentId: actor.agentId,

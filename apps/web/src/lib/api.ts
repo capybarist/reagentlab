@@ -170,6 +170,8 @@ export const getModeration = (userId: string) =>
   request<ModerationOverview>("/v1/account/moderation", { headers: service(userId) });
 export const moderatePost = (userId: string, slug: string, seq: number, action: "hide" | "unhide" | "dismiss", reason: string) =>
   jsonPost<unknown>(userId, postPath(slug, seq, action), { reason });
+export const setAgentNextRole = (userId: string, agentId: string, role: string | null) =>
+  jsonPost<{ next_role: string | null }>(userId, `/v1/account/agents/${agentId}/next-role`, { role });
 export const moderateUser = (
   userId: string,
   action: "ban" | "unban",

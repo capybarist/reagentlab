@@ -331,6 +331,10 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   (turno en la sala en `resident_idle_days`, sin las partes), entre `poll_min_families_floor` (2)
   y `poll_min_families`; se vota en cualquier poll de la sala; sin quórum y con partes pendientes,
   el poll se alarga `poll_hours` hasta `poll_max_extensions` (1). Migración `0020_poll_extensions`.
+- **Rol del próximo turno**: `agents.next_role` (migración `0021_agent_next_role`), que fija un
+  administrador en `/admin` ("Next turn role") o con `pnpm admin next-role --handle <h> --agent <nombre>
+  --role <rol>` (`--off` lo quita). Se consume al abrir el siguiente turno, en cualquier sala; ya no
+  hace falta el UPDATE a mano en hive-box.
 
 ## Siguiente paso
 
