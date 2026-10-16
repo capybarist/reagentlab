@@ -1,3 +1,4 @@
+import type { StepCheck } from "@reagentlab/contracts";
 import { sql } from "drizzle-orm";
 import {
   bigserial,
@@ -485,6 +486,9 @@ export const verifications = pgTable(
     kind: text("kind", { enum: ["artifact", "derivation"] }).notNull(),
     outcome: text("outcome", { enum: ["confirms", "fails", "inconclusive"] }).notNull(),
     step: integer("step"),
+    /** ADR-0031: cómo se comprobó y qué dice de cada paso. Nulos en las anteriores. */
+    method: text("method", { enum: ["read", "rerun", "both"] }),
+    stepsChecked: jsonb("steps_checked").$type<StepCheck[]>(),
     log: text("log").notNull(),
     environment: text("environment").notNull(),
     createdAt: ts("created_at").notNull(),

@@ -1,4 +1,11 @@
-import type { ClaimStatus, LabRules, VerificationKind, VerificationOutcome } from "@reagentlab/contracts";
+import type {
+  ClaimStatus,
+  LabRules,
+  StepCheck,
+  VerificationKind,
+  VerificationMethod,
+  VerificationOutcome,
+} from "@reagentlab/contracts";
 
 /**
  * Verificaciones (ADR-0027), funciones puras. Un claim se verifica reproduciendo su
@@ -67,4 +74,96 @@ export function tally(verifications: readonly { party: string; outcome: Verifica
  */
 export function readyForGreen(status: ClaimStatus, t: Tally, required: number): boolean {
   return status === "adopted" && required > 0 && t.confirms - t.fails >= required;
+}
+
+export interface StepsProblem {
+  message: string;
+  hint: string;
+}
+
+/**
+ * Normaliza y valida lo que dice una verificación de sus pasos (ADR-0031). En una derivación,
+ * `confirms` exige haber leído todos los pasos y que todos se sostengan, y un `rerun` solo no
+ * confirma nada: el enunciado puede valer en el rango probado con un paso roto. `fails` exige
+ * el paso que falla (en `steps_checked` o, como antes, en `step`). En un artefacto no hay pasos.
+ */
+export function checkSteps(
+  kind: VerificationKind,
+  input: { outcome: VerificationOutcome; method?: VerificationMethod; step?: number; steps_checked?: StepCheck[] },
+  stepCount: number,
+): { method: VerificationMethod; step: number | null; steps: StepCheck[] | null } | StepsProblem {
+  if (kind === "artifact") {
+    if (input.steps_checked?.length || input.step !== undefined) {
+      return { message: "steps_checked y step solo valen para derivaciones.", hint: "Quítalos al verificar un artefacto." };
+    }
+    return { method: input.method ?? "rerun", step: null, steps: null };
+  }
+
+  const method = input.method ?? "read";
+  const steps = new Map<number, StepCheck>();
+  for (const c of input.steps_checked ?? []) {
+    if (c.step > stepCount) {
+      return { message: `La derivación tiene ${stepCount} pasos: step va de 1 a ${stepCount}.`, hint: "Revisa los números de paso." };
+    }
+    if (steps.has(c.step)) return { message: `El paso ${c.step} aparece dos veces en steps_checked.`, hint: "Uno por paso." };
+    steps.set(c.step, c);
+  }
+  if (input.step !== undefined) {
+    if (input.step > stepCount) {
+      return { message: `La derivación tiene ${stepCount} pasos: step va de 1 a ${stepCount}.`, hint: "Revisa el número de paso." };
+    }
+    const listed = steps.get(input.step);
+    if (listed && listed.verdict !== "fails") {
+      return { message: `step dice que falla el paso ${input.step}, pero steps_checked dice "${listed.verdict}".`, hint: "Que coincidan." };
+    }
+    if (!listed) steps.set(input.step, { step: input.step, verdict: "fails" });
+  }
+  const sorted = [...steps.values()].sort((a, b) => a.step - b.step);
+  const failing = sorted.find((c) => c.verdict === "fails");
+
+  if (input.outcome === "confirms") {
+    if (method === "rerun") {
+      return {
+        message: "Volver a ejecutar el enunciado no comprueba la derivación: puede valer en el rango probado con un paso roto.",
+        hint: "Lee los pasos (method 'read' o 'both') y di en steps_checked qué encontraste en cada uno, o publica el re-run como evidencia.",
+      };
+    }
+    const missing = Array.from({ length: stepCount }, (_, i) => i + 1).filter((n) => steps.get(n)?.verdict !== "holds");
+    if (missing.length) {
+      return {
+        message: `Para confirmar una derivación, todos sus pasos tienen que estar revisados y sostenerse; faltan o no se sostienen: ${missing.join(", ")}.`,
+        hint: 'Manda steps_checked con {step, verdict: "holds"} para cada paso, o usa "fails" o "inconclusive".',
+      };
+    }
+  }
+  if (input.outcome === "fails" && !failing) {
+    return {
+      message: "Una verificación que falla tiene que decir qué paso no se sigue.",
+      hint: 'Marca ese paso con verdict "fails" en steps_checked (o pon su número en step).',
+    };
+  }
+  if (input.outcome !== "fails" && failing) {
+    return { message: `El paso ${failing.step} falla, así que el resultado es "fails".`, hint: 'Usa outcome "fails".' };
+  }
+  return { method, step: failing?.step ?? null, steps: sorted.length ? sorted : null };
+}
+
+/** Por paso, cuántas partes dicen que se sostiene y cuántas que falla (ADR-0031). */
+export function stepCoverage(
+  stepCount: number,
+  verifications: readonly { party: string; steps: StepCheck[] | null }[],
+): { holds: number; fails: number }[] {
+  const out = Array.from({ length: stepCount }, () => ({ holds: 0, fails: 0 }));
+  const seen = new Set<string>();
+  for (const v of verifications) {
+    if (seen.has(v.party)) continue;
+    seen.add(v.party);
+    for (const c of v.steps ?? []) {
+      const slot = out[c.step - 1];
+      if (!slot) continue;
+      if (c.verdict === "holds") slot.holds++;
+      else if (c.verdict === "fails") slot.fails++;
+    }
+  }
+  return out;
 }

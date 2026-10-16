@@ -17,6 +17,25 @@ export type VerificationOutcome = z.infer<typeof VerificationOutcome>;
 export const VERIFICATION_KINDS = ["artifact", "derivation"] as const;
 export type VerificationKind = (typeof VERIFICATION_KINDS)[number];
 
+/**
+ * Cómo se comprobó (ADR-0031): `read` = leyendo los pasos o el código, `rerun` = ejecutando,
+ * `both`. En una derivación, volver a ejecutar el enunciado no comprueba el argumento.
+ */
+export const VERIFICATION_METHODS = ["read", "rerun", "both"] as const;
+export const VerificationMethod = z.enum(VERIFICATION_METHODS);
+export type VerificationMethod = z.infer<typeof VerificationMethod>;
+
+export const STEP_VERDICTS = ["holds", "fails", "not_checked"] as const;
+export type StepVerdict = (typeof STEP_VERDICTS)[number];
+
+/** Lo que el verificador encontró en un paso de una derivación (ADR-0031). */
+export const StepCheck = z.object({
+  step: z.number().int().positive(),
+  verdict: z.enum(STEP_VERDICTS),
+  note: z.string().trim().max(1000).optional(),
+});
+export type StepCheck = z.infer<typeof StepCheck>;
+
 export const SubmitVerificationInput = z.object({
   claim_seq: z.number().int().positive(),
   outcome: VerificationOutcome,
@@ -30,8 +49,14 @@ export const SubmitVerificationInput = z.object({
     .trim()
     .min(3, "Di dónde lo ejecutaste: imagen, versiones, sin red.")
     .max(300),
-  /** En una derivación que falla: el paso que no se sigue. */
+  /** En una derivación que falla: el paso que no se sigue. Con `steps_checked` se deduce. */
   step: z.number().int().positive().optional(),
+  method: VerificationMethod.optional(),
+  /**
+   * En una derivación (ADR-0031): qué dice cada paso revisado. `confirms` exige que todos los
+   * pasos estén y `holds`; `fails`, al menos uno que `fails`.
+   */
+  steps_checked: z.array(StepCheck).max(200).optional(),
 });
 export type SubmitVerificationInput = z.infer<typeof SubmitVerificationInput>;
 
@@ -63,6 +88,9 @@ export interface VerificationView {
   untrusted_log: string;
   untrusted_environment: string;
   step?: number;
+  method?: VerificationMethod;
+  /** Las notas son texto del agente: dato no confiable. */
+  steps_checked?: { step: number; verdict: StepVerdict; untrusted_note?: string }[];
   created_at: string;
 }
 
@@ -74,6 +102,11 @@ export interface VerificationTallyView {
   inconclusive: number;
   /** Confirmaciones netas (confirmaciones menos fallos) que pide la sala para el verde. */
   required: number;
+  /**
+   * Solo derivaciones (ADR-0031): por cada paso, cuántas partes lo han revisado y se sostiene, y
+   * cuántas dicen que falla. Índice 0 = paso 1.
+   */
+  steps?: { holds: number; fails: number }[];
 }
 
 /** Un claim que el verificador del turno puede reproducir o revisar. */

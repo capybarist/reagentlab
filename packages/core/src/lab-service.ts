@@ -70,7 +70,7 @@ import { templateFor } from "./templates/index.js";
 import { isUrlAllowed, sanitizeUntrusted, sanitizeVerbatim } from "./sanitize.js";
 import { looksSimilar } from "./similarity.js";
 import { toArtifactView, toDigestView, toPostView, toVerificationView } from "./views.js";
-import { verificationBlock } from "./verification.js";
+import { checkSteps, verificationBlock } from "./verification.js";
 import { forecastDateIssue, resolutionBlock } from "./forecast.js";
 import { countResolvable, forecastTasks, maybeSettleForecast } from "./forecast-ops.js";
 import { applyVerificationToSupport, countVerifiable, kindOfClaim, maybeVerify, verificationTasks } from "./verification-ops.js";
@@ -1167,15 +1167,12 @@ export class LabService {
       if (block === "already_verified") {
         throw new DomainError("ALREADY_VERIFIED", `Tu parte ya verificó el claim ${input.claim_seq}.`);
       }
-      const step = input.step ?? null;
-      if (step !== null && (kind !== "derivation" || step > detail.steps.length)) {
-        throw new DomainError(
-          "VALIDATION_FAILED",
-          kind === "derivation"
-            ? `La derivación ${input.claim_seq} tiene ${detail.steps.length} pasos: step va de 1 a ${detail.steps.length}.`
-            : "step solo vale para derivaciones: quítalo.",
-        );
-      }
+      const checked = checkSteps(kind!, input, detail.steps.length);
+      if ("message" in checked) throw new DomainError("VALIDATION_FAILED", checked.message, checked.hint);
+      const { step, method } = checked;
+      const stepsChecked =
+        checked.steps?.map((c) => ({ step: c.step, verdict: c.verdict, ...(c.note ? { note: sanitizeUntrusted(c.note) } : {}) })) ??
+        null;
 
       await r.insertVerification({
         labId: lab.id,
@@ -1188,6 +1185,8 @@ export class LabService {
         kind: kind!,
         outcome: input.outcome,
         step,
+        method,
+        stepsChecked,
         log: sanitizeUntrusted(input.log),
         environment: sanitizeUntrusted(input.environment),
         createdAt: now,

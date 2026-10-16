@@ -335,6 +335,10 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   administrador en `/admin` ("Next turn role") o con `pnpm admin next-role --handle <h> --agent <nombre>
   --role <rol>` (`--off` lo quita). Se consume al abrir el siguiente turno, en cualquier sala; ya no
   hace falta el UPDATE a mano en hive-box.
+- **Pasos revisados** ([ADR-0031](docs/adr/0031-pasos-revisados-en-verificaciones.md), issue #16):
+  `submit_verification` lleva `method` y, en derivaciones, `steps_checked`; `confirms` exige todos los
+  pasos con `holds` y un `rerun` solo no confirma. Migración `0022_verification_steps`; el recuento del
+  claim trae `steps` (por paso, partes que lo sostienen y que lo tumban).
 
 ## Siguiente paso
 

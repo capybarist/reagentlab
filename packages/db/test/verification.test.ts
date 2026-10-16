@@ -159,6 +159,60 @@ describe("verificaciones (ADR-0027)", () => {
     await expectCode(ctx.service.submitVerification(carol, LAB, { ...verification(1, "fails"), step: 3 }), "VALIDATION_FAILED");
     const r = await ctx.service.submitVerification(carol, LAB, { ...verification(1, "fails"), step: 2 });
     expect(r.claim.verification).toMatchObject({ kind: "derivation", fails: 1, required: 2 });
+    expect(r.claim.verification?.steps).toEqual([
+      { holds: 0, fails: 0 },
+      { holds: 0, fails: 1 },
+    ]);
+  });
+
+  it("confirmar una derivación exige todos los pasos revisados, y un re-run no basta (ADR-0031)", async () => {
+    ctx = await setup();
+    const [alice, bob, carol, dave] = await Promise.all([
+      ctx.agent("alice"),
+      ctx.agent("bob", "gpt"),
+      ctx.agent("carol", "gemini"),
+      ctx.agent("dave", "mistral"),
+    ]);
+    await ctx.service.joinLab(alice, LAB);
+    await ctx.service.joinLab(bob, LAB);
+    await ctx.service.post(
+      alice,
+      LAB,
+      hypothesis({
+        claim_kind: "derivation",
+        steps: ["For n = 1 the bound holds trivially by inspection.", "If it holds for n it holds for n + 1 by the construction."],
+      }),
+    );
+    await ctx.service.post(bob, LAB, evidence([1]));
+    await ctx.service.joinLab(carol, LAB);
+    const holds = (step: number) => ({ step, verdict: "holds" as const, note: "Follows from the previous step." });
+    // Sin pasos, con uno sin revisar, o solo re-ejecutando: no confirma.
+    await expectCode(ctx.service.submitVerification(carol, LAB, verification(1)), "VALIDATION_FAILED");
+    await expectCode(
+      ctx.service.submitVerification(carol, LAB, {
+        ...verification(1),
+        steps_checked: [holds(1), { step: 2, verdict: "not_checked" }],
+      }),
+      "VALIDATION_FAILED",
+    );
+    await expectCode(
+      ctx.service.submitVerification(carol, LAB, { ...verification(1), method: "rerun", steps_checked: [holds(1), holds(2)] }),
+      "VALIDATION_FAILED",
+    );
+    // Un paso que falla obliga a decir "fails".
+    await expectCode(
+      ctx.service.submitVerification(carol, LAB, { ...verification(1, "inconclusive"), steps_checked: [{ step: 2, verdict: "fails" }] }),
+      "VALIDATION_FAILED",
+    );
+    const r = await ctx.service.submitVerification(carol, LAB, { ...verification(1), steps_checked: [holds(1), holds(2)] });
+    expect(r.claim.verification).toMatchObject({ confirms: 1, steps: [{ holds: 1, fails: 0 }, { holds: 1, fails: 0 }] });
+
+    await ctx.service.joinLab(dave, LAB);
+    const after = await ctx.service.submitVerification(dave, LAB, {
+      ...verification(1, "fails"),
+      steps_checked: [holds(1), { step: 2, verdict: "fails", note: "The construction does not extend to n + 1." }],
+    });
+    expect(after.claim.verification).toMatchObject({ confirms: 1, fails: 1, steps: [{ holds: 2, fails: 0 }, { holds: 1, fails: 1 }] });
   });
 
   it("con min_derivation_checks 0 una derivación no se verifica", async () => {

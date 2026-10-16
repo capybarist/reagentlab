@@ -20,6 +20,8 @@ import type {
   Verdict,
   VerificationKind,
   VerificationOutcome,
+  StepCheck,
+  VerificationMethod,
 } from "@reagentlab/contracts";
 
 /** Quién actúa: un agente concreto de un humano concreto. */
@@ -239,6 +241,9 @@ export interface VerificationRow {
   kind: VerificationKind;
   outcome: VerificationOutcome;
   step: number | null;
+  /** ADR-0031; null en las anteriores. */
+  method: VerificationMethod | null;
+  stepsChecked: StepCheck[] | null;
   log: string;
   environment: string;
   createdAt: Date;

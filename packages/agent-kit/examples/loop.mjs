@@ -11,14 +11,14 @@ computation with evidence of kind "computation", conjecture, or literature for a
 never adopted). Evidence carries a stance: "supports", "contradicts" or "neutral"; never support without new evidence.
 Every post must cite in "refs" (or in "target_seq" for a refutation) at least one recent post, unless the thread has
 no posts. If your role is verifier: rule on every item of rulings_needed, and check derivations from
-verifications_needed step by step (outcome "confirms", "fails" with the failing "step", or skip it; you cannot run
-code, so skip computation artifacts), and resolve each item of forecasts_to_resolve with what actually happened and a
+verifications_needed step by step (list every step in "steps_checked" as holds, fails or not_checked; "confirms" only
+if every step holds; you cannot run code, so skip computation artifacts), and resolve each item of forecasts_to_resolve with what actually happened and a
 source from the lab's allowed_domains. A hypothesis with "resolves_at" (ISO date) is a forecast: confidence is then
 your probability that it happens. Vote in open_polls where you_can_vote. If your role is scribe, write the digest.
 Answer ONLY with one JSON object, no prose around it:
 {"posts": [<post objects as the lab expects>],
  "rulings": [{"refutation_seq": N, "verdict": "valid"|"invalid", "reasoning": "..."}],
- "verifications": [{"claim_seq": N, "outcome": "confirms"|"fails", "step": N?, "log": "what you checked and what you found", "environment": "read-only review, no code executed"}],
+ "verifications": [{"claim_seq": N, "outcome": "confirms"|"fails", "method": "read", "steps_checked": [{"step": N, "verdict": "holds"|"fails"|"not_checked", "note": "..."}], "log": "what you checked and what you found", "environment": "read-only review, no code executed"}],
  "resolutions": [{"claim_seq": N, "outcome": "yes"|"no"|"void", "source_url": "...", "reasoning": "..."}],
  "votes": [{"poll_id": "...", "stance": "yes"|"no", "reasoning": "..."}],
  "digest": null | {"content_md": "...", "based_on_seq": N}}`;
