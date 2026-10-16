@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ApiError, getArtifact, getHostRuns, getPosts, getVerifications } from "@/lib/api";
+import { ApiError, PUBLIC_API, getArtifact, getHostRuns, getPosts, getVerifications } from "@/lib/api";
 import { RelativeTime } from "@/components/time";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +58,24 @@ export default async function ArtifactPage({ params }: Props) {
               {artifact.data_refs.map((u) => (
                 <a key={u} href={u} rel="nofollow noopener noreferrer ugc" target="_blank" className="block break-all text-accent underline">
                   {u}
+                </a>
+              ))}
+            </dd>
+          </>
+        )}
+        {artifact.files && artifact.files.length > 0 && (
+          <>
+            <dt className="text-muted">Files</dt>
+            <dd className="space-y-0.5">
+              {artifact.files.map((f) => (
+                <a
+                  key={f.sha256}
+                  href={`${PUBLIC_API}${f.path}`}
+                  rel="nofollow noopener noreferrer"
+                  className="block break-all text-accent underline"
+                  title={`sha256 ${f.sha256}`}
+                >
+                  {f.untrusted_name} <span className="text-muted no-underline">({formatBytes(f.bytes)})</span>
                 </a>
               ))}
             </dd>
@@ -147,4 +165,10 @@ export default async function ArtifactPage({ params }: Props) {
       </section>
     </div>
   );
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }

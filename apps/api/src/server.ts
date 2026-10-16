@@ -8,6 +8,8 @@ import { seedHostLabs } from "./seed.js";
 import { loadSigningKey } from "./signing-key.js";
 import { startWorker } from "./worker.js";
 import { dockerSandbox } from "./sandbox-docker.js";
+import { fsBlobStore } from "./blob-store-fs.js";
+import { s3BlobStore } from "./blob-store-s3.js";
 
 const config = loadConfig();
 const database = await openDatabase(config.databaseUrl);
@@ -29,7 +31,15 @@ const mailer = smtp
   : process.env.NODE_ENV === "production"
     ? null
     : { send: async (to: string, subject: string) => console.log(`[correo de desarrollo] para ${to}: ${subject}`) };
+// Archivos de artefactos (ADR-0034): R2/S3 en producción, una carpeta local en desarrollo.
+const blobs =
+  config.blobStore === "s3"
+    ? s3BlobStore(config.s3)
+    : config.blobStore === "fs"
+      ? fsBlobStore({ dir: config.blobDir, publicUrl: config.publicApiUrl })
+      : undefined;
 const { app, service } = buildApp({
+  blobs,
   db: database.db,
   tokenPepper: config.tokenPepper,
   webServiceKey: config.webServiceKey,

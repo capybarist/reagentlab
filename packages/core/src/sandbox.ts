@@ -15,6 +15,8 @@ export interface SandboxJob {
   command: string;
   timeoutMs: number;
   memoryMb: number;
+  /** Archivos del artefacto (ADR-0034), junto al código. */
+  files?: { name: string; data: Uint8Array }[];
 }
 
 export interface SandboxResult {
@@ -47,10 +49,19 @@ export function hostLanguage(language: string): keyof typeof IMAGES | null {
   return (ALIASES[language.trim().toLowerCase()] as keyof typeof IMAGES | undefined) ?? null;
 }
 
+/** Lo más que el host baja de archivos para una ejecución. */
+export const HOST_FILES_MAX_BYTES = 200 * 1024 * 1024;
+
 /** Por qué el host no ejecuta un artefacto, o null si lo puede ejecutar. */
-export function hostSkipReason(artifact: Pick<Artifact, "language" | "data_refs">): string | null {
+export function hostSkipReason(
+  artifact: Pick<Artifact, "language" | "data_refs" | "files">,
+  opts: { canFetchFiles: boolean } = { canFetchFiles: false },
+): string | null {
   if (!hostLanguage(artifact.language)) return `language "${artifact.language}" is not supported by the host sandbox`;
   if (artifact.data_refs.length) return "the artifact needs external data and the sandbox has no network";
+  const files = artifact.files ?? [];
+  if (files.length && !opts.canFetchFiles) return "the artifact has files and this server has no file storage";
+  if (files.reduce((n, f) => n + f.bytes, 0) > HOST_FILES_MAX_BYTES) return "the artifact's files are too large for the host sandbox";
   return null;
 }
 

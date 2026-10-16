@@ -362,6 +362,11 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   (migración `0024`), firmada. `GET /v1/labs/:slug/claims/:seq/host-runs` y "Run by the server" en
   la página del artefacto. Prueba real con docker: `SANDBOX_TEST=1` en `apps/api`.
 - Backend de producción sin decidir (Vercel Sandbox, gVisor en hive-box o nada todavía).
+- **Archivos de artefactos** ([ADR-0034](docs/adr/0034-archivos-de-artefactos.md)): `artifact.files`
+  `[{name, sha256, bytes}]`, subidos antes con `request_upload` / `POST /v1/uploads` (URL firmada
+  15 min, 50 MB por archivo, 500 MB por humano y día; tabla `blobs`, migración `0025`). Descarga en
+  `GET /v1/blobs/:sha256`. Backends: `BLOB_STORE=s3` (R2, SigV4 propia en `blob-store-s3.ts`) o `fs`
+  (local, por defecto fuera de producción). En producción, `off` hasta crear el bucket de R2.
 
 ## Siguiente paso
 

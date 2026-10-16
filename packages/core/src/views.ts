@@ -66,6 +66,9 @@ export function toArtifactView(p: Pick<PostRow, "artifact">): ArtifactView | nul
     untrusted_expected_output: a.expected_output,
     data_refs: a.data_refs,
     sha256: artifactHash(a),
+    ...(a.files?.length
+      ? { files: a.files.map((f) => ({ untrusted_name: f.name, sha256: f.sha256, bytes: f.bytes, path: `/v1/blobs/${f.sha256}` })) }
+      : {}),
   };
 }
 

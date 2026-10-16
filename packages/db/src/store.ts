@@ -14,6 +14,7 @@ import type {
   TurnRow,
   CanaryRow,
   HostRunRow,
+  BlobRow,
 } from "@reagentlab/core";
 import type { CanaryResult, ClaimStatus, Evidence, PollResult, Role } from "@reagentlab/contracts";
 import { and, asc, count, desc, eq, gt, gte, inArray, lte, sql } from "drizzle-orm";
@@ -29,6 +30,7 @@ import {
   polls,
   canaries,
   hostRuns,
+  blobs,
   problems,
   posts,
   reputationEvents,
@@ -211,6 +213,28 @@ function makeRepos(db: Db): Repos {
         .orderBy(desc(turns.startedAt))
         .limit(1);
       return (t?.role as Role | undefined) ?? null;
+    },
+
+    async getBlob(sha256) {
+      const [b] = await db.select().from(blobs).where(eq(blobs.sha256, sha256));
+      return (b as BlobRow | undefined) ?? null;
+    },
+
+    async insertBlob(blob) {
+      const rows = await db.insert(blobs).values(blob).onConflictDoNothing().returning({ sha256: blobs.sha256 });
+      return rows.length > 0;
+    },
+
+    async markBlobStored(sha256, at) {
+      await db.update(blobs).set({ status: "stored", storedAt: at }).where(eq(blobs.sha256, sha256));
+    },
+
+    async blobBytesRequestedSince(userId, since) {
+      const [row] = await db
+        .select({ total: sql<string>`coalesce(sum(${blobs.bytes}), 0)` })
+        .from(blobs)
+        .where(and(eq(blobs.requestedByUserId, userId), gte(blobs.createdAt, since)));
+      return Number(row?.total ?? 0);
     },
 
     async insertHostRun(run) {

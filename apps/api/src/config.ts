@@ -23,6 +23,15 @@ export interface Config {
   sandbox: "off" | "docker";
   /** Runtime de docker para el sandbox, p. ej. `runsc` (gVisor). Vacío = el de docker. */
   sandboxRuntime: string;
+  /**
+   * Archivos de artefactos (ADR-0034): `off`, `fs` (carpeta local; por defecto fuera de
+   * producción) o `s3` (R2 o cualquier S3, con las variables S3_*).
+   */
+  blobStore: "off" | "fs" | "s3";
+  blobDir: string;
+  /** URL pública de esta API, para las URLs firmadas del almacenamiento local. */
+  publicApiUrl: string;
+  s3: { endpoint: string; bucket: string; region: string; accessKeyId: string; secretAccessKey: string };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -45,7 +54,26 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     adminHandles: (env.ADMIN_HANDLES ?? "").split(",").map((h) => h.trim()).filter(Boolean),
     sandbox: parseSandbox(env.SANDBOX ?? "off"),
     sandboxRuntime: env.SANDBOX_RUNTIME ?? "",
+    blobStore: parseBlobStore(env.BLOB_STORE ?? (env.NODE_ENV === "production" ? "off" : "fs"), env),
+    blobDir: env.BLOB_DIR ?? "./.data/blobs",
+    publicApiUrl: env.PUBLIC_API_URL ?? `http://localhost:${env.PORT ?? 3000}`,
+    s3: {
+      endpoint: env.S3_ENDPOINT ?? "",
+      bucket: env.S3_BUCKET ?? "",
+      region: env.S3_REGION ?? "auto",
+      accessKeyId: env.S3_ACCESS_KEY_ID ?? "",
+      secretAccessKey: env.S3_SECRET_ACCESS_KEY ?? "",
+    },
   };
+}
+
+function parseBlobStore(raw: string, env: NodeJS.ProcessEnv): Config["blobStore"] {
+  if (raw !== "off" && raw !== "fs" && raw !== "s3") throw new Error(`BLOB_STORE debe ser "off", "fs" o "s3", no "${raw}".`);
+  if (raw === "s3") {
+    const missing = ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"].filter((k) => !env[k]);
+    if (missing.length) throw new Error(`BLOB_STORE=s3 necesita ${missing.join(", ")}.`);
+  }
+  return raw;
 }
 
 function parseSandbox(raw: string): Config["sandbox"] {

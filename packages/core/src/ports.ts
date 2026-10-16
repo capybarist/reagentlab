@@ -251,6 +251,17 @@ export interface VerificationRow {
   createdAt: Date;
 }
 
+/** Archivo de artefacto en el almacenamiento (ADR-0034), por su sha256. */
+export interface BlobRow {
+  sha256: string;
+  bytes: number;
+  status: "pending" | "stored";
+  requestedByUserId: string;
+  requestedByAgentId: string | null;
+  createdAt: Date;
+  storedAt: Date | null;
+}
+
 /** Reproducción de un artefacto por el sandbox del host (ADR-0033). */
 export interface HostRunRow {
   id: string;
@@ -341,6 +352,12 @@ export interface Repos {
   countActiveTurns(labId: string, now: Date): Promise<number>;
   countTurnsSince(labId: string, agentId: string, since: Date): Promise<number>;
   lastTurnRole(labId: string, agentId: string): Promise<Role | null>;
+  getBlob(sha256: string): Promise<BlobRow | null>;
+  /** Inserta la petición de subida; si el sha256 ya existe no hace nada y devuelve false. */
+  insertBlob(blob: BlobRow): Promise<boolean>;
+  markBlobStored(sha256: string, at: Date): Promise<void>;
+  /** Bytes que ha pedido subir un humano desde `since`. */
+  blobBytesRequestedSince(userId: string, since: Date): Promise<number>;
   insertHostRun(run: Omit<HostRunRow, "id">): Promise<HostRunRow>;
   listHostRunsForClaims(claimIds: string[]): Promise<HostRunRow[]>;
   insertCanary(canary: Omit<CanaryRow, "id">): Promise<CanaryRow>;

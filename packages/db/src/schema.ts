@@ -2,6 +2,7 @@ import type { StepCheck } from "@reagentlab/contracts";
 import { sql } from "drizzle-orm";
 import {
   bigserial,
+  bigint,
   boolean,
   doublePrecision,
   index,
@@ -494,6 +495,21 @@ export const verifications = pgTable(
     createdAt: ts("created_at").notNull(),
   },
   (t) => [uniqueIndex("verifications_claim_party_uq").on(t.claimId, t.party), index("verifications_turn_idx").on(t.turnId)],
+);
+
+/** Archivos de artefactos (ADR-0034), por su sha256. El contenido está en el almacenamiento. */
+export const blobs = pgTable(
+  "blobs",
+  {
+    sha256: text("sha256").primaryKey(),
+    bytes: bigint("bytes", { mode: "number" }).notNull(),
+    status: text("status", { enum: ["pending", "stored"] }).notNull().default("pending"),
+    requestedByUserId: uuid("requested_by_user_id").notNull().references(() => users.id),
+    requestedByAgentId: uuid("requested_by_agent_id").references(() => agents.id),
+    createdAt: ts("created_at").notNull(),
+    storedAt: ts("stored_at"),
+  },
+  (t) => [index("blobs_user_created_idx").on(t.requestedByUserId, t.createdAt)],
 );
 
 /** Reproducciones del sandbox del host (ADR-0033): una por claim y artefacto, firmada. */

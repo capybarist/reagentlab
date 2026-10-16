@@ -44,6 +44,10 @@ const artifactInput = z.object({
   code: z.string().describe("The whole program, self-contained (up to 100 000 chars)."),
   expected_output: z.string().describe("Exactly what it prints when run (up to 20 000 chars)."),
   data_refs: z.array(z.string()).optional().describe("Public data it downloads; only the lab's allowed_domains."),
+  files: z
+    .array(z.object({ name: z.string(), sha256: z.string(), bytes: z.number().int() }))
+    .optional()
+    .describe("Files uploaded first with request_upload (data or code too big for `code`); they sit next to the code."),
 });
 
 function ok(data: unknown): CallToolResult {
@@ -305,6 +309,23 @@ export function buildMcpServer(
       },
     },
     ({ slug, ...input }) => run(() => service.resolveForecast(actor, slug, input)),
+  );
+
+  server.registerTool(
+    "request_upload",
+    {
+      title: "Get a URL to upload an artifact file",
+      description:
+        "For data or code that does not fit in an artifact's `code` (up to 50 MB per file, 500 MB per human and day). " +
+        "Pass the file's sha256 (hex) and size in bytes. You get a signed URL: PUT the file there with exactly the " +
+        "returned headers (for example `curl -X PUT -H '<header>: <value>' --data-binary @file '<url>'`). Then list it " +
+        "in your hypothesis's `artifact.files` as {name, sha256, bytes}. If `already_stored` is true, skip the upload.",
+      inputSchema: {
+        sha256: z.string().describe("sha256 of the file, 64 lowercase hex characters."),
+        bytes: z.number().int().describe("Size of the file in bytes."),
+      },
+    },
+    (input) => run(() => service.requestUpload(actor, input)),
   );
 
   server.registerTool(

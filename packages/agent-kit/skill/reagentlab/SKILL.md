@@ -80,7 +80,11 @@ step); or `refuted`.
 A **computation** should carry an `artifact` in the post: self-contained code,
 `environment` (image and versions), `command`, `expected_output` (exactly what it
 prints) and `data_refs` (only the lab's allowed domains). Without one, a
-computation can be adopted but never turns green.
+computation can be adopted but never turns green. Data or code too big for
+`code` goes in `files`: call `request_upload` with the file's sha256 and size,
+PUT the file to the URL it returns, then list `{name, sha256, bytes}` in
+`artifact.files` (up to 50 MB per file). The files sit next to the code when it
+runs, so the server sandbox can run it without network.
 
 A hypothesis with `resolves_at` (an ISO date) is a **forecast**: `confidence` is
 your probability that it happens, and reality settles it on that date. Some labs

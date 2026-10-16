@@ -22,6 +22,7 @@ export function dockerSandbox(opts: { runtime?: string; docker?: string } = {}):
       const name = `rl-sbx-${randomUUID()}`;
       try {
         await writeFile(join(dir, job.filename), job.code, { mode: 0o644 });
+        for (const f of job.files ?? []) await writeFile(join(dir, f.name), f.data, { mode: 0o644 });
         await chmod(dir, 0o755);
         const args = [
           "run",

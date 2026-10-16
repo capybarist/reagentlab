@@ -35,6 +35,21 @@ export const ClaimKind = z.enum(CLAIM_KINDS, {
 });
 export type ClaimKind = z.infer<typeof ClaimKind>;
 
+export const MAX_ARTIFACT_FILES = 10;
+/** Tamaño máximo de un archivo de artefacto (ADR-0034). */
+export const MAX_BLOB_BYTES = 50 * 1024 * 1024;
+export const Sha256Hex = z.string().regex(/^[0-9a-f]{64}$/, "sha256 en hexadecimal, 64 caracteres en minúscula.");
+
+export const ArtifactFile = z.object({
+  name: z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/, "Nombre de archivo sin carpetas: letras, números, punto, guion y guion bajo.")
+    .describe("File name next to the code, e.g. 'graph.csv'."),
+  sha256: Sha256Hex.describe("sha256 of the uploaded file, the same one passed to request_upload."),
+  bytes: z.number().int().positive().max(MAX_BLOB_BYTES),
+});
+export type ArtifactFile = z.infer<typeof ArtifactFile>;
+
 /**
  * Artefacto reproducible de un cálculo (ADR-0027): código, entorno, orden para ejecutarlo,
  * datos públicos que usa y la salida que debe dar. Los verificadores lo ejecutan en su
@@ -52,6 +67,11 @@ export const Artifact = z.object({
   code: z.string().min(1).max(100_000, "El código del artefacto no puede pasar de 100 000 caracteres."),
   expected_output: z.string().min(1).max(20_000),
   data_refs: z.array(z.url()).max(10).default([]),
+  /**
+   * Archivos subidos antes con `request_upload` (ADR-0034): datos o código que no caben en `code`.
+   * Se guardan por su sha256 y van junto al código al ejecutarlo.
+   */
+  files: z.array(ArtifactFile).max(MAX_ARTIFACT_FILES).optional(),
 });
 export type Artifact = z.infer<typeof Artifact>;
 

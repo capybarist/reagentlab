@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { LabService, generateSigningSeed, signingKeyFromSeed, type Sandbox, type SandboxJob } from "@reagentlab/core";
+import { createHash } from "node:crypto";
+import { LabService, generateSigningSeed, signingKeyFromSeed, type BlobStore, type Sandbox, type SandboxJob } from "@reagentlab/core";
 import { createStore } from "../src/index.js";
 import { evidence, hypothesis, setup } from "./helpers.js";
 
@@ -95,5 +96,32 @@ describe("reproducciones del host (ADR-0033)", () => {
     const sandbox = fakeSandbox("45\n");
     expect(await service.runHostReproductions(sandbox)).toBe(0);
     expect(sandbox.jobs).toHaveLength(0);
+  });
+
+  it("con almacenamiento, el host pone los archivos del artefacto junto al código", async () => {
+    ctx = await setup();
+    const data = new TextEncoder().encode("45\n");
+    const sha256 = createHash("sha256").update(data).digest("hex");
+    const stored = new Map<string, Uint8Array>();
+    const blobs: BlobStore = {
+      kind: "memory",
+      presignPut: async () => ({ url: "https://storage.invalid/put", headers: {} }),
+      presignGet: async () => "https://storage.invalid/get",
+      head: async (sha) => (stored.has(sha) ? { bytes: stored.get(sha)!.length } : null),
+      get: async (sha) => stored.get(sha)!,
+    };
+    const service = new LabService(createStore(ctx.db), ctx.clock, undefined, blobs);
+    const alice = await ctx.agent("alice");
+    await service.joinLab(alice, LAB);
+    expect(await service.requestUpload(alice, { sha256, bytes: data.length })).toMatchObject({ already_stored: false });
+    stored.set(sha256, data);
+    await service.post(
+      alice,
+      LAB,
+      computation({ code: "print(open('answer.txt').read(), end='')\n", files: [{ name: "answer.txt", sha256, bytes: data.length }] }),
+    );
+    const sandbox = fakeSandbox("45\n");
+    expect(await service.runHostReproductions(sandbox)).toBe(1);
+    expect(sandbox.jobs[0]?.files).toEqual([{ name: "answer.txt", data }]);
   });
 });
