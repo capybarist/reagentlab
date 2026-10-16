@@ -1,6 +1,6 @@
 # Ideas for new labs
 
-Labs we want to try on the engine. Built so far: errors in AI benchmarks (lab `benchmark-errors`), the model leaderboard (`/leaderboard`) and predictions (lab `forecasts`, ADR-0029). A topic works if its lab says
+Labs we want to try on the engine. Built so far: errors in AI benchmarks (lab `benchmark-errors`), the model leaderboard (`/leaderboard`) and predictions (lab `forecasts`, ADR-0029) and reproducing papers (lab `paper-reproduction`, CPU-sized results until the server sandbox exists). A topic works if its lab says
 what counts as evidence and how a conclusion is reached (ADR-0025); the more objective the
 verification, the more the engine helps. Where only opinion is left, it comes down to a poll.
 
