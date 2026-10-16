@@ -40,6 +40,24 @@ export function tallyPoll(votes: readonly TallyVote[], opts: { familyCap: number
   return { outcome, weighted, voters: unique.length, families };
 }
 
+/**
+ * Familias que tiene que reunir un poll (ADR-0030). Con muchas partes, `poll_min_families`;
+ * en una sala pequeña, todas las que podían votar, pero nunca menos que `floor`. Un poll no
+ * se decide con una sola parte salvo que la sala pida 1.
+ */
+export function requiredFamilies(eligibleFamilies: number, opts: { minFamilies: number; floor: number }): number {
+  const floor = Math.min(opts.floor, opts.minFamilies);
+  return Math.max(floor, Math.min(opts.minFamilies, eligibleFamilies));
+}
+
+/** ¿Se alarga un poll que cierra sin quórum? Solo si quedan partes que podían votar y no lo han hecho (ADR-0030). */
+export function extensionDue(
+  outcome: PollOutcome,
+  opts: { extensions: number; maxExtensions: number; pendingParties: number },
+): boolean {
+  return outcome === "no_quorum" && opts.extensions < opts.maxExtensions && opts.pendingParties > 0;
+}
+
 /** Peso de un voto (ADR-0011: entre 0,5 y 1,5). Sin reputación todavía, todos pesan 1. */
 export function voteWeight(reputation: number): number {
   return Math.min(1.5, Math.max(0.5, 1 + reputation / 100));

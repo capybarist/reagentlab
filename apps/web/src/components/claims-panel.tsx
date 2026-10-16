@@ -119,7 +119,8 @@ export function PollsPanel({ polls }: { polls: PollView[] }) {
           <li key={p.id} className="text-sm">
             <PollTitle poll={p} />
             <p className="mt-1 text-xs text-muted">
-              Blind vote · closes <RelativeTime iso={p.closes_at} />
+              Blind vote{p.extensions ? " · extended, waiting for more voters" : ""} · closes{" "}
+              <RelativeTime iso={p.closes_at} />
             </p>
           </li>
         ))}
@@ -129,7 +130,7 @@ export function PollsPanel({ polls }: { polls: PollView[] }) {
             {p.result && (
               <p className="mt-1 text-xs text-muted">
                 {p.result.outcome === "no_quorum"
-                  ? `No quorum (${p.result.families} model famil${p.result.families === 1 ? "y" : "ies"})`
+                  ? `No quorum (${p.result.families} of ${p.result.required_families ?? "?"} model families)`
                   : `${p.result.outcome === "yes" ? "Yes" : "No"} · ${p.result.weighted.yes} vs ${p.result.weighted.no}`}{" "}
                 · {p.result.voters} vote{p.result.voters === 1 ? "" : "s"}
               </p>

@@ -49,7 +49,7 @@ import {
   settleSilentRulings,
 } from "./claim-ops.js";
 import { applyRuling, rulingBlock } from "./claims.js";
-import { closePoll, openDuePolls, openPollViews, pollViews } from "./poll-ops.js";
+import { closePoll, labPollsFirstHere, openDuePolls, openPollViews, pollViews } from "./poll-ops.js";
 import { voteBlock, voteWeight } from "./polls.js";
 import {
   problemDigestV0,
@@ -1346,11 +1346,12 @@ export class LabService {
       const lab = await requireLab(r, slug, true);
       const rules = parseLabRules(lab.rules);
       const { turn, problem } = await requireProblemTurn(r, lab, actor, now);
+      // Se vota en cualquier poll de la sala, no solo en los del hilo del turno (ADR-0030).
       const poll = await r.getPoll(input.poll_id);
-      if (!poll || poll.labId !== lab.id || poll.problemId !== problem.id) {
+      if (!poll || poll.labId !== lab.id) {
         throw new DomainError(
           "POLL_NOT_FOUND",
-          `No hay ningún poll con ese id en el problema "${problem.slug}".`,
+          `No hay ningún poll con ese id en la sala "${lab.slug}".`,
           "Usa un id de `open_polls`.",
         );
       }
@@ -1405,8 +1406,7 @@ export class LabService {
         const lab = (await r.getLabBySlug(l.slug, { forUpdate: true }))!;
         const rules = parseLabRules(lab.rules);
         for (const poll of (await r.listDuePolls(now)).filter((p) => p.labId === lab.id)) {
-          await closePoll(r, lab, rules, poll, now);
-          closed++;
+          if (await closePoll(r, lab, rules, poll, now)) closed++;
         }
         opened += await openDuePolls(r, lab, rules, now);
       });
@@ -1682,7 +1682,8 @@ export class LabService {
         turn.role === "verifier"
           ? await forecastTasks(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id)
           : [],
-      open_polls: await openPollViews(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id),
+      // Todos los polls abiertos de la sala, primero los del hilo del turno (ADR-0030).
+      open_polls: await labPollsFirstHere(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id),
       other_problems: others,
     };
   }

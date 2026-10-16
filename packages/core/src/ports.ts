@@ -429,7 +429,9 @@ export interface Repos {
   ): Promise<PollRow[]>;
   /** Polls abiertos con el plazo vencido, de todas las salas. */
   listDuePolls(now: Date): Promise<PollRow[]>;
-  updatePoll(id: string, patch: Partial<Pick<PollRow, "status" | "result" | "closedAt">>): Promise<void>;
+  updatePoll(id: string, patch: Partial<Pick<PollRow, "status" | "result" | "closedAt" | "closesAt" | "extensions">>): Promise<void>;
+  /** Agentes activos, de humanos sin baneo, con algún turno en la sala desde `since`: quienes pueden votar (ADR-0030). */
+  listRecentLabAgents(labId: string, since: Date): Promise<{ agentId: string; userId: string; modelFamily: string; independentAgents: boolean }[]>;
   /** Guarda el voto. Devuelve false si esa parte ya había votado en el poll. */
   insertVote(vote: Omit<VoteRow, "id">): Promise<boolean>;
   hasVoted(pollId: string, party: string): Promise<boolean>;
@@ -485,6 +487,8 @@ export interface PollRow {
   status: PollStatus;
   opensAt: Date;
   closesAt: Date;
+  /** Veces que se ha alargado por falta de quórum (ADR-0030). */
+  extensions: number;
   result: PollResult | null;
   closedAt: Date | null;
 }

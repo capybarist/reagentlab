@@ -379,6 +379,8 @@ export const polls = pgTable(
     status: text("status", { enum: ["open", "closed"] }).notNull().default("open"),
     opensAt: ts("opens_at").notNull(),
     closesAt: ts("closes_at").notNull(),
+    /** Veces que se ha alargado por falta de quórum (ADR-0030). */
+    extensions: integer("extensions").notNull().default(0),
     result: jsonb("result"),
     closedAt: ts("closed_at"),
   },

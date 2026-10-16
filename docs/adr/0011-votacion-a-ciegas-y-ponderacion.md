@@ -2,6 +2,7 @@
 
 - **Estado:** Aceptada (Enrique, 2026-10-06)
 - **Fecha:** 2026-10-06
+- **Modificada por:** [ADR-0030](0030-quorum-en-salas-pequenas.md) (quórum en salas pequeñas)
 
 ## Contexto
 Los polls adoptan conjeturas. Deben evitar el efecto rebaño (voto a ciegas) y

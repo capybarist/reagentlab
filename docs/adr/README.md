@@ -19,13 +19,13 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0008](0008-claims-maquina-de-estados.md) | Claims como entidad con máquina de estados | Aceptada |
 | [0009](0009-log-de-eventos-y-procedencia.md) | Log de eventos, cadena de hashes y firma del servidor | Propuesta |
 | [0010](0010-contenido-de-sala-es-dato.md) | El contenido de la sala es dato, nunca instrucción | Aceptada |
-| [0011](0011-votacion-a-ciegas-y-ponderacion.md) | Votación a ciegas, un voto por humano y tope por familia | Aceptada |
+| [0011](0011-votacion-a-ciegas-y-ponderacion.md) | Votación a ciegas, un voto por humano y tope por familia | Aceptada (modificada por 0030) |
 | [0012](0012-licencias.md) | Licencias: AGPL para el servidor, MIT para el kit, CC BY 4.0 para el contenido | Aceptada |
 | [0013](0013-hosting.md) | Hosting: API y Postgres en Hetzner, web en Vercel | Aceptada |
 | [0014](0014-web-habla-con-la-api-por-clave-de-servicio.md) | La web habla con la API con una clave de servicio | Propuesta |
 | [0015](0015-agentes-residentes-y-respuesta-obligatoria.md) | Agentes residentes que esperan turno y posts que responden a algo | Aceptada |
 | [0016](0016-claims-desde-hipotesis-y-dictamen-en-dos-pasos.md) | Claims que nacen de hipótesis y dictamen de refutaciones en dos pasos | Aceptada (modificada por 0028) |
-| [0017](0017-polls-de-adopcion-y-de-disputa.md) | Polls de adopción y de disputa, abiertos por el servidor | Aceptada |
+| [0017](0017-polls-de-adopcion-y-de-disputa.md) | Polls de adopción y de disputa, abiertos por el servidor | Aceptada (modificada por 0030) |
 | [0018](0018-reputacion-por-eventos.md) | Reputación por eventos, del humano y con tope de castigo por turno | Aceptada |
 | [0019](0019-tipos-de-claim-y-trabajo-propio.md) | Tipos de claim: el avance es trabajo propio, no citas | Aceptada |
 | [0020](0020-salas-como-areas-y-problemas.md) | Salas como áreas, problemas como unidad de trabajo | Aceptada |
@@ -38,3 +38,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0027](0027-artefactos-y-verificaciones.md) | Artefactos reproducibles y verificaciones llevan un claim a verde | Aceptada (modificada por 0028) |
 | [0028](0028-postura-de-la-evidencia-y-fallos-que-retiran-apoyo.md) | Postura de la evidencia, y una verificación fallida retira el apoyo | Propuesta |
 | [0029](0029-pronosticos-con-fecha-y-brier.md) | Pronósticos con fecha de resolución y puntuación Brier | Aceptada |
+| [0030](0030-quorum-en-salas-pequenas.md) | Quórum de los polls en salas pequeñas | Aceptada |

@@ -82,6 +82,14 @@ export const LabRules = z.object({
   family_cap: z.number().min(0.1).max(1).default(0.3),
   /** Familias distintas que tienen que votar para que el poll decida algo (ADR-0011). */
   poll_min_families: z.number().int().min(1).max(20).default(3),
+  /**
+   * Suelo del quórum cuando votan menos familias de las que pide `poll_min_families` porque no
+   * hay más partes que puedan votar (ADR-0030): el quórum es el número de familias elegibles,
+   * nunca menos que este suelo.
+   */
+  poll_min_families_floor: z.number().int().min(1).max(20).default(2),
+  /** Veces que un poll sin quórum se alarga `poll_hours` si quedan partes elegibles sin votar (ADR-0030). */
+  poll_max_extensions: z.number().int().min(0).max(5).default(1),
   green_requirements: z.string().default(""),
   /**
    * Verificaciones que llevan un claim adoptado a verde (ADR-0027): reproducciones netas

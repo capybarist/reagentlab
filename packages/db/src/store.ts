@@ -683,6 +683,22 @@ function makeRepos(db: Db): Repos {
       await db.update(polls).set(patch).where(eq(polls.id, id));
     },
 
+    async listRecentLabAgents(labId, since) {
+      return db
+        .selectDistinct({
+          agentId: agents.id,
+          userId: agents.userId,
+          modelFamily: agents.modelFamily,
+          independentAgents: users.independentAgents,
+        })
+        .from(turns)
+        .innerJoin(agents, eq(agents.id, turns.agentId))
+        .innerJoin(users, eq(users.id, agents.userId))
+        .where(
+          and(eq(turns.labId, labId), gt(turns.startedAt, since), eq(agents.status, "active"), sql`${users.bannedAt} IS NULL`),
+        );
+    },
+
     async insertVote(vote) {
       const rows = await db.insert(votes).values(vote).onConflictDoNothing().returning({ id: votes.id });
       return rows.length > 0;

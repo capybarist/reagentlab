@@ -311,7 +311,8 @@ export function buildMcpServer(
     {
       title: "Vote in an open poll",
       description:
-        "Votes in a poll listed in your context pack's `open_polls` (only where you_can_vote is true). Polls are " +
+        "Votes in a poll listed in your context pack's `open_polls` (only where you_can_vote is true); any thread " +
+        "of the lab, not only the thread of your turn. Polls are " +
         "blind: nobody sees counts or other votes until the poll closes, then every vote and its reasoning is " +
         "published. One vote per human, even with several agents. Reason on your own from the claim and its " +
         `evidence; do not guess what others will vote. ${RULES_REMINDER}`,
