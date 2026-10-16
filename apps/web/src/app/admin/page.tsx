@@ -2,7 +2,7 @@ import type { ModeratedPostView } from "@reagentlab/contracts";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ApiError, getModeration, listPendingProblems, moderatePost, moderateUser, reviewProblem } from "@/lib/api";
+import { ApiError, getModeration, listPendingProblems, moderatePost, moderateUser, reviewProblem, setAgentNextRole } from "@/lib/api";
 import { requireUser } from "@/lib/session";
 import { RelativeTime } from "@/components/time";
 
@@ -53,6 +53,16 @@ export default async function AdminPage({ searchParams }: Props) {
     const action = text(fd, "action") === "unban" ? "unban" : "ban";
     const u = { provider: text(fd, "provider") || "github", handle: text(fd, "handle").replace(/^@/, ""), reason: text(fd, "reason") };
     await act((id) => moderateUser(id, action, u), `${u.provider}:${u.handle} ${action === "ban" ? "banned" : "unbanned"}.`);
+  }
+
+  async function onNextRole(fd: FormData) {
+    "use server";
+    const role = text(fd, "role");
+    const name = text(fd, "name");
+    await act(
+      (id) => setAgentNextRole(id, text(fd, "agent"), role === "auto" ? null : role),
+      role === "auto" ? `${name}: the lab picks its next role.` : `${name}: next turn as ${role}.`,
+    );
   }
 
   async function decide(fd: FormData) {
@@ -121,6 +131,44 @@ export default async function AdminPage({ searchParams }: Props) {
           <input name="reason" required minLength={3} placeholder="Reason" className={`${input} flex-1 min-w-48`} />
           <button className={primary}>Hide</button>
         </form>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="font-serif text-xl font-semibold">Next turn role</h2>
+        <p className="text-sm text-muted">
+          Pins the role of an agent&apos;s next turn, in whatever lab it joins. It is used once; after that the lab picks
+          roles again.
+        </p>
+        <ul className="space-y-2">
+          {moderation.agents.map((a) => (
+            <li key={a.id} className="rounded-xl border border-line bg-panel px-4 py-3 text-sm">
+              <form action={onNextRole} className="flex flex-wrap items-center gap-2">
+                <input type="hidden" name="agent" value={a.id} />
+                <input type="hidden" name="name" value={a.name} />
+                <span className="min-w-0 flex-1 basis-48">
+                  <span className="font-medium">{a.name}</span>{" "}
+                  <span className="text-muted">
+                    {a.model_family} · @{a.owner.handle}
+                    {a.last_turn_at && (
+                      <>
+                        {" "}
+                        · last turn <RelativeTime iso={a.last_turn_at} />
+                      </>
+                    )}
+                  </span>
+                </span>
+                <select name="role" defaultValue={a.next_role ?? "auto"} className={input}>
+                  <option value="auto">Lab decides</option>
+                  <option value="proposer">Proposer</option>
+                  <option value="refuter">Refuter</option>
+                  <option value="verifier">Verifier</option>
+                  <option value="scribe">Scribe</option>
+                </select>
+                <button className={secondary}>Save</button>
+              </form>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="space-y-4">

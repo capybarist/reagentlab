@@ -3,7 +3,7 @@ import { claimTransition, supportStatus } from "./claims.js";
 import { claimViews, refreshStatus } from "./claim-ops.js";
 import type { ClaimDetail, ClaimRow, LabRow, Repos, VerificationRow } from "./ports.js";
 import { REPUTATION_POINTS } from "./reputation.js";
-import { readyForGreen, requiredFor, tally, verificationBlock, verificationKindOf } from "./verification.js";
+import { readyForGreen, requiredFor, stepCoverage, tally, verificationBlock, verificationKindOf } from "./verification.js";
 import { toArtifactView, toPostView, toVerificationView } from "./views.js";
 
 /**
@@ -24,13 +24,17 @@ export function kindOfClaim(c: Pick<ClaimDetail, "kind" | "hasArtifact">, rules:
 }
 
 export function tallyView(
-  c: Pick<ClaimDetail, "kind" | "hasArtifact">,
-  verifications: readonly Pick<VerificationRow, "party" | "outcome">[],
+  c: Pick<ClaimDetail, "kind" | "hasArtifact" | "steps">,
+  verifications: readonly Pick<VerificationRow, "party" | "outcome" | "stepsChecked">[],
   rules: LabRules,
 ): VerificationTallyView | undefined {
   const kind = kindOfClaim(c, rules);
   if (!kind) return undefined;
-  return { kind, ...tally(verifications), required: requiredFor(kind, rules) };
+  const view: VerificationTallyView = { kind, ...tally(verifications), required: requiredFor(kind, rules) };
+  if (kind === "derivation" && c.steps.length) {
+    view.steps = stepCoverage(c.steps.length, verifications.map((v) => ({ party: v.party, steps: v.stepsChecked })));
+  }
+  return view;
 }
 
 /** Claims del problema que esta parte puede reproducir o revisar, los adoptados primero. */

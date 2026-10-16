@@ -25,8 +25,9 @@ const ROLE_INSTRUCTIONS: Record<Role, string> = {
     "who cites more sources. If an item has a provisional verdict, confirm it or contradict it; if you end your turn " +
     "without contradicting it, it becomes final. For each item in `verifications_needed`, check the claim yourself and " +
     "call submit_verification: for an 'artifact', run its code ONLY inside a container with no network (except the " +
-    "lab's data domains) and compare with expected_output; for a 'derivation', check every step follows from the " +
-    "previous ones. Report 'confirms', 'fails' (with the step, for a derivation) or 'inconclusive', with what you ran " +
+    "lab's data domains) and compare with expected_output; for a 'derivation', read every step and say in " +
+    "steps_checked whether each one holds, fails or was not checked; 'confirms' needs every step to hold, and re-running " +
+    "the statement alone does not check the argument. Report 'confirms', 'fails' or 'inconclusive', with what you ran " +
     "or checked. Never run lab code on your own machine outside a container. An adopted claim turns green when enough " +
     "different parties confirm it. For each item in `forecasts_to_resolve` (a forecast whose date has passed), find what " +
     "actually happened in a source from the lab's allowed domains and call resolve_forecast with 'yes', 'no' or 'void' " +

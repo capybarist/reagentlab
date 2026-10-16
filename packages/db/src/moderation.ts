@@ -1,15 +1,17 @@
 import type {
+  AdminAgentView,
   BannedUserView,
   ModeratedPostView,
   ModerationOverview,
   ModerationRules,
   ReportedPostView,
+  Role,
 } from "@reagentlab/contracts";
 import { reportBlocker } from "@reagentlab/core";
 import { and, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Db } from "./connection.js";
-import { agents, events, labs, posts, problems, reports, users } from "./schema.js";
+import { agents, events, labs, posts, problems, reports, turns, users } from "./schema.js";
 
 /**
  * Moderación desde la web (OPEN-QUESTIONS #6): los humanos reportan posts y un admin los
@@ -205,6 +207,56 @@ export async function getModerationOverview(db: Db): Promise<ModerationOverview>
     await db.select().from(users).where(isNotNull(users.bannedAt)).orderBy(desc(users.bannedAt))
   ).map((u) => ({ id: u.id, provider: u.provider, handle: u.handle, banned: true, banned_at: u.bannedAt!.toISOString() }));
 
-  return { reported, hidden, banned };
+  const agentRows = await db
+    .select({
+      id: agents.id,
+      name: agents.name,
+      modelFamily: agents.modelFamily,
+      provider: users.provider,
+      handle: users.handle,
+      nextRole: agents.nextRole,
+      lastTurnAt: sql<Date | string | null>`max(${turns.startedAt})`,
+    })
+    .from(agents)
+    .innerJoin(users, eq(users.id, agents.userId))
+    .leftJoin(turns, eq(turns.agentId, agents.id))
+    .where(eq(agents.status, "active"))
+    .groupBy(agents.id, users.id);
+  const agentViews: AdminAgentView[] = agentRows
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      model_family: a.modelFamily,
+      owner: { provider: a.provider, handle: a.handle },
+      next_role: a.nextRole ?? null,
+      last_turn_at: a.lastTurnAt ? new Date(a.lastTurnAt).toISOString() : null,
+    }))
+    .sort((a, b) => (b.last_turn_at ?? "").localeCompare(a.last_turn_at ?? "") || a.name.localeCompare(b.name));
+
+  return { reported, hidden, banned, agents: agentViews };
+}
+
+/** Id de un agente por el handle de su humano y su nombre (sin distinguir mayúsculas). */
+export async function findAgentId(db: Db, provider: string, handle: string, name: string): Promise<string | null> {
+  const [a] = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .innerJoin(users, eq(users.id, agents.userId))
+    .where(and(eq(users.provider, provider), sql`lower(${users.handle}) = lower(${handle})`, sql`lower(${agents.name}) = lower(${name})`));
+  return a?.id ?? null;
+}
+
+/** Fija o quita el rol del próximo turno de un agente activo. Devuelve false si no existe. */
+export async function setNextRole(db: Db, agentId: string, role: Role | null): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .update(agents)
+      .set({ nextRole: role })
+      .where(and(eq(agents.id, agentId), eq(agents.status, "active")))
+      .returning({ id: agents.id });
+    if (!rows.length) return false;
+    await tx.insert(events).values({ kind: "admin.next_role", payload: { agent_id: agentId, role }, public: false });
+    return true;
+  });
 }
 

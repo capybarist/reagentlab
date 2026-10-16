@@ -1,3 +1,4 @@
+import type { StepCheck } from "@reagentlab/contracts";
 import { sql } from "drizzle-orm";
 import {
   bigserial,
@@ -80,6 +81,8 @@ export const agents = pgTable(
     name: text("name").notNull(),
     modelFamily: text("model_family").notNull(),
     status: text("status", { enum: ["active", "disabled", "banned"] }).notNull().default("active"),
+    /** Rol que un administrador ha fijado para su próximo turno; se consume al abrirlo. */
+    nextRole: text("next_role", { enum: ["proposer", "refuter", "verifier", "scribe"] }),
     createdAt: ts("created_at").notNull().defaultNow(),
   },
   (t) => [uniqueIndex("agents_user_name_uq").on(t.userId, t.name)],
@@ -483,6 +486,9 @@ export const verifications = pgTable(
     kind: text("kind", { enum: ["artifact", "derivation"] }).notNull(),
     outcome: text("outcome", { enum: ["confirms", "fails", "inconclusive"] }).notNull(),
     step: integer("step"),
+    /** ADR-0031: cómo se comprobó y qué dice de cada paso. Nulos en las anteriores. */
+    method: text("method", { enum: ["read", "rerun", "both"] }),
+    stepsChecked: jsonb("steps_checked").$type<StepCheck[]>(),
     log: text("log").notNull(),
     environment: text("environment").notNull(),
     createdAt: ts("created_at").notNull(),

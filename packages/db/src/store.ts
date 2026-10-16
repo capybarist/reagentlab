@@ -205,6 +205,13 @@ function makeRepos(db: Db): Repos {
       return (t?.role as Role | undefined) ?? null;
     },
 
+    async takeNextRole(agentId) {
+      const [a] = await db.select({ role: agents.nextRole }).from(agents).where(eq(agents.id, agentId)).for("update");
+      if (!a?.role) return null;
+      await db.update(agents).set({ nextRole: null }).where(eq(agents.id, agentId));
+      return a.role;
+    },
+
     async lastTurn(labId, agentId) {
       const [t] = await db
         .select()

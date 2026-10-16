@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { CLAIM_STATUSES, CLAIM_KINDS, VERIFICATION_OUTCOMES } from "@reagentlab/contracts";
-import { readyForGreen, requiredFor, tally, verificationBlock, verificationKindOf } from "../src/index.js";
+import {
+  checkSteps,
+  readyForGreen,
+  requiredFor,
+  stepCoverage,
+  tally,
+  verificationBlock,
+  verificationKindOf,
+} from "../src/index.js";
 
 const RULES = { min_reproductions: 2, min_derivation_checks: 2 };
 
@@ -69,5 +77,51 @@ describe("recuento y verde", () => {
 
   it("con requisito 0 nunca hay verde por esta vía", () => {
     expect(readyForGreen("adopted", tally([v("a", "confirms"), v("b", "confirms")]), 0)).toBe(false);
+  });
+});
+
+describe("pasos revisados en una derivación (ADR-0031)", () => {
+  const holds = (step: number) => ({ step, verdict: "holds" as const });
+  const ok = (r: ReturnType<typeof checkSteps>) => !("message" in r);
+
+  it("confirmar exige todos los pasos con holds y no vale solo con rerun", () => {
+    expect(ok(checkSteps("derivation", { outcome: "confirms", steps_checked: [holds(1), holds(2)] }, 2))).toBe(true);
+    expect(ok(checkSteps("derivation", { outcome: "confirms", method: "both", steps_checked: [holds(2), holds(1)] }, 2))).toBe(true);
+    expect(ok(checkSteps("derivation", { outcome: "confirms" }, 2))).toBe(false);
+    expect(ok(checkSteps("derivation", { outcome: "confirms", steps_checked: [holds(1)] }, 2))).toBe(false);
+    expect(ok(checkSteps("derivation", { outcome: "confirms", method: "rerun", steps_checked: [holds(1), holds(2)] }, 2))).toBe(false);
+    expect(ok(checkSteps("derivation", { outcome: "confirms", steps_checked: [holds(1), holds(1), holds(2)] }, 2))).toBe(false);
+    expect(ok(checkSteps("derivation", { outcome: "confirms", steps_checked: [holds(1), holds(3)] }, 2))).toBe(false);
+  });
+
+  it("fallar exige un paso que falla, en steps_checked o en step, y lo devuelve", () => {
+    expect(checkSteps("derivation", { outcome: "fails", step: 2 }, 3)).toMatchObject({ step: 2, steps: [{ step: 2, verdict: "fails" }] });
+    expect(
+      checkSteps("derivation", { outcome: "fails", steps_checked: [holds(1), { step: 3, verdict: "fails" }] }, 3),
+    ).toMatchObject({ step: 3, method: "read" });
+    expect(ok(checkSteps("derivation", { outcome: "fails" }, 3))).toBe(false);
+    expect(ok(checkSteps("derivation", { outcome: "fails", step: 2, steps_checked: [holds(2)] }, 3))).toBe(false);
+    expect(ok(checkSteps("derivation", { outcome: "inconclusive", steps_checked: [{ step: 1, verdict: "fails" }] }, 3))).toBe(false);
+    expect(checkSteps("derivation", { outcome: "inconclusive" }, 3)).toEqual({ method: "read", step: null, steps: null });
+  });
+
+  it("un artefacto no lleva pasos", () => {
+    expect(checkSteps("artifact", { outcome: "confirms" }, 0)).toEqual({ method: "rerun", step: null, steps: null });
+    expect(ok(checkSteps("artifact", { outcome: "fails", step: 1 }, 0))).toBe(false);
+    expect(ok(checkSteps("artifact", { outcome: "fails", steps_checked: [holds(1)] }, 0))).toBe(false);
+  });
+
+  it("la cobertura cuenta una vez por parte y por paso", () => {
+    expect(
+      stepCoverage(2, [
+        { party: "a", steps: [holds(1), { step: 2, verdict: "fails" }] },
+        { party: "a", steps: [holds(2)] },
+        { party: "b", steps: [holds(1), { step: 2, verdict: "not_checked" }] },
+        { party: "c", steps: null },
+      ]),
+    ).toEqual([
+      { holds: 2, fails: 0 },
+      { holds: 0, fails: 1 },
+    ]);
   });
 });

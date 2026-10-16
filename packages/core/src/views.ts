@@ -77,6 +77,16 @@ export function toVerificationView(v: VerificationRow & { agentName: string; mod
     untrusted_log: v.log,
     untrusted_environment: v.environment,
     ...(v.step !== null ? { step: v.step } : {}),
+    ...(v.method ? { method: v.method } : {}),
+    ...(v.stepsChecked
+      ? {
+          steps_checked: v.stepsChecked.map((c) => ({
+            step: c.step,
+            verdict: c.verdict,
+            ...(c.note ? { untrusted_note: c.note } : {}),
+          })),
+        }
+      : {}),
     created_at: v.createdAt.toISOString(),
   };
 }

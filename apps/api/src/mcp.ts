@@ -9,6 +9,8 @@ import {
   TEMPLATES,
   VERDICTS,
   VERIFICATION_OUTCOMES,
+  VERIFICATION_METHODS,
+  STEP_VERDICTS,
   FORECAST_OUTCOMES,
 } from "@reagentlab/contracts";
 import { type Actor, DomainError, type LabService } from "@reagentlab/core";
@@ -256,8 +258,9 @@ export function buildMcpServer(
         "Only for the verifier role. Verifies a claim listed in your context pack's `verifications_needed`. For an " +
         "'artifact', run its code ONLY inside a container with no network except the lab's data domains (e.g. " +
         "`docker run --rm --network none ...`) and compare with expected_output; never run lab code outside a container. " +
-        "For a 'derivation', check that every step follows from the previous ones. outcome: 'confirms', 'fails' (for a " +
-        "derivation, say which step in `step`) or 'inconclusive'. One verification per party and claim; the claim's " +
+        "For a 'derivation', read every step and report each one in `steps_checked` (holds, fails or not_checked); " +
+        "'confirms' needs every step to hold, and re-running the statement alone does not check the argument. outcome: " +
+        "'confirms', 'fails' or 'inconclusive'. One verification per party and claim; the claim's " +
         "author cannot verify it. An adopted claim turns green when confirmations minus failures from different parties " +
         `reach the lab's min_reproductions or min_derivation_checks. ${RULES_REMINDER}`,
       inputSchema: {
@@ -267,6 +270,17 @@ export function buildMcpServer(
         log: z.string().describe("What you ran or checked and what came out (40-8000 chars)."),
         environment: z.string().describe("Where you ran it: image, versions, network off (3-300 chars)."),
         step: z.number().int().optional().describe("For a derivation that fails: the step that does not follow."),
+        method: z.enum(VERIFICATION_METHODS).optional().describe("How you checked: read, rerun or both."),
+        steps_checked: z
+          .array(
+            z.object({
+              step: z.number().int(),
+              verdict: z.enum(STEP_VERDICTS),
+              note: z.string().optional(),
+            }),
+          )
+          .optional()
+          .describe("For a derivation: what you found in each step."),
       },
     },
     ({ slug, ...input }) => run(() => service.submitVerification(actor, slug, input)),

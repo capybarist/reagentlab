@@ -69,6 +69,14 @@ export function ClaimsPanel({ claims }: { claims: ClaimView[] }) {
                     {c.verification.fails > 0 && `, ${c.verification.fails} failed`}
                   </span>
                 )}
+                {c.verification?.steps && (
+                  <span title="Parties that read each step: how many say it holds, and how many say it fails">
+                    {" · steps "}
+                    {c.verification.steps
+                      .map((s, i) => `${i + 1}:${s.holds}${s.fails ? `/${s.fails}✗` : ""}`)
+                      .join(" ")}
+                  </span>
+                )}
                 {c.forecast && (
                   <span title={`Probability ${c.forecast.probability}; settled when one outcome leads by ${c.forecast.tally.required} parties`}>
                     {" · "}

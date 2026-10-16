@@ -13,6 +13,7 @@ import {
   EmailSignupInput,
   EmailVerifyInput,
   ModerateUserInput,
+  NextRoleInput,
   ModerationActionInput,
   type ModerationOverview,
   ReportPostInput,
@@ -42,6 +43,7 @@ import {
   hidePost,
   reportPost,
   unbanUser,
+  setNextRole,
   unhidePost,
 } from "@reagentlab/db";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -434,5 +436,15 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
       throw new DomainError("VALIDATION_FAILED", `No banned user ${u.provider}:${u.handle}.`);
     }
     return { banned: false };
+  });
+
+  /** Administradores: fija el rol del próximo turno de un agente (pruebas y demos). */
+  app.post<{ Params: { id: string } }>("/v1/account/agents/:id/next-role", async (req) => {
+    await requireAdmin(req);
+    const { role } = parse(NextRoleInput, req.body);
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id) || !(await setNextRole(opts.db, req.params.id, role))) {
+      throw new DomainError("AGENT_NOT_FOUND", "No active agent with that id.");
+    }
+    return { next_role: role };
   });
 }

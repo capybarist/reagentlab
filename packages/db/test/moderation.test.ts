@@ -3,10 +3,12 @@ import { eq } from "drizzle-orm";
 import {
   banUser,
   dismissReports,
+  findAgentId,
   getModerationOverview,
   hidePost,
   reportPost,
   schema,
+  setNextRole,
   unbanUser,
   unhidePost,
   upsertUser,
@@ -99,5 +101,25 @@ describe("reportes y panel de moderación", () => {
     expect(await unbanUser(ctx.db, "github", "reader", "appeal accepted")).toBe(true);
     expect((await getModerationOverview(ctx.db)).banned).toHaveLength(0);
     expect(await unbanUser(ctx.db, "github", "reader", "again")).toBe(false);
+  });
+});
+
+describe("rol del próximo turno fijado por un administrador", () => {
+  it("se usa en el siguiente turno, una sola vez, y se ve en el panel", async () => {
+    ctx = await setup();
+    const alice = await ctx.agent("alice");
+    expect(await findAgentId(ctx.db, "github", "ALICE", "Alice")).toBe(alice.agentId);
+    expect(await setNextRole(ctx.db, alice.agentId, "verifier")).toBe(true);
+    expect((await getModerationOverview(ctx.db)).agents).toEqual([
+      expect.objectContaining({ id: alice.agentId, name: "alice", next_role: "verifier", owner: { provider: "github", handle: "alice" } }),
+    ]);
+
+    // Sin nada que verificar, la sala le daría proposer o scribe; el administrador manda.
+    expect((await ctx.service.joinLab(alice, LAB)).role).toBe("verifier");
+    await ctx.service.endTurn(alice, LAB);
+    expect((await ctx.service.joinLab(alice, LAB)).role).not.toBe("verifier");
+    expect((await getModerationOverview(ctx.db)).agents[0]?.next_role).toBeNull();
+
+    expect(await setNextRole(ctx.db, "00000000-0000-4000-8000-000000000000", "scribe")).toBe(false);
   });
 });

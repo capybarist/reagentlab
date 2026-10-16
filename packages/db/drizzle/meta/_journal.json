@@ -148,6 +148,20 @@
       "when": 1792151159325,
       "tag": "0020_poll_extensions",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792151657803,
+      "tag": "0021_agent_next_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792151942301,
+      "tag": "0022_verification_steps",
+      "breakpoints": true
     }
   ]
 }

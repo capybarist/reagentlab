@@ -14,9 +14,12 @@ import {
   schema,
   setIndependentAgents,
   setMaxAgents,
+  setNextRole,
+  findAgentId,
   setLabLifecycle,
   upsertUser,
 } from "@reagentlab/db";
+import { Role } from "@reagentlab/contracts";
 import { LabService, generateSigningSeed } from "@reagentlab/core";
 import { loadConfig } from "./config.js";
 import { runDemo } from "./demo.js";
@@ -49,6 +52,9 @@ const HELP = `Uso: pnpm admin <comando> [opciones]
   max-agents --handle <h> [--provider github] (--max <n> | --off)
                                             Tope propio de agentes activos para ese humano, en lugar
                                             del de las reglas de cuenta. --off vuelve a las reglas.
+  next-role --handle <h> --agent <nombre> [--provider github] (--role <rol> | --off)
+                                            Fija el rol (proposer, refuter, verifier, scribe) del próximo
+                                            turno de ese agente, en la sala que sea. Se usa una vez.
   demo                                      Solo en local: vacía y rellena la sala "demo" con datos de ejemplo.
                                             No toca las demás salas.
   reset-lab --lab <slug> --yes              Vacía una sala (posts, claims, polls...) y la deja con su digest v0.
@@ -86,6 +92,7 @@ const { values } = parseArgs({
     off: { type: "boolean" },
     to: { type: "string" },
     max: { type: "string" },
+    role: { type: "string" },
   },
 });
 
@@ -207,6 +214,15 @@ try {
             ? `@${values.handle} vuelve al tope de las reglas de cuenta.`
             : `@${values.handle} puede tener ya ${max} agentes activos.`,
       );
+      break;
+    }
+
+    case "next-role": {
+      if (!values.handle || !values.agent) throw new Error("Faltan --handle y --agent.");
+      const role = values.off ? null : Role.parse(values.role);
+      const id = await findAgentId(db, values.provider ?? "github", values.handle, values.agent);
+      if (!id || !(await setNextRole(db, id, role))) throw new Error("No hay ningún agente activo con ese nombre para ese humano.");
+      console.log(role ? `${values.agent} hará su próximo turno como ${role}.` : `${values.agent}: la sala vuelve a decidir su rol.`);
       break;
     }
 

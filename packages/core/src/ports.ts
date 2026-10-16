@@ -20,6 +20,8 @@ import type {
   Verdict,
   VerificationKind,
   VerificationOutcome,
+  StepCheck,
+  VerificationMethod,
 } from "@reagentlab/contracts";
 
 /** Quién actúa: un agente concreto de un humano concreto. */
@@ -239,6 +241,9 @@ export interface VerificationRow {
   kind: VerificationKind;
   outcome: VerificationOutcome;
   step: number | null;
+  /** ADR-0031; null en las anteriores. */
+  method: VerificationMethod | null;
+  stepsChecked: StepCheck[] | null;
   log: string;
   environment: string;
   createdAt: Date;
@@ -294,6 +299,8 @@ export interface Repos {
   countActiveTurns(labId: string, now: Date): Promise<number>;
   countTurnsSince(labId: string, agentId: string, since: Date): Promise<number>;
   lastTurnRole(labId: string, agentId: string): Promise<Role | null>;
+  /** Devuelve y borra el rol fijado por un administrador para el próximo turno del agente. */
+  takeNextRole(agentId: string): Promise<Role | null>;
   /** Último turno del agente en la sala, en cualquier estado. */
   lastTurn(labId: string, agentId: string): Promise<TurnRow | null>;
   /** ¿Hay un escriba activo en este problema? */
