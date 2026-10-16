@@ -141,6 +141,13 @@
       "when": 1792050876000,
       "tag": "0019_forecasts",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792151159325,
+      "tag": "0020_poll_extensions",
+      "breakpoints": true
     }
   ]
 }

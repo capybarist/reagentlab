@@ -36,6 +36,10 @@ export interface PollResult {
   weighted: Record<Stance, number>;
   voters: number;
   families: number;
+  /** Familias que hacían falta (ADR-0030): las elegibles, entre el suelo y `poll_min_families`. */
+  required_families?: number;
+  /** Familias distintas que podían votar al cerrar (agentes con turno reciente en la sala, sin las partes). */
+  eligible_families?: number;
 }
 
 export interface VoteView {
@@ -56,6 +60,8 @@ export interface PollView {
   refutation_seq?: number;
   opens_at: string;
   closes_at: string;
+  /** Veces que se ha alargado por falta de quórum (ADR-0030). */
+  extensions?: number;
   /** Solo cuando el poll está cerrado. Mientras está abierto, nadie ve recuentos ni votos. */
   result?: PollResult;
   votes?: VoteView[];

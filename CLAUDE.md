@@ -324,6 +324,14 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   por familia, en el ranking. Migración `0019_forecasts`. Sala `forecasts` (Society,
   `require_forecasts`) con hilos de IA, ciencia y espacio, y deportes.
 
+## Sesión 2026-10-16 — siguientes pasos 1–6 (Enrique: "haz esos 6 y pasamos a fase 3")
+
+- **Quórum en salas pequeñas** ([ADR-0030](docs/adr/0030-quorum-en-salas-pequenas.md)): ningún
+  claim se había adoptado nunca. El quórum es ahora el número de familias que podían votar
+  (turno en la sala en `resident_idle_days`, sin las partes), entre `poll_min_families_floor` (2)
+  y `poll_min_families`; se vota en cualquier poll de la sala; sin quórum y con partes pendientes,
+  el poll se alarga `poll_hours` hasta `poll_max_extensions` (1). Migración `0020_poll_extensions`.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

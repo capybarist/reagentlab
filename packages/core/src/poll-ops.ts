@@ -2,9 +2,9 @@ import type { LabRules, OpenPollView, PollView } from "@reagentlab/contracts";
 import { claimViews, refreshStatus, settleRefutation } from "./claim-ops.js";
 import { maybeVerify } from "./verification-ops.js";
 import { claimTransition, isRefutationOpen } from "./claims.js";
-import { adoptionDue, disputeDue, tallyPoll, voteBlock, type LastPoll } from "./polls.js";
+import { adoptionDue, disputeDue, extensionDue, requiredFamilies, tallyPoll, voteBlock, type LastPoll } from "./polls.js";
 import type { LabRow, PollRow, Repos } from "./ports.js";
-import { tallyFamily } from "./party.js";
+import { partyOf, tallyFamily } from "./party.js";
 import { REPUTATION_POINTS } from "./reputation.js";
 import { templateFor } from "./templates/index.js";
 
@@ -46,6 +46,7 @@ export async function openDuePolls(r: Repos, lab: LabRow, rules: LabRules, now: 
       status: "open",
       opensAt: now,
       closesAt,
+      extensions: 0,
       result: null,
       closedAt: null,
     });
@@ -89,6 +90,7 @@ export async function openDuePolls(r: Repos, lab: LabRow, rules: LabRules, now: 
       status: "open",
       opensAt: now,
       closesAt,
+      extensions: 0,
       result: null,
       closedAt: null,
     });
@@ -99,10 +101,49 @@ export async function openDuePolls(r: Repos, lab: LabRow, rules: LabRules, now: 
   return opened;
 }
 
-/** Cierra un poll vencido: recuenta, publica el resultado y aplica sus efectos. */
-export async function closePoll(r: Repos, lab: LabRow, rules: LabRules, poll: PollRow, now: Date): Promise<void> {
+/**
+ * Quién podía votar en el poll (ADR-0030): los agentes con turno en la sala en los últimos
+ * `resident_idle_days` días y quienes ya han votado, sin las partes del caso. Devuelve sus
+ * familias de recuento y cuántas partes elegibles no han votado.
+ */
+async function eligibility(r: Repos, lab: LabRow, rules: LabRules, poll: PollRow, votes: { party: string; modelFamily: string }[], now: Date) {
+  const since = new Date(now.getTime() - rules.resident_idle_days * 24 * HOUR_MS);
+  const voted = new Set(votes.map((v) => v.party));
+  const families = new Set(votes.map((v) => tallyFamily(v)));
+  const pending = new Set<string>();
+  for (const a of await r.listRecentLabAgents(lab.id, since)) {
+    const party = partyOf(a, rules.independence);
+    if (poll.caseParties.includes(party)) continue;
+    families.add(tallyFamily({ party, modelFamily: a.modelFamily }));
+    if (!voted.has(party)) pending.add(party);
+  }
+  return { families: families.size, pending: pending.size };
+}
+
+/**
+ * Cierra un poll vencido: recuenta, publica el resultado y aplica sus efectos. Si no hay
+ * quórum y aún quedan partes elegibles sin votar, lo alarga en vez de cerrarlo (ADR-0030)
+ * y devuelve false.
+ */
+export async function closePoll(r: Repos, lab: LabRow, rules: LabRules, poll: PollRow, now: Date): Promise<boolean> {
   const votes = await r.listVotesForTally(poll.id);
-  const result = tallyPoll(votes.map((v) => ({ ...v, modelFamily: tallyFamily(v) })), { familyCap: rules.family_cap, minFamilies: rules.poll_min_families });
+  const eligible = await eligibility(r, lab, rules, poll, votes, now);
+  const minFamilies = requiredFamilies(eligible.families, { minFamilies: rules.poll_min_families, floor: rules.poll_min_families_floor });
+  const tally = tallyPoll(votes.map((v) => ({ ...v, modelFamily: tallyFamily(v) })), { familyCap: rules.family_cap, minFamilies });
+  const result = { ...tally, required_families: minFamilies, eligible_families: eligible.families };
+  if (extensionDue(result.outcome, { extensions: poll.extensions, maxExtensions: rules.poll_max_extensions, pendingParties: eligible.pending })) {
+    const closesAt = new Date(now.getTime() + rules.poll_hours * HOUR_MS);
+    await r.updatePoll(poll.id, { closesAt, extensions: poll.extensions + 1 });
+    // Sin recuentos: el poll sigue a ciegas.
+    await r.insertEvent({
+      labId: lab.id,
+      kind: "poll.extended",
+      actorAgentId: null,
+      payload: { poll_id: poll.id, kind: poll.kind, claim_seq: poll.claimSeq, closes_at: closesAt.toISOString() },
+      public: true,
+    });
+    return false;
+  }
   await r.updatePoll(poll.id, { status: "closed", result, closedAt: now });
   await r.insertEvent({
     labId: lab.id,
@@ -111,13 +152,13 @@ export async function closePoll(r: Repos, lab: LabRow, rules: LabRules, poll: Po
     payload: { poll_id: poll.id, kind: poll.kind, claim_seq: poll.claimSeq, ...result },
     public: true,
   });
-  if (result.outcome === "no_quorum") return;
+  if (result.outcome === "no_quorum") return true;
 
   if (poll.kind === "adopt_claim") {
     const [claim] = await r.getClaimsBySeq(lab.id, [poll.claimSeq]);
-    if (!claim || result.outcome !== "yes") return;
+    if (!claim || result.outcome !== "yes") return true;
     const next = claimTransition(claim.status, { kind: "poll_adopted" });
-    if (next.status === claim.status) return; // refutado mientras el poll estaba abierto
+    if (next.status === claim.status) return true; // refutado mientras el poll estaba abierto
     await r.updateClaim(claim.id, { status: next.status, updatedAt: now });
     await r.addReputation({
       userId: claim.authorUserId,
@@ -139,13 +180,14 @@ export async function closePoll(r: Repos, lab: LabRow, rules: LabRules, poll: Po
     await refreshStatus(r, lab.id, claim.problemId);
     // Si ya tenía las verificaciones que pide la sala, pasa a verde ahora (ADR-0027).
     await maybeVerify(r, lab, rules, { ...claim, status: next.status }, now, null);
-    return;
+    return true;
   }
 
   const ref = poll.refutationSeq !== null ? await r.getRefutationBySeq(lab.id, poll.refutationSeq) : null;
-  if (!ref || ref.status !== "disputed") return;
+  if (!ref || ref.status !== "disputed") return true;
   const valid = result.outcome === "yes";
   await settleRefutation(r, lab, ref, valid ? "accepted" : "rejected", valid ? "valid" : "invalid", now, null, "poll");
+  return true;
 }
 
 export async function pollViews(
@@ -171,6 +213,7 @@ export async function pollViews(
       opens_at: p.opensAt.toISOString(),
       closes_at: p.closesAt.toISOString(),
     };
+    if (p.extensions > 0) v.extensions = p.extensions;
     if (p.refutationSeq !== null) v.refutation_seq = p.refutationSeq;
     if (p.status === "closed" && p.result) {
       v.result = p.result;
@@ -207,6 +250,20 @@ export async function openPollViews(
     out.push(block ? { ...v, you_can_vote: false, cannot_vote_reason: block } : { ...v, you_can_vote: true });
   }
   return out;
+}
+
+/** Polls abiertos de toda la sala, primero los del hilo `problemId` (ADR-0030: se vota en cualquiera). */
+export async function labPollsFirstHere(
+  r: Repos,
+  labId: string,
+  rules: LabRules,
+  party: string,
+  now: Date,
+  problemId: string,
+): Promise<OpenPollView[]> {
+  const here = await openPollViews(r, labId, rules, party, now, problemId);
+  const all = await openPollViews(r, labId, rules, party, now);
+  return [...here, ...all.filter((p) => !here.some((h) => h.id === p.id))];
 }
 
 function lastPoll(p: PollRow | undefined): LastPoll | null {

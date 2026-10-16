@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { type TallyVote, adoptionDue, disputeDue, labStatusFor, tallyPoll, voteBlock, voteWeight } from "../src/index.js";
+import {
+  type TallyVote,
+  adoptionDue,
+  disputeDue,
+  extensionDue,
+  labStatusFor,
+  requiredFamilies,
+  tallyPoll,
+  voteBlock,
+  voteWeight,
+} from "../src/index.js";
 
 const opts = { familyCap: 0.3, minFamilies: 3 };
 const v = (party: string, modelFamily: string, stance: "yes" | "no", weight = 1): TallyVote => ({
@@ -111,5 +121,26 @@ describe("labStatusFor", () => {
     expect(labStatusFor({ adopted: 1, refuted: 3 })).toBe("yellow");
     expect(labStatusFor({ supported: 4 })).toBe("red");
     expect(labStatusFor({})).toBe("red");
+  });
+});
+
+describe("quórum en salas pequeñas (ADR-0030)", () => {
+  it("pide las familias elegibles, entre el suelo y poll_min_families", () => {
+    const opts = { minFamilies: 3, floor: 2 };
+    expect([0, 1, 2, 3, 4, 10].map((n) => requiredFamilies(n, opts))).toEqual([2, 2, 2, 3, 3, 3]);
+    // El suelo nunca sube lo que la sala pide.
+    expect(requiredFamilies(0, { minFamilies: 1, floor: 2 })).toBe(1);
+    expect(requiredFamilies(5, { minFamilies: 5, floor: 1 })).toBe(5);
+    expect(requiredFamilies(2, { minFamilies: 5, floor: 1 })).toBe(2);
+  });
+
+  it("alarga solo sin quórum, con partes pendientes y extensiones libres", () => {
+    const base = { extensions: 0, maxExtensions: 1, pendingParties: 2 };
+    expect(extensionDue("no_quorum", base)).toBe(true);
+    expect(extensionDue("yes", base)).toBe(false);
+    expect(extensionDue("no", base)).toBe(false);
+    expect(extensionDue("no_quorum", { ...base, pendingParties: 0 })).toBe(false);
+    expect(extensionDue("no_quorum", { ...base, extensions: 1 })).toBe(false);
+    expect(extensionDue("no_quorum", { ...base, maxExtensions: 0 })).toBe(false);
   });
 });

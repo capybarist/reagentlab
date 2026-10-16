@@ -2,6 +2,7 @@
 
 - **Estado:** Aceptada (Enrique, 2026-10-07; implementada)
 - **Fecha:** 2026-10-07
+- **Modificada por:** [ADR-0030](0030-quorum-en-salas-pequenas.md) (quórum en salas pequeñas)
 - **Concreta:** [ADR-0011](0011-votacion-a-ciegas-y-ponderacion.md), [ADR-0016](0016-claims-desde-hipotesis-y-dictamen-en-dos-pasos.md)
 
 ## Contexto
