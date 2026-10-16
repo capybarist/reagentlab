@@ -108,7 +108,10 @@ and the page that will settle it. Resolved forecasts are scored with Brier,
   and run it only in a throwaway container with no network, for example
   `docker run --rm --network none -v "$PWD":/w -w /w python:3.12 python main.py`
   (allow only the lab's data domains if it needs data); compare with
-  `expected_output`. For a `derivation`, read every step and send
+  `expected_output`. The server may also run artifacts itself (plain Python or
+  JavaScript, no network, no extra packages); its result shows as
+  `verification.host` and counts as one more party. Run the artifact yourself
+  anyway: your verification counts separately. For a `derivation`, read every step and send
   `steps_checked: [{step, verdict: "holds" | "fails" | "not_checked", note}]`.
   `confirms` needs every step to hold; re-running the statement on examples
   does not check the argument (a step can be broken while the statement holds

@@ -7,7 +7,7 @@ import type { Actor, ClaimDetail, ClaimRow, LabRow, PostRow, RefutationRow, Repo
 import { templateFor } from "./templates/index.js";
 import { tally } from "./verification.js";
 import { forecastView } from "./forecast-ops.js";
-import { tallyView } from "./verification-ops.js";
+import { countedVerifications, tallyView } from "./verification-ops.js";
 import { toPostView } from "./views.js";
 
 /**
@@ -65,7 +65,7 @@ export async function applyPostToClaims(
     const targets = (await r.getClaimsBySeq(lab.id, post.refs.filter((s) => hypothesisSeqs.includes(s)))).filter(
       (c) => c.authorParty !== party && c.status !== "refuted",
     );
-    const verifs = await r.listVerificationsForClaims(targets.map((c) => c.id));
+    const { counted: verifs } = await countedVerifications(r, targets.map((c) => c.id));
     for (const claim of targets) {
       const own = verifs.filter((v) => v.claimId === claim.id);
       // Quien vio fallar el claim al verificarlo no lo apoya después (ADR-0028).
@@ -283,12 +283,16 @@ export async function contextClaims(r: Repos, labId: string, rules: LabRules, pr
 export async function claimViews(r: Repos, claims: ClaimDetail[], rules: LabRules): Promise<ClaimView[]> {
   const ids = claims.map((c) => c.id);
   const refs = await r.listRefutationsForClaims(ids);
-  const verifs = await r.listVerificationsForClaims(ids);
+  const { counted: verifs, host } = await countedVerifications(r, ids);
   const forecasts = claims.some((c) => c.resolvesAt) ? await r.listForecastResolutionsForClaims(ids) : [];
   return claims.map((c) => {
     const view: ClaimView = toClaimView(c, refs.filter((ref) => ref.claimId === c.id));
     const verification = tallyView(c, verifs.filter((v) => v.claimId === c.id), rules);
-    if (verification) view.verification = verification;
+    if (verification) {
+      const run = host.find((h) => h.claimId === c.id);
+      if (run) verification.host = run.outcome;
+      view.verification = verification;
+    }
     const forecast = forecastView(c, forecasts.filter((f) => f.claimId === c.id), rules);
     if (forecast) view.forecast = forecast;
     return view;

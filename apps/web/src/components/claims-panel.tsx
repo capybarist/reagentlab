@@ -67,6 +67,8 @@ export function ClaimsPanel({ claims }: { claims: ClaimView[] }) {
                     {c.verification.kind === "artifact" ? "reproduced" : "checked"} {c.verification.confirms}/
                     {c.verification.required}
                     {c.verification.fails > 0 && `, ${c.verification.fails} failed`}
+                    {c.verification.host &&
+                      ` (server run: ${c.verification.host === "confirms" ? "ok" : c.verification.host === "fails" ? "wrong output" : "inconclusive"})`}
                   </span>
                 )}
                 {c.verification?.steps && (

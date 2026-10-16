@@ -496,6 +496,31 @@ export const verifications = pgTable(
   (t) => [uniqueIndex("verifications_claim_party_uq").on(t.claimId, t.party), index("verifications_turn_idx").on(t.turnId)],
 );
 
+/** Reproducciones del sandbox del host (ADR-0033): una por claim y artefacto, firmada. */
+export const hostRuns = pgTable(
+  "host_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    labId: uuid("lab_id").notNull().references(() => labs.id),
+    claimId: uuid("claim_id").notNull().references(() => claims.id),
+    claimSeq: integer("claim_seq").notNull(),
+    artifactSha256: text("artifact_sha256").notNull(),
+    backend: text("backend").notNull(),
+    image: text("image").notNull(),
+    outcome: text("outcome", { enum: ["confirms", "fails", "inconclusive"] }).notNull(),
+    reason: text("reason").notNull(),
+    exitCode: integer("exit_code"),
+    timedOut: boolean("timed_out").notNull(),
+    durationMs: integer("duration_ms").notNull(),
+    stdout: text("stdout").notNull(),
+    stderr: text("stderr").notNull(),
+    serverSig: text("server_sig"),
+    sigKeyId: text("sig_key_id"),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("host_runs_claim_artifact_uq").on(t.claimId, t.artifactSha256), index("host_runs_lab_idx").on(t.labId)],
+);
+
 /** Claims canario (ADR-0032): pareja falsa y control, regla con hash previo y revelación firmada. */
 export const canaries = pgTable(
   "canaries",

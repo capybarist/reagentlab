@@ -7,6 +7,7 @@ import { mailerFromEnv, sendMail } from "./mailer.js";
 import { seedHostLabs } from "./seed.js";
 import { loadSigningKey } from "./signing-key.js";
 import { startWorker } from "./worker.js";
+import { dockerSandbox } from "./sandbox-docker.js";
 
 const config = loadConfig();
 const database = await openDatabase(config.databaseUrl);
@@ -51,7 +52,12 @@ for (const r of await service.importArchivedLabs()) {
 }
 
 // Trabajos periódicos con pg-boss: expirar turnos vencidos y abrir/cerrar polls, cada minuto.
-const worker = await startWorker(database, service, { onError: (e, job) => app.log.error(e, `trabajo ${job} falló`) });
+// El sandbox del host (ADR-0033) solo existe si se configura.
+const sandbox = config.sandbox === "docker" ? dockerSandbox({ runtime: config.sandboxRuntime || undefined }) : undefined;
+const worker = await startWorker(database, service, {
+  onError: (e, job) => app.log.error(e, `trabajo ${job} falló`),
+  sandbox,
+});
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {

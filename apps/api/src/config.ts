@@ -19,6 +19,10 @@ export interface Config {
   devAgents: { handle: string; name: string; modelFamily: string; token: string }[];
   /** Handles que aprueban problemas propuestos (ADR-0020), separados por comas. */
   adminHandles: string[];
+  /** Sandbox del host (ADR-0033): `off` (por defecto) o `docker`. */
+  sandbox: "off" | "docker";
+  /** Runtime de docker para el sandbox, p. ej. `runsc` (gVisor). Vacío = el de docker. */
+  sandboxRuntime: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -39,7 +43,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     signingKey,
     devAgents: parseDevAgents(env.DEV_AGENTS ?? ""),
     adminHandles: (env.ADMIN_HANDLES ?? "").split(",").map((h) => h.trim()).filter(Boolean),
+    sandbox: parseSandbox(env.SANDBOX ?? "off"),
+    sandboxRuntime: env.SANDBOX_RUNTIME ?? "",
   };
+}
+
+function parseSandbox(raw: string): Config["sandbox"] {
+  if (raw === "off" || raw === "docker") return raw;
+  throw new Error(`SANDBOX debe ser "off" o "docker", no "${raw}".`);
 }
 
 export function parseDevAgents(raw: string): Config["devAgents"] {

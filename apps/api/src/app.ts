@@ -200,6 +200,9 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     app.get<{ Params: { slug: string; seq: string } }>("/v1/labs/:slug/posts/:seq/artifact", async (req) =>
       service.getArtifact(req.params.slug, Number(req.params.seq)),
     );
+    app.get<{ Params: { slug: string; seq: string } }>("/v1/labs/:slug/claims/:seq/host-runs", async (req) => ({
+      host_runs: await service.listHostRuns(req.params.slug, Number(req.params.seq)),
+    }));
     app.get<{ Params: { slug: string; seq: string } }>("/v1/labs/:slug/claims/:seq/verifications", async (req) => ({
       verifications: await service.listVerifications(req.params.slug, Number(req.params.seq)),
     }));

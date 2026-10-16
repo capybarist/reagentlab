@@ -107,6 +107,8 @@ export interface VerificationTallyView {
    * cuántas dicen que falla. Índice 0 = paso 1.
    */
   steps?: { holds: number; fails: number }[];
+  /** Reproducción del host (ADR-0033), si la hay: ya cuenta en confirms/fails/inconclusive. */
+  host?: VerificationOutcome;
 }
 
 /** Un claim que el verificador del turno puede reproducir o revisar. */

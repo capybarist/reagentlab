@@ -13,6 +13,7 @@ import type {
   Store,
   TurnRow,
   CanaryRow,
+  HostRunRow,
 } from "@reagentlab/core";
 import type { CanaryResult, ClaimStatus, Evidence, PollResult, Role } from "@reagentlab/contracts";
 import { and, asc, count, desc, eq, gt, gte, inArray, lte, sql } from "drizzle-orm";
@@ -27,6 +28,7 @@ import {
   memberships,
   polls,
   canaries,
+  hostRuns,
   problems,
   posts,
   reputationEvents,
@@ -69,6 +71,8 @@ const toClaim = (c: typeof claims.$inferSelect): ClaimRow => ({ ...c });
 const toPoll = (p: typeof polls.$inferSelect): PollRow => ({ ...p, result: (p.result as PollResult | null) ?? null });
 
 const toCanary = (c: typeof canaries.$inferSelect): CanaryRow => ({ ...c, result: (c.result as CanaryResult | null) ?? null });
+
+const toHostRun = (h: typeof hostRuns.$inferSelect): HostRunRow => ({ ...h });
 
 const toProblem = (p: typeof problems.$inferSelect): ProblemRow => ({ ...p });
 
@@ -207,6 +211,17 @@ function makeRepos(db: Db): Repos {
         .orderBy(desc(turns.startedAt))
         .limit(1);
       return (t?.role as Role | undefined) ?? null;
+    },
+
+    async insertHostRun(run) {
+      const [h] = await db.insert(hostRuns).values(run).returning();
+      return toHostRun(h!);
+    },
+
+    async listHostRunsForClaims(claimIds) {
+      if (!claimIds.length) return [];
+      const rows = await db.select().from(hostRuns).where(inArray(hostRuns.claimId, claimIds)).orderBy(asc(hostRuns.createdAt));
+      return rows.map(toHostRun);
     },
 
     async insertCanary(canary) {

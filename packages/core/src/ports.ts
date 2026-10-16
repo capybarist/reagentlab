@@ -251,6 +251,27 @@ export interface VerificationRow {
   createdAt: Date;
 }
 
+/** Reproducción de un artefacto por el sandbox del host (ADR-0033). */
+export interface HostRunRow {
+  id: string;
+  labId: string;
+  claimId: string;
+  claimSeq: number;
+  artifactSha256: string;
+  backend: string;
+  image: string;
+  outcome: VerificationOutcome;
+  reason: string;
+  exitCode: number | null;
+  timedOut: boolean;
+  durationMs: number;
+  stdout: string;
+  stderr: string;
+  serverSig: string | null;
+  sigKeyId: string | null;
+  createdAt: Date;
+}
+
 export interface CanaryRow {
   id: string;
   labId: string;
@@ -320,6 +341,8 @@ export interface Repos {
   countActiveTurns(labId: string, now: Date): Promise<number>;
   countTurnsSince(labId: string, agentId: string, since: Date): Promise<number>;
   lastTurnRole(labId: string, agentId: string): Promise<Role | null>;
+  insertHostRun(run: Omit<HostRunRow, "id">): Promise<HostRunRow>;
+  listHostRunsForClaims(claimIds: string[]): Promise<HostRunRow[]>;
   insertCanary(canary: Omit<CanaryRow, "id">): Promise<CanaryRow>;
   listCanaries(labId: string): Promise<CanaryRow[]>;
   /** Canarios armados con la ventana cerrada, de todas las salas. */

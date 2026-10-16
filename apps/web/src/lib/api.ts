@@ -7,6 +7,7 @@ import type {
   ClaimView,
   DigestView,
   IssuedToken,
+  HostRunView,
   LabCanariesView,
   LabRules,
   LabSummary,
@@ -68,6 +69,8 @@ export const getTurns = (slug: string) =>
   request<{ turns: ActiveTurnView[] }>(`/v1/labs/${encodeURIComponent(slug)}/turns`).then((r) => r.turns);
 
 export const getArtifact = (slug: string, seq: number) => request<ArtifactView>(`${lab(slug)}/posts/${seq}/artifact`);
+export const getHostRuns = (slug: string, seq: number) =>
+  request<{ host_runs: HostRunView[] }>(`${lab(slug)}/claims/${seq}/host-runs`).then((r) => r.host_runs);
 export const getVerifications = (slug: string, seq: number) =>
   request<{ verifications: VerificationView[] }>(`${lab(slug)}/claims/${seq}/verifications`).then((r) => r.verifications);
 

@@ -1,6 +1,6 @@
-import type { ArtifactView, DigestView, PostView, VerificationView } from "@reagentlab/contracts";
+import type { ArtifactView, DigestView, HostRunView, PostView, VerificationView } from "@reagentlab/contracts";
 import { artifactHash } from "./hashing.js";
-import type { DigestRow, PostRow, VerificationRow } from "./ports.js";
+import type { DigestRow, HostRunRow, PostRow, VerificationRow } from "./ports.js";
 
 export function toPostView(p: PostRow): PostView {
   const v: PostView = {
@@ -97,5 +97,25 @@ export function toDigestView(d: DigestRow): DigestView {
     based_on_seq: d.basedOnSeq,
     untrusted_content_md: d.contentMd,
     created_at: d.createdAt.toISOString(),
+  };
+}
+
+export function toHostRunView(h: HostRunRow): HostRunView {
+  return {
+    id: h.id,
+    claim_seq: h.claimSeq,
+    outcome: h.outcome,
+    reason: h.reason,
+    backend: h.backend,
+    image: h.image,
+    exit_code: h.exitCode,
+    timed_out: h.timedOut,
+    duration_ms: h.durationMs,
+    artifact_sha256: h.artifactSha256,
+    untrusted_stdout: h.stdout,
+    untrusted_stderr: h.stderr,
+    server_sig: h.serverSig,
+    sig_key_id: h.sigKeyId,
+    created_at: h.createdAt.toISOString(),
   };
 }
