@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ApiError, getArtifact, getPosts, getVerifications } from "@/lib/api";
+import { ApiError, PUBLIC_API, getArtifact, getHostRuns, getPosts, getVerifications } from "@/lib/api";
 import { RelativeTime } from "@/components/time";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +22,10 @@ export default async function ArtifactPage({ params }: Props) {
     if (e instanceof ApiError && (e.status === 404 || e.status === 409)) notFound();
     throw e;
   };
-  const [artifact, verifications, page] = await Promise.all([
+  const [artifact, verifications, hostRuns, page] = await Promise.all([
     getArtifact(slug, seq).catch(missing),
     getVerifications(slug, seq).catch(() => []),
+    getHostRuns(slug, seq).catch(() => []),
     getPosts(slug, seq - 1, 1).catch(missing),
   ]);
   const post = page.posts.find((p) => p.seq === seq);
@@ -62,6 +63,24 @@ export default async function ArtifactPage({ params }: Props) {
             </dd>
           </>
         )}
+        {artifact.files && artifact.files.length > 0 && (
+          <>
+            <dt className="text-muted">Files</dt>
+            <dd className="space-y-0.5">
+              {artifact.files.map((f) => (
+                <a
+                  key={f.sha256}
+                  href={`${PUBLIC_API}${f.path}`}
+                  rel="nofollow noopener noreferrer"
+                  className="block break-all text-accent underline"
+                  title={`sha256 ${f.sha256}`}
+                >
+                  {f.untrusted_name} <span className="text-muted no-underline">({formatBytes(f.bytes)})</span>
+                </a>
+              ))}
+            </dd>
+          </>
+        )}
         <dt className="text-muted">sha256</dt>
         <dd className="font-mono text-xs break-all">{artifact.sha256}</dd>
       </dl>
@@ -79,6 +98,46 @@ export default async function ArtifactPage({ params }: Props) {
           <code>{artifact.untrusted_expected_output}</code>
         </pre>
       </section>
+
+      {hostRuns.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="font-serif text-xl font-semibold">Run by the server</h2>
+          <p className="text-sm text-muted">
+            The server ran this artifact itself in a sandbox with no network, and counts the result as one more
+            verification. The record is signed.
+          </p>
+          <ul className="space-y-3">
+            {hostRuns.map((h) => (
+              <li key={h.id} className="rounded-xl border border-line bg-panel p-4 space-y-2 text-sm">
+                <p className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted">
+                  <span className="font-semibold text-ink">{OUTCOME[h.outcome] ?? h.outcome}</span>
+                  <span>{h.reason}</span>
+                  <span>
+                    · <RelativeTime iso={h.created_at} />
+                  </span>
+                </p>
+                <p className="font-mono text-xs text-muted break-words">
+                  {h.image} · {h.backend} · exit {h.timed_out ? "timeout" : (h.exit_code ?? "none")} ·{" "}
+                  {(h.duration_ms / 1000).toFixed(1)} s · signed {h.sig_key_id ?? "unsigned"}
+                </p>
+                {h.untrusted_stdout && (
+                  <pre className="overflow-x-auto rounded-lg border border-line p-3 text-[12px]">
+                    <code>{h.untrusted_stdout}</code>
+                  </pre>
+                )}
+                {h.untrusted_stderr && (
+                  <details>
+                    <summary className="cursor-pointer text-xs text-muted">stderr</summary>
+                    <pre className="mt-2 overflow-x-auto rounded-lg border border-line p-3 text-[12px]">
+                      <code>{h.untrusted_stderr}</code>
+                    </pre>
+                  </details>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="space-y-3">
         <h2 className="font-serif text-xl font-semibold">Verifications ({verifications.length})</h2>
@@ -106,4 +165,10 @@ export default async function ArtifactPage({ params }: Props) {
       </section>
     </div>
   );
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }

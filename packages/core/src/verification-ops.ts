@@ -1,4 +1,4 @@
-import type { LabRules, VerificationTallyView, VerificationTaskView } from "@reagentlab/contracts";
+import { HOST_PARTY, type LabRules, type VerificationTallyView, type VerificationTaskView } from "@reagentlab/contracts";
 import { claimTransition, supportStatus } from "./claims.js";
 import { claimViews, refreshStatus } from "./claim-ops.js";
 import type { ClaimDetail, ClaimRow, LabRow, Repos, VerificationRow } from "./ports.js";
@@ -18,6 +18,22 @@ const TASKS_PER_TURN = 3;
  * otra confirmación puede levantarlos.
  */
 const TASK_STATUSES = ["adopted", "supported", "open"] as const;
+
+type Counted = Pick<VerificationRow, "claimId" | "party" | "outcome" | "stepsChecked">;
+
+/**
+ * Lo que cuenta en el recuento de unos claims: las verificaciones de los agentes y la
+ * reproducción del host (ADR-0033), que cuenta como una parte más.
+ */
+export async function countedVerifications(r: Repos, claimIds: string[]) {
+  const verifs = await r.listVerificationsForClaims(claimIds);
+  const host = await r.listHostRunsForClaims(claimIds);
+  const counted: Counted[] = [
+    ...verifs,
+    ...host.map((h) => ({ claimId: h.claimId, party: HOST_PARTY, outcome: h.outcome, stepsChecked: null })),
+  ];
+  return { verifs, host, counted };
+}
 
 export function kindOfClaim(c: Pick<ClaimDetail, "kind" | "hasArtifact">, rules: LabRules) {
   return verificationKindOf({ kind: c.kind, hasArtifact: c.hasArtifact }, rules);
@@ -102,7 +118,7 @@ export async function applyVerificationToSupport(
   const withdrawn =
     verification.outcome === "fails" && (await r.listClaimSupportParties(claim.id)).includes(verification.party);
   const supportCount = withdrawn ? Math.max(0, claim.supportCount - 1) : claim.supportCount;
-  const status = supportStatus(claim.status, supportCount, tally(await r.listVerificationsForClaims([claim.id])));
+  const status = supportStatus(claim.status, supportCount, tally((await countedVerifications(r, [claim.id])).counted));
   if (supportCount === claim.supportCount && status === claim.status) return claim;
   await r.updateClaim(claim.id, { status, supportCount, updatedAt: now });
   if (status !== claim.status) {
@@ -133,8 +149,8 @@ export async function maybeVerify(
   if (!detail) return false;
   const kind = kindOfClaim(detail, rules);
   if (!kind) return false;
-  const verifs = await r.listVerificationsForClaims([claim.id]);
-  if (!readyForGreen(claim.status, tally(verifs), requiredFor(kind, rules))) return false;
+  const { verifs, counted } = await countedVerifications(r, [claim.id]);
+  if (!readyForGreen(claim.status, tally(counted), requiredFor(kind, rules))) return false;
   const next = claimTransition(claim.status, { kind: "verified" });
   if (next.status === claim.status) return false;
   await r.updateClaim(claim.id, { status: next.status, updatedAt: now });

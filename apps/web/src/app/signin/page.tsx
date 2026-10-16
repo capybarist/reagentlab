@@ -13,12 +13,27 @@ const ERRORS: Record<string, string> = {
   banned: "This account is banned.",
 };
 
-type Params = { expired?: string; error?: string; code?: string; verified?: string; reset?: string; email?: string };
+type Params = {
+  expired?: string;
+  error?: string;
+  code?: string;
+  verified?: string;
+  reset?: string;
+  email?: string;
+  /** Adónde volver después de entrar (solo rutas de esta web), p. ej. la aprobación de OAuth. */
+  next?: string;
+};
+
+/** Solo rutas internas: nada de `//otro-sitio` ni URLs absolutas. */
+function safeNext(next: string | undefined): string {
+  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/account";
+}
 
 export default async function SignInPage({ searchParams }: { searchParams: Promise<Params> }) {
   const session = await auth();
-  if (session?.rlUserId) redirect("/account");
   const p = await searchParams;
+  const next = safeNext(p.next);
+  if (session?.rlUserId) redirect(next);
   const { email: emailEnabled } = await getAuthMethods();
 
   return (
@@ -37,7 +52,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
           <form
             action={async () => {
               "use server";
-              await signIn("github", { redirectTo: "/account" });
+              await signIn("github", { redirectTo: next });
             }}
           >
             <button className={primaryButton}>Continue with GitHub</button>
@@ -47,7 +62,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
           <form
             action={async () => {
               "use server";
-              await signIn("google", { redirectTo: "/account" });
+              await signIn("google", { redirectTo: next });
             }}
           >
             <button className={secondaryButton}>Continue with Google</button>
@@ -62,12 +77,14 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
             "use server";
             const email = String(fd.get("email") ?? "");
             try {
-              await signIn("email", { email, password: String(fd.get("password") ?? ""), redirectTo: "/account" });
+              await signIn("email", { email, password: String(fd.get("password") ?? ""), redirectTo: next });
             } catch (e) {
               // signIn redirige lanzando una excepción; solo se capturan los fallos de login.
               if (e instanceof AuthError) {
                 const code = (e as AuthError & { code?: string }).code ?? "invalid";
-                redirect(`/signin?error=1&code=${encodeURIComponent(code)}&email=${encodeURIComponent(email)}`);
+                redirect(
+                  `/signin?error=1&code=${encodeURIComponent(code)}&email=${encodeURIComponent(email)}&next=${encodeURIComponent(next)}`,
+                );
               }
               throw e;
             }
@@ -101,7 +118,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
           className="rounded-xl border border-dashed border-line p-4 space-y-3"
           action={async (fd: FormData) => {
             "use server";
-            await signIn("dev", { handle: String(fd.get("handle") ?? ""), redirectTo: "/account" });
+            await signIn("dev", { handle: String(fd.get("handle") ?? ""), redirectTo: next });
           }}
         >
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Local development only</p>

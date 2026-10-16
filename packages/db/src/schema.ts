@@ -2,6 +2,7 @@ import type { StepCheck } from "@reagentlab/contracts";
 import { sql } from "drizzle-orm";
 import {
   bigserial,
+  bigint,
   boolean,
   doublePrecision,
   index,
@@ -496,6 +497,46 @@ export const verifications = pgTable(
   (t) => [uniqueIndex("verifications_claim_party_uq").on(t.claimId, t.party), index("verifications_turn_idx").on(t.turnId)],
 );
 
+/** Archivos de artefactos (ADR-0034), por su sha256. El contenido está en el almacenamiento. */
+export const blobs = pgTable(
+  "blobs",
+  {
+    sha256: text("sha256").primaryKey(),
+    bytes: bigint("bytes", { mode: "number" }).notNull(),
+    status: text("status", { enum: ["pending", "stored"] }).notNull().default("pending"),
+    requestedByUserId: uuid("requested_by_user_id").notNull().references(() => users.id),
+    requestedByAgentId: uuid("requested_by_agent_id").references(() => agents.id),
+    createdAt: ts("created_at").notNull(),
+    storedAt: ts("stored_at"),
+  },
+  (t) => [index("blobs_user_created_idx").on(t.requestedByUserId, t.createdAt)],
+);
+
+/** Reproducciones del sandbox del host (ADR-0033): una por claim y artefacto, firmada. */
+export const hostRuns = pgTable(
+  "host_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    labId: uuid("lab_id").notNull().references(() => labs.id),
+    claimId: uuid("claim_id").notNull().references(() => claims.id),
+    claimSeq: integer("claim_seq").notNull(),
+    artifactSha256: text("artifact_sha256").notNull(),
+    backend: text("backend").notNull(),
+    image: text("image").notNull(),
+    outcome: text("outcome", { enum: ["confirms", "fails", "inconclusive"] }).notNull(),
+    reason: text("reason").notNull(),
+    exitCode: integer("exit_code"),
+    timedOut: boolean("timed_out").notNull(),
+    durationMs: integer("duration_ms").notNull(),
+    stdout: text("stdout").notNull(),
+    stderr: text("stderr").notNull(),
+    serverSig: text("server_sig"),
+    sigKeyId: text("sig_key_id"),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("host_runs_claim_artifact_uq").on(t.claimId, t.artifactSha256), index("host_runs_lab_idx").on(t.labId)],
+);
+
 /** Claims canario (ADR-0032): pareja falsa y control, regla con hash previo y revelación firmada. */
 export const canaries = pgTable(
   "canaries",
@@ -540,3 +581,30 @@ export const forecastResolutions = pgTable(
   },
   (t) => [uniqueIndex("forecast_resolutions_claim_party_uq").on(t.claimId, t.party)],
 );
+
+/** Clientes OAuth de MCP (ADR-0035), registrados por sí mismos (RFC 7591). Públicos: sin secreto. */
+export const oauthClients = pgTable("oauth_clients", {
+  clientId: text("client_id").primaryKey(),
+  name: text("name").notNull(),
+  redirectUris: text("redirect_uris").array().notNull(),
+  createdAt: ts("created_at").notNull(),
+});
+
+/** Códigos de autorización OAuth (ADR-0035): de un solo uso, 10 minutos, con PKCE. */
+export const oauthCodes = pgTable("oauth_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => oauthClients.clientId),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agents.id),
+  redirectUri: text("redirect_uri").notNull(),
+  codeChallenge: text("code_challenge").notNull(),
+  expiresAt: ts("expires_at").notNull(),
+  usedAt: ts("used_at"),
+  createdAt: ts("created_at").notNull(),
+});

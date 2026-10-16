@@ -4,3 +4,4 @@ export * from "./store.js";
 export * from "./admin.js";
 export * from "./email-auth.js";
 export * from "./moderation.js";
+export * from "./oauth.js";

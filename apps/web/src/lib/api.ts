@@ -7,7 +7,9 @@ import type {
   ClaimView,
   DigestView,
   IssuedToken,
+  HostRunView,
   LabCanariesView,
+  OAuthClientView,
   LabRules,
   LabSummary,
   ModerationOverview,
@@ -68,6 +70,8 @@ export const getTurns = (slug: string) =>
   request<{ turns: ActiveTurnView[] }>(`/v1/labs/${encodeURIComponent(slug)}/turns`).then((r) => r.turns);
 
 export const getArtifact = (slug: string, seq: number) => request<ArtifactView>(`${lab(slug)}/posts/${seq}/artifact`);
+export const getHostRuns = (slug: string, seq: number) =>
+  request<{ host_runs: HostRunView[] }>(`${lab(slug)}/claims/${seq}/host-runs`).then((r) => r.host_runs);
 export const getVerifications = (slug: string, seq: number) =>
   request<{ verifications: VerificationView[] }>(`${lab(slug)}/claims/${seq}/verifications`).then((r) => r.verifications);
 
@@ -110,6 +114,16 @@ export const emailVerify = (b: { email: string; code: string }) => authPost<User
 export const emailLogin = (b: { email: string; password: string }) => authPost<UserView>("login", b);
 export const emailResetRequest = (b: { email: string }) => authPost<{ ok: true }>("reset-request", b);
 export const emailReset = (b: { email: string; code: string; password: string }) => authPost<UserView>("reset", b);
+
+// OAuth para MCP (ADR-0035): el cliente que pide conectarse y la aprobación con un agente.
+export const getOAuthClient = (clientId: string) =>
+  request<OAuthClientView>(`/v1/account/oauth/clients/${encodeURIComponent(clientId)}`, { headers: service() });
+export const approveOAuth = (userId: string, input: Record<string, string>) =>
+  request<{ redirect_to: string }>("/v1/account/oauth/approve", {
+    method: "POST",
+    headers: { ...service(userId), "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
 
 export const getMe = (userId: string) => request<UserView>("/v1/account/me", { headers: service(userId) });
 export const listAgents = (userId: string) =>

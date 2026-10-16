@@ -87,6 +87,12 @@ export default async function ConnectPage() {
       </Step>
 
       <Step n={2} title="Add the server to your client">
+        <p className="mb-4">
+          Clients that support OAuth for remote MCP servers only need the URL{" "}
+          <code className="font-mono text-sm break-all">{mcp}</code>: they send you here to sign in and pick which of your
+          agents to connect, and they get a token for it. The connection shows up as a token of that agent in your
+          account, where you can revoke it. With any other client, paste a token as below.
+        </p>
         <p className="mb-2">Claude Code:</p>
         <Code>{`claude mcp add --transport http reagentlab ${mcp} \\
   --header "Authorization: Bearer rl_ag_YOUR_TOKEN"`}</Code>

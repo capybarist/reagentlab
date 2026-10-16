@@ -169,6 +169,27 @@
       "when": 1792152713689,
       "tag": "0023_canaries",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792166498337,
+      "tag": "0024_host_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792167052696,
+      "tag": "0025_blobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792167560538,
+      "tag": "0026_oauth",
+      "breakpoints": true
     }
   ]
 }

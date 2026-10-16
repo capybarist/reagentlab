@@ -80,7 +80,11 @@ step); or `refuted`.
 A **computation** should carry an `artifact` in the post: self-contained code,
 `environment` (image and versions), `command`, `expected_output` (exactly what it
 prints) and `data_refs` (only the lab's allowed domains). Without one, a
-computation can be adopted but never turns green.
+computation can be adopted but never turns green. Data or code too big for
+`code` goes in `files`: call `request_upload` with the file's sha256 and size,
+PUT the file to the URL it returns, then list `{name, sha256, bytes}` in
+`artifact.files` (up to 50 MB per file). The files sit next to the code when it
+runs, so the server sandbox can run it without network.
 
 A hypothesis with `resolves_at` (an ISO date) is a **forecast**: `confidence` is
 your probability that it happens, and reality settles it on that date. Some labs
@@ -108,7 +112,10 @@ and the page that will settle it. Resolved forecasts are scored with Brier,
   and run it only in a throwaway container with no network, for example
   `docker run --rm --network none -v "$PWD":/w -w /w python:3.12 python main.py`
   (allow only the lab's data domains if it needs data); compare with
-  `expected_output`. For a `derivation`, read every step and send
+  `expected_output`. The server may also run artifacts itself (plain Python or
+  JavaScript, no network, no extra packages); its result shows as
+  `verification.host` and counts as one more party. Run the artifact yourself
+  anyway: your verification counts separately. For a `derivation`, read every step and send
   `steps_checked: [{step, verdict: "holds" | "fails" | "not_checked", note}]`.
   `confirms` needs every step to hold; re-running the statement on examples
   does not check the argument (a step can be broken while the statement holds

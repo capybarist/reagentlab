@@ -17,6 +17,8 @@ import {
   ModerationActionInput,
   type ModerationOverview,
   ReportPostInput,
+  OAuthApproveInput,
+  type OAuthClientView,
 } from "@reagentlab/contracts";
 import { DomainError, type LabService, agentCreationBlocker, type Clock, systemClock } from "@reagentlab/core";
 import type { ProblemReview, ProblemView } from "@reagentlab/contracts";
@@ -45,6 +47,8 @@ import {
   unbanUser,
   setNextRole,
   unhidePost,
+  createOAuthCode,
+  getOAuthClient,
 } from "@reagentlab/db";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
@@ -66,6 +70,8 @@ export interface AccountOptions {
   adminHandles?: string[];
   /** Envía los códigos del login con email (ADR-0022). Sin él, ese login está desactivado. */
   mailer?: Mailer | null;
+  /** Emisor OAuth (URL pública de la API), para el parámetro `iss` de la respuesta (RFC 9207). */
+  oauthIssuer?: string;
 }
 
 export interface Mailer {
@@ -311,6 +317,50 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
       }
       throw e;
     }
+  });
+
+  // ── OAuth para MCP (ADR-0035): la web pinta el consentimiento y aprueba con el agente elegido ──
+  app.get<{ Params: { id: string } }>("/v1/account/oauth/clients/:id", async (req): Promise<OAuthClientView> => {
+    requireService(req);
+    const client = await getOAuthClient(opts.db, req.params.id);
+    if (!client) throw new DomainError("VALIDATION_FAILED", "Unknown OAuth client.");
+    return { client_id: client.clientId, untrusted_name: client.name, redirect_uris: client.redirectUris };
+  });
+
+  app.post("/v1/account/oauth/approve", async (req): Promise<{ redirect_to: string }> => {
+    const user = await requireUser(req);
+    const parsed = OAuthApproveInput.safeParse(req.body);
+    if (!parsed.success) throw new DomainError("VALIDATION_FAILED", parsed.error.issues.map((i) => i.message).join("; "));
+    const input = parsed.data;
+    const client = await getOAuthClient(opts.db, input.client_id);
+    if (!client || !client.redirectUris.includes(input.redirect_uri)) {
+      throw new DomainError("VALIDATION_FAILED", "Unknown OAuth client or redirect_uri.");
+    }
+    if (user.bannedAt) throw new DomainError("USER_BANNED", "This account is banned.");
+    const agent = await agentOf(user.id, input.agent_id);
+    if (agent.status !== "active") throw new DomainError("FORBIDDEN", "This agent is not active.");
+    const current = (await listAgentsWithTokens(opts.db, user.id)).find((a) => a.id === agent.id)!;
+    if (current.tokens.length >= MAX_TOKENS_PER_AGENT) {
+      throw new DomainError(
+        "FORBIDDEN",
+        `An agent can have at most ${MAX_TOKENS_PER_AGENT} active tokens.`,
+        "Revoke an old token of this agent in your account first.",
+      );
+    }
+    const code = await createOAuthCode(opts.db, {
+      clientId: client.clientId,
+      userId: user.id,
+      agentId: agent.id,
+      redirectUri: input.redirect_uri,
+      codeChallenge: input.code_challenge,
+      now: clock.now(),
+      ttlMs: 10 * 60 * 1000,
+    });
+    const back = new URL(input.redirect_uri);
+    back.searchParams.set("code", code);
+    if (input.state) back.searchParams.set("state", input.state);
+    if (opts.oauthIssuer) back.searchParams.set("iss", opts.oauthIssuer);
+    return { redirect_to: back.toString() };
   });
 
   app.post<{ Params: { id: string } }>("/v1/account/agents/:id/tokens", async (req, reply) => {

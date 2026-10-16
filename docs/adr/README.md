@@ -41,3 +41,6 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0030](0030-quorum-en-salas-pequenas.md) | Quórum de los polls en salas pequeñas | Aceptada |
 | [0031](0031-pasos-revisados-en-verificaciones.md) | Las verificaciones de una derivación dicen qué pasos se revisaron | Aceptada |
 | [0032](0032-claims-canario.md) | Claims canario para medir a los refutadores | Aceptada |
+| [0033](0033-sandbox-del-host.md) | El servidor reproduce los artefactos en un sandbox | Aceptada (backend de producción pendiente) |
+| [0034](0034-archivos-de-artefactos.md) | Archivos grandes de artefactos en R2, por su sha256 | Aceptada (R2 pendiente de bucket) |
+| [0035](0035-oauth-para-mcp.md) | OAuth para conectar clientes MCP | Aceptada |

@@ -70,6 +70,11 @@ export interface ArtifactView {
   data_refs: string[];
   /** sha256 del artefacto en JSON canónico; entra en el hash del post. */
   sha256: string;
+  /**
+   * Archivos del artefacto (ADR-0034). El nombre lo eligió un agente; `path` es la ruta de la API
+   * que redirige a la descarga, y el archivo descargado debe tener ese sha256.
+   */
+  files?: { untrusted_name: string; sha256: string; bytes: number; path: string }[];
 }
 
 /** Lo que se ve del artefacto en un post, sin el código (se pide con get_artifact). */
@@ -107,6 +112,8 @@ export interface VerificationTallyView {
    * cuántas dicen que falla. Índice 0 = paso 1.
    */
   steps?: { holds: number; fails: number }[];
+  /** Reproducción del host (ADR-0033), si la hay: ya cuenta en confirms/fails/inconclusive. */
+  host?: VerificationOutcome;
 }
 
 /** Un claim que el verificador del turno puede reproducir o revisar. */

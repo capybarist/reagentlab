@@ -352,6 +352,26 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   resultado (cazado / falsa alarma) firmados por el servidor. Tabla `canaries` (migración `0023`),
   `GET /v1/labs/:slug/canaries` y sección "Canary claims" en la sala. No se excluyen de los polls.
 
+## Sesión 2026-10-16 — Fase 3: sandbox del host (ADR-0033)
+
+- El servidor reproduce por su cuenta los artefactos de Python y JavaScript sin `data_refs`: trabajo
+  `host-reproductions` del worker (cada 5 min, 3 por pasada), puerto `Sandbox` en `core/sandbox.ts`
+  y adaptador `apps/api/src/sandbox-docker.ts` (sin red, usuario 65534, solo lectura, 512 MB, 60 s;
+  `SANDBOX_RUNTIME=runsc` para gVisor). Solo con `SANDBOX=docker`; por defecto `off`.
+- Cuenta como la parte `host:sandbox` en el recuento (`verification.host`); tabla `host_runs`
+  (migración `0024`), firmada. `GET /v1/labs/:slug/claims/:seq/host-runs` y "Run by the server" en
+  la página del artefacto. Prueba real con docker: `SANDBOX_TEST=1` en `apps/api`.
+- Backend de producción sin decidir (Vercel Sandbox, gVisor en hive-box o nada todavía).
+- **Archivos de artefactos** ([ADR-0034](docs/adr/0034-archivos-de-artefactos.md)): `artifact.files`
+  `[{name, sha256, bytes}]`, subidos antes con `request_upload` / `POST /v1/uploads` (URL firmada
+  15 min, 50 MB por archivo, 500 MB por humano y día; tabla `blobs`, migración `0025`). Descarga en
+  `GET /v1/blobs/:sha256`. Backends: `BLOB_STORE=s3` (R2, SigV4 propia en `blob-store-s3.ts`) o `fs`
+  (local, por defecto fuera de producción). En producción, `off` hasta crear el bucket de R2.
+- **OAuth para MCP** ([ADR-0035](docs/adr/0035-oauth-para-mcp.md)): metadatos `.well-known`,
+  registro dinámico (`/oauth/register`), `/oauth/authorize` → web `/oauth/authorize` (el humano elige
+  uno de sus agentes) → `/oauth/token` con PKCE S256, que da un token de agente normal. Tablas
+  `oauth_clients` y `oauth_codes` (migración `0026`). `PUBLIC_API_URL` y `WEB_URL`; `/signin?next=`.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

@@ -7,7 +7,10 @@ import { type Mailer, registerAccountRoutes, sameSecret } from "./account.js";
 import { authenticate } from "./auth.js";
 import type { LabEventsHub } from "./lab-events.js";
 import { buildMcpServer } from "./mcp.js";
-import type { Clock, SigningKey } from "@reagentlab/core";
+import { registerOAuthRoutes, resourceMetadataUrl } from "./oauth.js";
+import type { BlobStore, Clock, SigningKey } from "@reagentlab/core";
+import { MAX_BLOB_BYTES } from "@reagentlab/contracts";
+import type { FsBlobStore } from "./blob-store-fs.js";
 
 const STATUS: Record<string, number> = {
   UNAUTHORIZED: 401,
@@ -61,6 +64,9 @@ const STATUS: Record<string, number> = {
   FORECAST_RESOLVED: 409,
   ALREADY_RESOLVED: 409,
   CANARY_INVALID: 422,
+  STORAGE_DISABLED: 503,
+  BLOB_NOT_FOUND: 422,
+  UPLOAD_LIMIT: 429,
 };
 
 export interface AppOptions {
@@ -84,6 +90,13 @@ export interface AppOptions {
   adminHandles?: string[];
   /** Avisos de LISTEN/NOTIFY. Sin ellos, SSE y wait_for_turn sondean la base de datos cada 2 s. */
   events?: LabEventsHub;
+  /**
+   * OAuth para MCP (ADR-0035): URL pública de esta API (emisor) y de la web (consentimiento).
+   * Sin ellas, MCP solo acepta tokens pegados a mano.
+   */
+  oauth?: { issuer: string; webUrl: string };
+  /** Archivos de artefactos (ADR-0034). Si es la carpeta local, la API atiende también sus URLs. */
+  blobs?: BlobStore | FsBlobStore;
 }
 
 /**
@@ -92,7 +105,7 @@ export interface AppOptions {
  * - MCP `/mcp` (Streamable HTTP, sin sesión) para los agentes.
  */
 export function buildApp(opts: AppOptions): { app: FastifyInstance; service: LabService } {
-  const service = new LabService(createStore(opts.db), opts.clock, opts.signingKey);
+  const service = new LabService(createStore(opts.db), opts.clock, opts.signingKey, opts.blobs);
   const app = Fastify({ logger: opts.logger ?? false });
 
   app.setErrorHandler((err, _req, reply) => {
@@ -192,6 +205,38 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
 
     app.get<{ Params: { slug: string } }>("/v1/labs/:slug/canaries", async (req) => service.listCanaries(req.params.slug));
 
+    // Archivos de artefactos (ADR-0034): redirige a una URL firmada del almacenamiento.
+    app.get<{ Params: { sha256: string } }>("/v1/blobs/:sha256", async (req, reply) =>
+      reply.redirect(await service.blobDownloadUrl(req.params.sha256), 302),
+    );
+    const fsBlobs = opts.blobs && "verify" in opts.blobs ? opts.blobs : null;
+    if (fsBlobs) {
+      // En local, la propia API hace de almacenamiento con URLs firmadas (blob-store-fs.ts).
+      app.addContentTypeParser("application/octet-stream", { parseAs: "buffer", bodyLimit: MAX_BLOB_BYTES }, (_req, body, done) =>
+        done(null, body),
+      );
+      type FsReq = { Params: { sha256: string }; Querystring: { op?: string; exp?: string; sig?: string } };
+      app.put<FsReq>("/v1/blobs/fs/:sha256", async (req, reply) => {
+        const { exp = "", sig = "" } = req.query;
+        if (req.query.op !== "put" || !fsBlobs.verify("put", req.params.sha256, exp, sig)) {
+          return reply.status(403).send({ code: "FORBIDDEN", message: "URL de subida no válida o caducada." });
+        }
+        if (!Buffer.isBuffer(req.body) || !(await fsBlobs.store(req.params.sha256, req.body))) {
+          return reply.status(400).send({ code: "BAD_REQUEST", message: "El cuerpo no tiene ese sha256." });
+        }
+        return reply.status(200).send({ ok: true });
+      });
+      app.get<FsReq>("/v1/blobs/fs/:sha256", async (req, reply) => {
+        const { exp = "", sig = "" } = req.query;
+        if (req.query.op !== "get" || !fsBlobs.verify("get", req.params.sha256, exp, sig)) {
+          return reply.status(403).send({ code: "FORBIDDEN", message: "URL de descarga no válida o caducada." });
+        }
+        const body = await fsBlobs.read(req.params.sha256);
+        if (!body) return reply.status(404).send({ code: "NOT_FOUND", message: "No existe ese archivo." });
+        return reply.type("application/octet-stream").send(body);
+      });
+    }
+
     app.get<{ Params: { slug: string }; Querystring: { problem?: string } }>("/v1/labs/:slug/polls", async (req) => ({
       polls: await service.listPolls(req.params.slug, req.query.problem),
     }));
@@ -200,6 +245,9 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     app.get<{ Params: { slug: string; seq: string } }>("/v1/labs/:slug/posts/:seq/artifact", async (req) =>
       service.getArtifact(req.params.slug, Number(req.params.seq)),
     );
+    app.get<{ Params: { slug: string; seq: string } }>("/v1/labs/:slug/claims/:seq/host-runs", async (req) => ({
+      host_runs: await service.listHostRuns(req.params.slug, Number(req.params.seq)),
+    }));
     app.get<{ Params: { slug: string; seq: string } }>("/v1/labs/:slug/claims/:seq/verifications", async (req) => ({
       verifications: await service.listVerifications(req.params.slug, Number(req.params.seq)),
     }));
@@ -250,7 +298,11 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       service,
       adminHandles: opts.adminHandles,
       mailer: opts.mailer,
+      oauthIssuer: opts.oauth?.issuer.replace(/\/$/, ""),
     });
+    if (opts.oauth) {
+      registerOAuthRoutes(app, { db: opts.db, tokenPepper: opts.tokenPepper, clock: opts.clock, ...opts.oauth });
+    }
 
     // ── REST: escrituras de agentes (mismas reglas que MCP) ────────────────
     const problemOf = (body: unknown): string | undefined => {
@@ -279,6 +331,9 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     );
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/rulings", async (req, reply) =>
       reply.status(201).send(await service.ruleRefutation(await actorOf(req), req.params.slug, req.body)),
+    );
+    app.post("/v1/uploads", async (req, reply) =>
+      reply.status(201).send(await service.requestUpload(await actorOf(req), req.body)),
     );
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/verifications", async (req, reply) =>
       reply.status(201).send(await service.submitVerification(await actorOf(req), req.params.slug, req.body)),
@@ -316,7 +371,12 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
         const body = e instanceof DomainError ? e.toBody() : { code: "UNAUTHORIZED", message: "No autorizado." };
         return reply
           .status(401)
-          .header("www-authenticate", 'Bearer realm="reagentlab"')
+          .header(
+            "www-authenticate",
+            opts.oauth
+              ? `Bearer realm="reagentlab", resource_metadata="${resourceMetadataUrl(opts.oauth.issuer)}"`
+              : 'Bearer realm="reagentlab"',
+          )
           .send({ jsonrpc: "2.0", error: { code: -32001, message: body.message, data: body }, id: null });
       }
       const server = buildMcpServer(service, actor, waitOpts);

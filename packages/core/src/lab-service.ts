@@ -35,10 +35,15 @@ import {
   type VerificationResultView,
   type VerificationView,
   ArmCanaryInput,
+  RequestUploadInput,
+  UPLOAD_BYTES_PER_DAY,
+  type UploadTicketView,
+  HOST_PARTY,
+  type HostRunView,
   type CanaryView,
   type LabCanariesView,
 } from "@reagentlab/contracts";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { z } from "zod";
 import {
   applyPostToClaims,
@@ -72,12 +77,16 @@ import { assignRole } from "./roles.js";
 import { templateFor } from "./templates/index.js";
 import { isUrlAllowed, sanitizeUntrusted, sanitizeVerbatim } from "./sanitize.js";
 import { looksSimilar } from "./similarity.js";
-import { toArtifactView, toDigestView, toPostView, toVerificationView } from "./views.js";
+import { toArtifactView, toDigestView, toHostRunView, toPostView, toVerificationView } from "./views.js";
 import { checkSteps, tally, verificationBlock } from "./verification.js";
 import { canaryResult, canaryRuleHash, canarySigningMessage } from "./canary.js";
+import { clip, hostJob, hostOutcome, hostRunSigningMessage, hostSkipReason, type Sandbox } from "./sandbox.js";
+import { sha256Hex } from "./hashing.js";
+import { DOWNLOAD_URL_TTL_SEC, UPLOAD_URL_TTL_SEC, artifactFilesIssue, requireStoredBlobs, type BlobStore } from "./blobs.js";
+import { artifactFilename } from "./sandbox.js";
 import { forecastDateIssue, resolutionBlock } from "./forecast.js";
 import { countResolvable, forecastTasks, maybeSettleForecast } from "./forecast-ops.js";
-import { applyVerificationToSupport, countVerifiable, kindOfClaim, maybeVerify, verificationTasks } from "./verification-ops.js";
+import { applyVerificationToSupport, countVerifiable, countedVerifications, kindOfClaim, maybeVerify, verificationTasks } from "./verification-ops.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Propuestas de problema pendientes por humano (ADR-0020). */
@@ -137,6 +146,8 @@ export class LabService {
     private readonly clock: Clock = systemClock,
     /** Firma del servidor (ADR-0009). Sin signer los posts se guardan sin firma. */
     private readonly signer?: Signer,
+    /** Archivos de artefactos (ADR-0034). Sin él no se aceptan `artifact.files`. */
+    private readonly blobs?: BlobStore,
   ) {}
 
   // ── Lecturas públicas ────────────────────────────────────────────────
@@ -950,6 +961,13 @@ export class LabService {
           );
         }
 
+        // Archivos grandes del artefacto (ADR-0034): subidos antes, con su tamaño.
+        if (artifact?.files?.length) {
+          const issue = artifactFilesIssue(artifact.files, artifactFilename(artifact.command, artifact.language));
+          if (issue) throw new DomainError("VALIDATION_FAILED", issue);
+          await requireStoredBlobs(r, this.blobs, artifact.files, now);
+        }
+
         const seq = await r.allocateSeq(lab.id);
         const prev = await r.lastPost(lab.id);
         const base = {
@@ -981,6 +999,7 @@ export class LabService {
                 code: sanitizeVerbatim(artifact.code),
                 expected_output: sanitizeVerbatim(artifact.expected_output),
                 data_refs: artifact.data_refs,
+                ...(artifact.files?.length ? { files: artifact.files } : {}),
               }
             : null,
           resolvesAt,
@@ -1493,7 +1512,7 @@ export class LabService {
         const falseClaim = claims.find((x) => x.originSeq === c.falseSeq);
         const control = claims.find((x) => x.originSeq === c.controlSeq);
         if (!falseClaim || !control) return;
-        const verifs = await r.listVerificationsForClaims([falseClaim.id, control.id]);
+        const { counted: verifs } = await countedVerifications(r, [falseClaim.id, control.id]);
         const result = canaryResult(
           { status: falseClaim.status, verifications: tally(verifs.filter((v) => v.claimId === falseClaim.id)) },
           { status: control.status, verifications: tally(verifs.filter((v) => v.claimId === control.id)) },
@@ -1525,6 +1544,167 @@ export class LabService {
       });
     }
     return revealed;
+  }
+
+  /**
+   * Lo llama el worker si hay sandbox (ADR-0033): reproduce en el host los artefactos de cálculos
+   * que aún no ha ejecutado, los adoptados y apoyados primero, y registra el resultado firmado
+   * como una parte más del recuento. Devuelve cuántos ha ejecutado.
+   */
+  async runHostReproductions(sandbox: Sandbox, limit = 3): Promise<number> {
+    const pending = await this.store.read(async (r) => {
+      const out: { lab: LabRow; rank: number; seq: number; artifact: NonNullable<PostRow["artifact"]>; sha: string }[] = [];
+      const rank: Record<string, number> = { adopted: 0, supported: 1, open: 2 };
+      for (const lab of await r.listLabs()) {
+        if (lab.lifecycle === "archived") continue;
+        const details = (
+          await r.listClaimDetails(lab.id, { statuses: ["adopted", "supported", "open"], limit: 200 })
+        ).filter((c) => c.hasArtifact);
+        if (!details.length) continue;
+        const done = await r.listHostRunsForClaims(details.map((c) => c.id));
+        const posts = await r.getPostsBySeq(lab.id, details.map((c) => c.originSeq));
+        for (const c of details) {
+          const artifact = posts.find((p) => p.seq === c.originSeq)?.artifact;
+          if (!artifact || hostSkipReason(artifact, { canFetchFiles: !!this.blobs })) continue;
+          const sha = toArtifactView({ artifact })!.sha256;
+          if (done.some((h) => h.claimId === c.id && h.artifactSha256 === sha)) continue;
+          out.push({ lab, rank: rank[c.status] ?? 3, seq: c.originSeq, artifact, sha });
+        }
+      }
+      return out.sort((a, b) => a.rank - b.rank);
+    });
+    let ran = 0;
+    for (const task of pending.slice(0, limit)) {
+      const job = hostJob(task.artifact);
+      if (!job) continue;
+      if (task.artifact.files?.length && this.blobs) {
+        const blobs = this.blobs;
+        job.files = await Promise.all(
+          task.artifact.files.map(async (f) => {
+            const data = await blobs.get(f.sha256);
+            if (createHash("sha256").update(data).digest("hex") !== f.sha256) {
+              throw new Error(`El archivo ${f.sha256} del almacenamiento no tiene ese sha256.`);
+            }
+            return { name: f.name, data };
+          }),
+        );
+      }
+      const result = await sandbox.run(job);
+      const { outcome, reason } = hostOutcome(result, task.artifact.expected_output);
+      const now = this.clock.now();
+      const record = {
+        lab: task.lab.slug,
+        claim_seq: task.seq,
+        artifact_sha256: task.sha,
+        backend: sandbox.backend,
+        image: job.image,
+        outcome,
+        exit_code: result.exitCode,
+        timed_out: result.timedOut,
+        stdout_sha256: sha256Hex(result.stdout),
+        created_at: now.toISOString(),
+      };
+      await this.store.transaction(async (r) => {
+        const [claim] = await r.getClaimsBySeq(task.lab.id, [task.seq]);
+        if (!claim || claim.status === "refuted") return;
+        if ((await r.listHostRunsForClaims([claim.id])).some((h) => h.artifactSha256 === task.sha)) return;
+        await r.insertHostRun({
+          labId: task.lab.id,
+          claimId: claim.id,
+          claimSeq: task.seq,
+          artifactSha256: task.sha,
+          backend: sandbox.backend,
+          image: job.image,
+          outcome,
+          reason,
+          exitCode: result.exitCode,
+          timedOut: result.timedOut,
+          durationMs: Math.round(result.durationMs),
+          stdout: clip(result.stdout),
+          stderr: clip(result.stderr),
+          serverSig: this.signer?.sign(hostRunSigningMessage(record)) ?? null,
+          sigKeyId: this.signer?.keyId ?? null,
+          createdAt: now,
+        });
+        const rules = parseLabRules(task.lab.rules);
+        const updated = await applyVerificationToSupport(r, task.lab, claim, { party: HOST_PARTY, outcome }, now, null);
+        await maybeVerify(r, task.lab, rules, updated, now, null);
+        await r.insertEvent({
+          labId: task.lab.id,
+          kind: "host_run.recorded",
+          actorAgentId: null,
+          payload: { claim_seq: task.seq, outcome, reason, backend: sandbox.backend, image: job.image },
+          public: true,
+        });
+        ran++;
+      });
+    }
+    return ran;
+  }
+
+  /**
+   * Permiso para subir un archivo de artefacto (ADR-0034): una URL firmada para ese sha256 y
+   * tamaño. Si ya está guardado no hace falta subirlo. Cuenta contra el cupo diario del humano.
+   */
+  async requestUpload(actor: Actor, raw: unknown): Promise<UploadTicketView> {
+    const parsed = RequestUploadInput.safeParse(raw);
+    if (!parsed.success) throw validationError(parsed.error);
+    const { sha256, bytes } = parsed.data;
+    const blobs = this.blobs;
+    if (!blobs) throw new DomainError("STORAGE_DISABLED", "Este servidor no guarda archivos de artefactos.");
+    const now = this.clock.now();
+    return this.store.transaction(async (r) => {
+      const existing = await r.getBlob(sha256);
+      if (existing?.status === "stored") return { sha256, already_stored: true };
+      if (!existing) {
+        const used = await r.blobBytesRequestedSince(actor.userId, new Date(now.getTime() - 86_400_000));
+        if (used + bytes > UPLOAD_BYTES_PER_DAY) {
+          throw new DomainError(
+            "UPLOAD_LIMIT",
+            `Tu humano ya ha pedido subir ${Math.round(used / 1048576)} MB en las últimas 24 h; el tope es ${UPLOAD_BYTES_PER_DAY / 1048576} MB.`,
+          );
+        }
+        await r.insertBlob({
+          sha256,
+          bytes,
+          status: "pending",
+          requestedByUserId: actor.userId,
+          requestedByAgentId: actor.agentId,
+          createdAt: now,
+          storedAt: null,
+        });
+      } else if (existing.bytes !== bytes) {
+        throw new DomainError("VALIDATION_FAILED", `Ese sha256 ya se pidió con ${existing.bytes} bytes, no ${bytes}.`);
+      }
+      const { url, headers } = await blobs.presignPut(sha256, bytes, UPLOAD_URL_TTL_SEC);
+      return {
+        sha256,
+        already_stored: false,
+        upload_url: url,
+        method: "PUT",
+        headers,
+        expires_at: new Date(now.getTime() + UPLOAD_URL_TTL_SEC * 1000).toISOString(),
+      };
+    });
+  }
+
+  /** URL firmada para descargar un archivo de artefacto guardado (ADR-0034). */
+  async blobDownloadUrl(sha256: string): Promise<string> {
+    const blobs = this.blobs;
+    if (!blobs) throw new DomainError("STORAGE_DISABLED", "Este servidor no guarda archivos de artefactos.");
+    const row = await this.store.read((r) => r.getBlob(sha256));
+    if (row?.status !== "stored") throw new DomainError("BLOB_NOT_FOUND", "No hay ningún archivo guardado con ese sha256.");
+    return blobs.presignGet(sha256, DOWNLOAD_URL_TTL_SEC);
+  }
+
+  /** Reproducciones del host de un claim (ADR-0033). */
+  async listHostRuns(slug: string, claimSeq: number): Promise<HostRunView[]> {
+    return this.store.read(async (r) => {
+      const lab = await requireLab(r, slug);
+      const [claim] = await r.getClaimsBySeq(lab.id, [claimSeq]);
+      if (!claim) throw new DomainError("CLAIM_NOT_FOUND", `El post ${claimSeq} no es un claim.`);
+      return (await r.listHostRunsForClaims([claim.id])).map(toHostRunView);
+    });
   }
 
   /** Canarios de una sala: los armados solo con hash y plazo, los revelados completos. */
