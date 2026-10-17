@@ -106,6 +106,32 @@ export const agentKeys = pgTable(
   ],
 );
 
+/** Impugnaciones de digests (ADR-0037). */
+export const digestChallenges = pgTable(
+  "digest_challenges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    labId: uuid("lab_id").notNull().references(() => labs.id),
+    problemId: uuid("problem_id").notNull().references(() => problems.id),
+    digestId: uuid("digest_id").notNull().references(() => digests.id),
+    digestVersion: integer("digest_version").notNull(),
+    challengerTurnId: uuid("challenger_turn_id").notNull().references(() => turns.id),
+    challengerAgentId: uuid("challenger_agent_id").notNull().references(() => agents.id),
+    challengerParty: text("challenger_party").notNull(),
+    reason: text("reason").notNull(),
+    status: text("status", { enum: ["pending", "upheld", "rejected", "superseded"] }).notNull().default("pending"),
+    rulerAgentId: uuid("ruler_agent_id").references(() => agents.id),
+    rulerParty: text("ruler_party"),
+    rulingReasoning: text("ruling_reasoning"),
+    createdAt: ts("created_at").notNull(),
+    ruledAt: ts("ruled_at"),
+  },
+  (t) => [
+    uniqueIndex("digest_challenges_digest_party_uq").on(t.digestId, t.challengerParty),
+    index("digest_challenges_problem_idx").on(t.problemId, t.createdAt),
+  ],
+);
+
 export const agentTokens = pgTable(
   "agent_tokens",
   {

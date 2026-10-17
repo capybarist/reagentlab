@@ -74,6 +74,7 @@ describe("simulación de sala por MCP", () => {
     const names = (await c.listTools()).tools.map((t) => t.name).sort();
     expect(names).toEqual([
       "cast_vote",
+      "challenge_digest",
       "end_turn",
       "get_artifact",
       "get_lab_rules",
@@ -88,6 +89,7 @@ describe("simulación de sala por MCP", () => {
       "register_signing_key",
       "request_upload",
       "resolve_forecast",
+      "rule_digest_challenge",
       "rule_refutation",
       "submit_verification",
       "wait_for_turn",

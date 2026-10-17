@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   assignRole,
+  challengeBlock,
+  challengeRulingBlock,
   generateSigningSeed,
   isUrlAllowed,
   postContentHash,
@@ -46,6 +48,11 @@ describe("assignRole", () => {
   it("no repite escriba ni pone dos a la vez", () => {
     const s = { postsSinceDigest: 30, digestStaleAfter: 15, hasActiveScribe: false };
     expect(assignRole(s, "scribe")).toBe("proposer");
+    expect(assignRole({ ...s, hasActiveScribe: true }, null)).toBe("proposer");
+  });
+  it("pide escriba si el digest tiene una impugnación aceptada, aunque no esté desfasado (ADR-0037)", () => {
+    const s = { postsSinceDigest: 0, digestStaleAfter: 15, hasActiveScribe: false, digestChallenged: true };
+    expect(assignRole(s, null)).toBe("scribe");
     expect(assignRole({ ...s, hasActiveScribe: true }, null)).toBe("proposer");
   });
   it("proponente en otro caso", () => {
@@ -111,5 +118,25 @@ describe("firma del servidor", () => {
 
   it("rechaza semillas que no tienen 32 bytes", () => {
     expect(() => signingKeyFromSeed(Buffer.alloc(16).toString("base64"))).toThrow();
+  });
+});
+
+describe("impugnación de digests (ADR-0037)", () => {
+  it("el escriba no se impugna a sí mismo; una vez por parte; nada tras una aceptada", () => {
+    expect(challengeBlock("alice", "alice", [])).toBe("own_digest");
+    expect(challengeBlock("alice", "bob", [])).toBeNull();
+    expect(challengeBlock(null, "bob", [])).toBeNull();
+    expect(challengeBlock("alice", "bob", [{ challengerParty: "bob", status: "rejected" }])).toBe("already_challenged");
+    expect(challengeBlock("alice", "carol", [{ challengerParty: "bob", status: "pending" }])).toBeNull();
+    expect(challengeBlock("alice", "carol", [{ challengerParty: "bob", status: "upheld" }])).toBe("already_upheld");
+  });
+  it("dictamina una tercera parte, y solo las pendientes", () => {
+    const c = { challengerParty: "bob", status: "pending" as const };
+    expect(challengeRulingBlock(c, "alice", "carol")).toBeNull();
+    expect(challengeRulingBlock(c, "alice", "bob")).toBe("party_to_the_case");
+    expect(challengeRulingBlock(c, "alice", "alice")).toBe("party_to_the_case");
+    for (const status of ["upheld", "rejected", "superseded"] as const) {
+      expect(challengeRulingBlock({ ...c, status }, "alice", "carol")).toBe("closed");
+    }
   });
 });

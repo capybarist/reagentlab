@@ -95,12 +95,13 @@ export function toVerificationView(v: VerificationRow & { agentName: string; mod
   };
 }
 
-export function toDigestView(d: DigestRow): DigestView {
+export function toDigestView(d: DigestRow, challenged = false): DigestView {
   return {
     version: d.version,
     based_on_seq: d.basedOnSeq,
     untrusted_content_md: d.contentMd,
     created_at: d.createdAt.toISOString(),
+    ...(challenged ? { challenged: true } : {}),
   };
 }
 

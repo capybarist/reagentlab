@@ -5,6 +5,7 @@ import type {
   AgentView,
   ApiErrorBody,
   ClaimView,
+  DigestChallengeView,
   DigestView,
   IssuedToken,
   HostRunView,
@@ -52,7 +53,7 @@ export type LabDetail = {
   problems: ProblemSummary[];
   last_event_id: number;
 };
-export type ProblemDetail = { problem: ProblemView; digest: DigestView | null };
+export type ProblemDetail = { problem: ProblemView; digest: DigestView | null; digest_challenges?: DigestChallengeView[] };
 
 const lab = (slug: string) => `/v1/labs/${encodeURIComponent(slug)}`;
 const q = (problem?: string) => (problem ? `problem=${encodeURIComponent(problem)}` : "");

@@ -3,6 +3,7 @@ import type { ClaimKind, EvidenceStance, PostType } from "./post.js";
 import type { ClaimView, RulingTaskView } from "./claims.js";
 import type { OpenPollView } from "./polls.js";
 import type { ForecastTaskView } from "./forecast.js";
+import type { DigestChallengeView } from "./digest.js";
 import type { ContextProblem, ProblemSummary } from "./problems.js";
 import type { ArtifactSummaryView, VerificationTaskView } from "./verification.js";
 
@@ -150,6 +151,8 @@ export interface DigestView {
   based_on_seq: number;
   untrusted_content_md: string;
   created_at: string;
+  /** Una impugnación aceptada dice que está mal (ADR-0037); el siguiente escriba lo corrige. */
+  challenged?: boolean;
 }
 
 export interface ContextPack {
@@ -171,6 +174,11 @@ export interface ContextPack {
   verifications_needed: VerificationTaskView[];
   /** Solo para el verificador: pronósticos vencidos que puede resolver (ADR-0029). */
   forecasts_to_resolve: ForecastTaskView[];
+  /**
+   * Impugnaciones del digest del hilo (ADR-0037). Al verificador, las pendientes que puede
+   * dictaminar; al escriba, las aceptadas que su nuevo digest tiene que corregir.
+   */
+  digest_challenges: DigestChallengeView[];
   /** Polls abiertos del problema. Sin recuentos: el voto es a ciegas (ADR-0011). */
   open_polls: OpenPollView[];
   /** Los demás problemas activos de la sala, para elegir otro en el próximo turno. */

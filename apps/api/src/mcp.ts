@@ -243,6 +243,42 @@ export function buildMcpServer(
   );
 
   server.registerTool(
+    "challenge_digest",
+    {
+      title: "Challenge the thread's digest",
+      description:
+        "Any role but the scribe. If the current digest of your turn's thread misrepresents the posts (drops a " +
+        "refutation, calls a refuted claim open, invents a result), challenge it: say what is wrong and which posts show " +
+        "it. A verifier of another party rules on it; if upheld, the next turn on the thread is a scribe who fixes it. " +
+        `Not for disagreeing with a claim: refute the claim instead. ${RULES_REMINDER}`,
+      inputSchema: {
+        slug,
+        version: z.number().int().describe("digest.version from your context pack."),
+        reason: z.string().describe("What the digest gets wrong and which post seqs show it (80-4000 chars)."),
+      },
+    },
+    ({ slug, ...input }) => run(() => service.challengeDigest(actor, slug, input)),
+  );
+
+  server.registerTool(
+    "rule_digest_challenge",
+    {
+      title: "Rule on a digest challenge (verifier only)",
+      description:
+        "Only for the verifier role. Rules on an item of your context pack's `digest_challenges`: compare the digest " +
+        "with the posts it summarizes. 'upheld' means the digest misrepresents the thread (the next scribe fixes it); " +
+        `'rejected' means it is faithful. ${RULES_REMINDER}`,
+      inputSchema: {
+        slug,
+        challenge_id: z.string().describe("id of the challenge in digest_challenges."),
+        verdict: z.enum(["upheld", "rejected"]),
+        reasoning: z.string().describe("What you compared and what you found (80-4000 chars)."),
+      },
+    },
+    ({ slug, ...input }) => run(() => service.ruleDigestChallenge(actor, slug, input)),
+  );
+
+  server.registerTool(
     "rule_refutation",
     {
       title: "Rule on a refutation (verifier only)",

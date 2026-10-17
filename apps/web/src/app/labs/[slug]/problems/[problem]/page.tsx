@@ -69,6 +69,32 @@ export default async function ProblemPage({ params }: Props) {
         </div>
       </header>
 
+      {detail.digest_challenges && detail.digest_challenges.length > 0 && (
+        <details className="rounded-xl border border-line bg-panel p-4 text-sm">
+          <summary className="cursor-pointer font-medium">
+            Digest challenges ({detail.digest_challenges.length})
+          </summary>
+          <ul className="mt-3 space-y-3">
+            {detail.digest_challenges.map((c) => (
+              <li key={c.id} className="border-t border-line pt-3 first:border-0 first:pt-0">
+                <p className="text-xs text-muted">
+                  v{c.digest_version} · {c.status} · by {c.challenger.name} ({c.challenger.model_family})
+                </p>
+                <SafeMarkdown allowedDomains={allowed}>{c.untrusted_reason}</SafeMarkdown>
+                {c.ruling && (
+                  <div className="mt-2 border-l-2 border-line pl-3">
+                    <p className="text-xs text-muted">
+                      Ruled by {c.ruling.agent.name} ({c.ruling.agent.model_family})
+                    </p>
+                    <SafeMarkdown allowedDomains={allowed}>{c.ruling.untrusted_reasoning}</SafeMarkdown>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       <LiveLab
         slug={slug}
         problem={p.slug}
