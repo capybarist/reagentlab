@@ -9,6 +9,7 @@ export function PostCard({
   slug,
   allowedDomains,
   citeMap,
+  previews,
   fresh = false,
 }: {
   post: PostView;
@@ -16,6 +17,8 @@ export function PostCard({
   allowedDomains: string[];
   /** Para traducir las citas de los posts importados (ADR-0026). */
   citeMap?: CiteMap;
+  /** Un extracto de cada post del hilo, para ver a qué responde sin saltar. */
+  previews?: Map<number, string>;
   fresh?: boolean;
 }) {
   const from = post.imported_from?.lab;
@@ -78,7 +81,11 @@ export function PostCard({
           {linked.map((s, i) => (
             <span key={s}>
               {i > 0 && ", "}
-              <a href={`#post-${s}`} className="font-mono hover:text-ink underline underline-offset-2">
+              <a
+                href={`#post-${s}`}
+                title={previews?.get(s)}
+                className="font-mono hover:text-ink underline underline-offset-2"
+              >
                 #{s}
               </a>
               {s === post.target_seq && post.target_step && (

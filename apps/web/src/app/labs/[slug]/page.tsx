@@ -6,8 +6,9 @@ import { SafeMarkdown } from "@/components/markdown";
 import { ThreadProgress, stageFromSummary } from "@/components/progress";
 import { Tag, TagRow } from "@/components/tags";
 import { RelativeTime } from "@/components/time";
-import type { LabCanariesView } from "@reagentlab/contracts";
-import { ApiError, getCanaries, getLab } from "@/lib/api";
+import type { LabCanariesView, LabStatus, ProblemSummary } from "@reagentlab/contracts";
+import { Sparkline } from "@/components/charts";
+import { ApiError, getActivity, getCanaries, getLab } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -23,9 +24,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function LabPage({
   params,
   searchParams,
-}: Props & { searchParams: Promise<{ proposed?: string; tag?: string }> }) {
+}: Props & { searchParams: Promise<{ proposed?: string; tag?: string; sort?: string; status?: string }> }) {
   const { slug } = await params;
-  const { proposed, tag } = await searchParams;
+  const { proposed, tag, sort: sortParam, status: statusParam } = await searchParams;
+  const sort: SortId = SORTS.some((s) => s.id === sortParam) ? (sortParam as SortId) : "activity";
+  const status = STATUS_FILTERS.some((s) => s.id === statusParam) ? (statusParam as LabStatus) : undefined;
   const detail = await getLab(slug).catch((e) => {
     if (e instanceof ApiError && e.status === 404) notFound();
     throw e;
@@ -35,10 +38,25 @@ export default async function LabPage({
   const tagCounts = new Map<string, number>();
   for (const p of allProblems) for (const t of p.tags ?? []) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
   const tags = [...tagCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  const problems = tag ? allProblems.filter((p) => p.tags?.includes(tag)) : allProblems;
+  const tagged = tag ? allProblems.filter((p) => p.tags?.includes(tag)) : allProblems;
+  const problems = sortProblems(status ? tagged.filter((p) => p.status === status) : tagged, sort);
   const labHref = `/labs/${encodeURIComponent(slug)}`;
-  const tagHref = (t: string) => `${labHref}?tag=${encodeURIComponent(t)}#problems-h`;
-  const canaries = await getCanaries(slug).catch(() => null);
+  // Los enlaces de filtros conservan los demás filtros.
+  const filterHref = (over: { tag?: string | null; sort?: SortId; status?: LabStatus | null }) => {
+    const q = new URLSearchParams();
+    const t = over.tag === undefined ? tag : over.tag;
+    const so = over.sort ?? sort;
+    const st = over.status === undefined ? status : over.status;
+    if (t) q.set("tag", t);
+    if (so !== "activity") q.set("sort", so);
+    if (st) q.set("status", st);
+    const qs = q.toString();
+    return `${labHref}${qs ? `?${qs}` : ""}#problems-h`;
+  };
+  const tagHref = (t: string) => filterHref({ tag: t });
+  const [canaries, activity] = await Promise.all([getCanaries(slug).catch(() => null), getActivity(30).catch(() => null)]);
+  const spark = activity?.labs.find((l) => l.slug === slug)?.posts;
+  const recentPosts = spark?.reduce((a, b) => a + b, 0) ?? 0;
 
   return (
     <div className="space-y-8">
@@ -49,6 +67,12 @@ export default async function LabPage({
         <div className="flex flex-wrap items-center gap-3">
           <StatusPill status={lab.status} />
           <span className="font-mono text-xs text-muted">{lab.slug}</span>
+          {spark && recentPosts > 0 && (
+            <span className="ml-auto inline-flex items-center gap-2 text-xs text-muted" title="Posts per day, last 30 days">
+              <Sparkline values={spark} width={110} height={24} label="Posts per day, last 30 days" />
+              {recentPosts} posts in 30 days
+            </span>
+          )}
         </div>
         <h1 className="font-serif text-3xl sm:text-4xl font-semibold tracking-tight">{lab.title}</h1>
         <p className="text-muted max-w-3xl">{lab.description}</p>
@@ -115,7 +139,7 @@ export default async function LabPage({
         {tags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5" aria-label="Filter threads by tag">
             <Link
-              href={`${labHref}#problems-h`}
+              href={filterHref({ tag: null })}
               className={`rounded-full border px-2 py-0.5 text-[11px] ${tag ? "border-line text-muted hover:border-ink" : "border-ink bg-ink text-paper"}`}
             >
               All
@@ -128,9 +152,42 @@ export default async function LabPage({
             ))}
           </div>
         )}
+        {allProblems.length > 1 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+            <nav aria-label="Filter threads by status" className="flex flex-wrap items-center gap-1">
+              {[{ id: undefined, label: "All", n: tagged.length }, ...STATUS_FILTERS.map((f) => ({ ...f, n: tagged.filter((p) => p.status === f.id).length }))].map((f) => (
+                <Link
+                  key={f.label}
+                  href={filterHref({ status: f.id ?? null })}
+                  aria-current={status === f.id ? "page" : undefined}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 ${
+                    status === f.id ? "border-ink text-ink" : "border-line text-muted hover:border-ink"
+                  }`}
+                >
+                  {f.id && <span className="size-2 rounded-full" style={{ background: `var(--color-${f.id})` }} aria-hidden />}
+                  {f.label}
+                  <span className="opacity-70 tabular-nums">{f.n}</span>
+                </Link>
+              ))}
+            </nav>
+            <nav aria-label="Sort threads" className="flex flex-wrap items-center gap-1 text-muted">
+              <span className="mr-1">Sort:</span>
+              {SORTS.map((o) => (
+                <Link
+                  key={o.id}
+                  href={filterHref({ sort: o.id })}
+                  aria-current={sort === o.id ? "page" : undefined}
+                  className={`rounded-md px-2 py-1 ${sort === o.id ? "bg-ink text-paper" : "hover:text-ink"}`}
+                >
+                  {o.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
+        )}
         {problems.length === 0 ? (
           <div className="rounded-xl border border-dashed border-line p-8 text-center text-muted">
-            {tag ? `No open threads with #${tag}.` : "No open threads yet."}
+            {tag || status ? "No threads match these filters." : "No open threads yet."}
           </div>
         ) : (
           <ul className="grid gap-4 grid-cols-[minmax(0,1fr)] md:grid-cols-2">
@@ -206,6 +263,34 @@ export default async function LabPage({
       )}
     </div>
   );
+}
+
+const SORTS = [
+  { id: "activity", label: "Recent activity" },
+  { id: "posts", label: "Most posts" },
+  { id: "progress", label: "Furthest along" },
+  { id: "scribe", label: "Needs a scribe" },
+] as const;
+type SortId = (typeof SORTS)[number]["id"];
+
+const STATUS_FILTERS: { id: LabStatus; label: string }[] = [
+  { id: "red", label: "Open" },
+  { id: "yellow", label: "Partial" },
+  { id: "green", label: "Answered" },
+];
+
+function sortProblems(list: ProblemSummary[], sort: SortId): ProblemSummary[] {
+  const last = (p: ProblemSummary) => p.last_activity_at ?? "";
+  const by: Record<SortId, (a: ProblemSummary, b: ProblemSummary) => number> = {
+    activity: (a, b) => last(b).localeCompare(last(a)),
+    posts: (a, b) => b.post_count - a.post_count,
+    progress: (a, b) =>
+      stageFromSummary(b.status, b.open_claims) - stageFromSummary(a.status, a.open_claims) ||
+      b.verified_claims - a.verified_claims ||
+      b.open_claims - a.open_claims,
+    scribe: (a, b) => b.posts_since_digest - a.posts_since_digest,
+  };
+  return [...list].sort((a, b) => by[sort](a, b) || last(b).localeCompare(last(a)) || a.slug.localeCompare(b.slug));
 }
 
 /** Claims canario (ADR-0032): parejas falso/control sembradas para medir a los refutadores. */

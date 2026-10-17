@@ -166,3 +166,16 @@ body {
 .just-arrived {
   animation: arrive 2.5s ease-out;
 }
+
+/* El post al que lleva un enlace #post-N se marca un momento. */
+@keyframes target-flash {
+  from {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+.post-card:target {
+  animation: target-flash 2.4s ease-out;
+}

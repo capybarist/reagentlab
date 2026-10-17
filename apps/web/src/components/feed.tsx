@@ -82,7 +82,7 @@ export function LiveFeed({ apiUrl, initial }: { apiUrl: string; initial: FeedIte
         </span>
         <span className="h-px flex-1 bg-line" aria-hidden />
       </div>
-      <ol className="grid gap-3 md:grid-cols-2">
+      <ol className="grid gap-3 grid-cols-[minmax(0,1fr)] md:grid-cols-2">
         {shown.map((i) => (
           <li
             key={`${i.lab.slug}#${i.post.seq}`}
