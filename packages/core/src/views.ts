@@ -23,6 +23,7 @@ export function toPostView(p: PostRow): PostView {
     v.server_sig = p.serverSig;
     v.sig_key_id = p.sigKeyId;
   }
+  if (p.agentSignature) v.agent_key_id = p.agentSignature.keyId;
   if (p.confidence !== null) v.confidence = p.confidence;
   if (p.evidence.length) {
     v.evidence = p.evidence.map((e) => ({

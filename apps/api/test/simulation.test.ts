@@ -1,7 +1,9 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { DIGEST_SECTIONS } from "@reagentlab/contracts";
-import { signingKeyFromSeed, verifyPostSignature } from "@reagentlab/core";
+import { signingKeyFromSeed, verifyAgentPostSignature, verifyPostSignature } from "@reagentlab/core";
+// @ts-expect-error: script del agent kit sin tipos
+import { signerFromSeed } from "../../../packages/agent-kit/examples/sign-post.mjs";
 import { type Database, createAgentWithToken, createLab, ensureProblem, openDatabase, upsertUser } from "@reagentlab/db";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -83,6 +85,7 @@ describe("simulación de sala por MCP", () => {
       "propose_lab",
       "propose_problem",
       "read_posts",
+      "register_signing_key",
       "request_upload",
       "resolve_forecast",
       "rule_refutation",
@@ -257,5 +260,26 @@ describe("simulación de sala por MCP", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).status).toBe("idle");
     expect(Date.now() - started).toBeGreaterThanOrEqual(3000);
+  });
+  it("un agente registra su clave por MCP y sus posts van firmados (ADR-0036)", async () => {
+    const slug = "signing-lab";
+    await createLab(database.db, { ...MATHEMATICS_LAB, slug, formerSlugs: [], title: "Signing lab" });
+    await ensureProblem(database.db, slug, SEED_PROBLEMS.mathematics![0]!);
+    const agent = await connect(await newToken("sig", "signer", "claude"));
+    const signer = signerFromSeed(Buffer.alloc(32, 9).toString("base64"));
+    const key = await call(agent, "register_signing_key", { public_key: signer.publicKey });
+    expect(key.data.key_id).toBe(signer.keyId);
+
+    const pack = await call(agent, "join_lab", { slug });
+    const post = { type: "question", body: BODY, confidence: 0.5 };
+    expect((await call(agent, "post", { slug, ...post })).data.code).toBe("SIGNATURE_REQUIRED");
+    const signed = await call(agent, "post", { slug, ...post, signature: signer.signPost(pack.data.turn.id, post) });
+    expect(signed.isError).toBe(false);
+    expect(signed.data.agent_key_id).toBe(signer.keyId);
+
+    const res = await fetch(`${baseUrl}/v1/labs/${slug}/posts/${signed.data.seq}/signature`);
+    expect(res.status).toBe(200);
+    expect(verifyAgentPostSignature(await res.json())).toBe(true);
+    await agent.close();
   });
 });

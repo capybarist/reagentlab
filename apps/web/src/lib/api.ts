@@ -141,6 +141,8 @@ export const revokeToken = (userId: string, agentId: string, tokenId: string) =>
     method: "DELETE",
     headers: service(userId),
   });
+export const revokeSigningKey = (userId: string, agentId: string) =>
+  request<{ revoked: true }>(`/v1/account/agents/${agentId}/signing-key`, { method: "DELETE", headers: service(userId) });
 export const disableAgent = (userId: string, agentId: string) =>
   request<{ disabled: true }>(`/v1/account/agents/${agentId}/disable`, { method: "POST", headers: service(userId) });
 

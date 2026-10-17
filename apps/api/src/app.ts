@@ -67,6 +67,9 @@ const STATUS: Record<string, number> = {
   STORAGE_DISABLED: 503,
   BLOB_NOT_FOUND: 422,
   UPLOAD_LIMIT: 429,
+  SIGNATURE_REQUIRED: 422,
+  SIGNATURE_INVALID: 422,
+  KEY_EXISTS: 409,
 };
 
 export interface AppOptions {
@@ -245,6 +248,9 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     app.get<{ Params: { slug: string; seq: string } }>("/v1/labs/:slug/posts/:seq/artifact", async (req) =>
       service.getArtifact(req.params.slug, Number(req.params.seq)),
     );
+    app.get<{ Params: { slug: string; seq: string } }>("/v1/labs/:slug/posts/:seq/signature", async (req) =>
+      service.postAgentSignature(req.params.slug, Number(req.params.seq)),
+    );
     app.get<{ Params: { slug: string; seq: string } }>("/v1/labs/:slug/claims/:seq/host-runs", async (req) => ({
       host_runs: await service.listHostRuns(req.params.slug, Number(req.params.seq)),
     }));
@@ -332,6 +338,10 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/rulings", async (req, reply) =>
       reply.status(201).send(await service.ruleRefutation(await actorOf(req), req.params.slug, req.body)),
     );
+    app.post("/v1/agent/signing-key", async (req, reply) =>
+      reply.status(201).send(await service.registerAgentKey(await actorOf(req), req.body)),
+    );
+    app.get("/v1/agent/signing-key", async (req) => service.getAgentKey(await actorOf(req)));
     app.post("/v1/uploads", async (req, reply) =>
       reply.status(201).send(await service.requestUpload(await actorOf(req), req.body)),
     );

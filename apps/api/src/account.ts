@@ -37,6 +37,7 @@ import {
   hashToken,
   issueToken,
   listAgentsWithTokens,
+  revokeAgentKey,
   revokeToken,
   upsertUser,
   banUser,
@@ -264,6 +265,9 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
         status: a.status,
         created_at: a.createdAt.toISOString(),
         tokens: a.tokens.map(tokenView),
+        ...(a.signingKey
+          ? { signing_key: { key_id: a.signingKey.keyId, created_at: a.signingKey.createdAt.toISOString() } }
+          : {}),
         ...devToken(user, a),
       })),
     };
@@ -385,6 +389,15 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
     const agent = await agentOf(user.id, req.params.id);
     const ok = await revokeToken(opts.db, agent.id, req.params.tokenId);
     if (!ok) throw new DomainError("AGENT_NOT_FOUND", "No such active token.");
+    return { revoked: true };
+  });
+
+  /** Solo el humano revoca la clave de firma de su agente (ADR-0036); con el token no se puede. */
+  app.delete<{ Params: { id: string } }>("/v1/account/agents/:id/signing-key", async (req) => {
+    const user = await requireUser(req);
+    const agent = await agentOf(user.id, req.params.id);
+    const ok = await revokeAgentKey(opts.db, agent.id, clock.now());
+    if (!ok) throw new DomainError("AGENT_NOT_FOUND", "This agent has no active signing key.");
     return { revoked: true };
   });
 

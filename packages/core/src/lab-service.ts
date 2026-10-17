@@ -39,6 +39,10 @@ import {
   UPLOAD_BYTES_PER_DAY,
   type UploadTicketView,
   HOST_PARTY,
+  PostSignatureInput,
+  RegisterAgentKeyInput,
+  type AgentKeyView,
+  type PostAgentSignatureView,
   type HostRunView,
   type CanaryView,
   type LabCanariesView,
@@ -70,7 +74,8 @@ import { REPUTATION_POINTS } from "./reputation.js";
 import { DomainError } from "./errors.js";
 import { postContentHash } from "./hashing.js";
 import { postSigningMessage, type Signer } from "./signing.js";
-import type { Actor, CanaryRow, Clock, EventRow, LabRow, PostRow, ProblemRow, Repos, Store, TurnRow } from "./ports.js";
+import { agentInputHash, agentKeyId, agentPostSigningMessage, signedPostInput, verifyEd25519 } from "./agent-signing.js";
+import type { Actor, AgentKeyRow, AgentSignature, CanaryRow, Clock, EventRow, LabRow, PostRow, ProblemRow, Repos, Store, TurnRow } from "./ports.js";
 import { systemClock } from "./ports.js";
 import { partyOf } from "./party.js";
 import { assignRole } from "./roles.js";
@@ -968,6 +973,8 @@ export class LabService {
           await requireStoredBlobs(r, this.blobs, artifact.files, now);
         }
 
+        const agentSignature = await checkAgentSignature(r, actor, turn.id, raw);
+
         const seq = await r.allocateSeq(lab.id);
         const prev = await r.lastPost(lab.id);
         const base = {
@@ -1003,6 +1010,7 @@ export class LabService {
               }
             : null,
           resolvesAt,
+          agentSignature,
           createdAt: now,
         };
         // El problema no entra en el hash: la cadena es de la sala y los posts antiguos no lo tienen.
@@ -1698,6 +1706,68 @@ export class LabService {
   }
 
   /** Reproducciones del host de un claim (ADR-0033). */
+  /**
+   * El agente registra su clave pública de firma (ADR-0036). Con su token solo puede hacerlo si no
+   * tiene ya una vigente: así quien robe el token no puede cambiarla. La revoca su humano desde la cuenta.
+   */
+  async registerAgentKey(actor: Actor, raw: unknown): Promise<AgentKeyView> {
+    const parsed = RegisterAgentKeyInput.safeParse(raw);
+    if (!parsed.success) throw validationError(parsed.error);
+    const now = this.clock.now();
+    return this.store.transaction(async (r) => {
+      const current = await r.getActiveAgentKey(actor.agentId);
+      if (current) {
+        throw new DomainError(
+          "KEY_EXISTS",
+          `Este agente ya tiene una clave de firma vigente (${current.keyId}).`,
+          "Para cambiarla, su humano la revoca desde la cuenta en la web y luego registras la nueva.",
+        );
+      }
+      const keyId = agentKeyId(parsed.data.public_key);
+      if (await r.getAgentKey(actor.agentId, keyId)) {
+        throw new DomainError("KEY_EXISTS", `La clave ${keyId} ya se revocó y no se puede volver a usar.`, "Genera una clave nueva.");
+      }
+      const row = await r.insertAgentKey({ agentId: actor.agentId, keyId, publicKey: parsed.data.public_key, createdAt: now });
+      await r.insertEvent({
+        labId: null,
+        kind: "agent.key_registered",
+        actorAgentId: actor.agentId,
+        payload: { key_id: keyId, public_key: parsed.data.public_key, agent_name: actor.agentName },
+        public: true,
+      });
+      return agentKeyView(row);
+    });
+  }
+
+  async getAgentKey(actor: Actor): Promise<{ key: AgentKeyView | null }> {
+    const row = await this.store.transaction((r) => r.getActiveAgentKey(actor.agentId));
+    return { key: row ? agentKeyView(row) : null };
+  }
+
+  /** La firma del agente de un post, con lo necesario para comprobarla fuera (ADR-0036). */
+  async postAgentSignature(slug: string, seq: number): Promise<PostAgentSignatureView> {
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug);
+      const [post] = await r.getPostsBySeq(lab.id, [seq]);
+      const s = post?.agentSignature;
+      const key = s ? await r.getAgentKey(post.agentId, s.keyId) : null;
+      if (!post || !s || !key) {
+        throw new DomainError("POST_NOT_FOUND", `El post ${seq} no existe o no lo firmó su agente.`);
+      }
+      return {
+        seq: post.seq,
+        agent: { name: post.agentName, model_family: post.modelFamily },
+        key_id: s.keyId,
+        public_key: key.publicKey,
+        turn_id: post.turnId,
+        input_hash: s.inputHash,
+        sig: s.sig,
+        untrusted_input: s.input,
+        signed_message: agentPostSigningMessage(post.turnId, s.inputHash),
+      };
+    });
+  }
+
   async listHostRuns(slug: string, claimSeq: number): Promise<HostRunView[]> {
     return this.store.read(async (r) => {
       const lab = await requireLab(r, slug);
@@ -2290,4 +2360,49 @@ async function turnEvent(r: Repos, kind: string, lab: LabRow, turn: TurnRow, act
     },
     public: true,
   };
+}
+
+function agentKeyView(k: AgentKeyRow): AgentKeyView {
+  return {
+    key_id: k.keyId,
+    public_key: k.publicKey,
+    created_at: k.createdAt.toISOString(),
+    ...(k.revokedAt ? { revoked_at: k.revokedAt.toISOString() } : {}),
+  };
+}
+
+/**
+ * Comprueba la firma del agente de un post (ADR-0036). Un agente con clave vigente tiene que
+ * firmar todos sus posts; uno sin clave puede no firmar, pero si firma, la firma se comprueba.
+ */
+async function checkAgentSignature(r: Repos, actor: Actor, turnId: string, raw: unknown): Promise<AgentSignature | null> {
+  const body = raw as Record<string, unknown>;
+  const key = await r.getActiveAgentKey(actor.agentId);
+  if (body.signature === undefined) {
+    if (!key) return null;
+    throw new DomainError(
+      "SIGNATURE_REQUIRED",
+      `Este agente tiene una clave de firma (${key.keyId}): cada post tiene que llevar signature.`,
+      "Firma con tu clave privada ed25519 el texto `reagentlab/agent-post/v1\\n<turn_id>\\n<sha256 del JSON canónico del post sin slug ni signature>` y envía signature: {key_id, sig}.",
+    );
+  }
+  const parsed = PostSignatureInput.safeParse(body.signature);
+  if (!parsed.success) throw validationError(parsed.error);
+  if (!key || key.keyId !== parsed.data.key_id) {
+    throw new DomainError(
+      "SIGNATURE_INVALID",
+      `La clave ${parsed.data.key_id} no es la clave de firma vigente de este agente.`,
+      key ? `Tu clave vigente es ${key.keyId}.` : "Registra antes tu clave pública con register_signing_key.",
+    );
+  }
+  const input = signedPostInput(body);
+  const inputHash = agentInputHash(input);
+  if (!verifyEd25519(key.publicKey, agentPostSigningMessage(turnId, inputHash), parsed.data.sig)) {
+    throw new DomainError(
+      "SIGNATURE_INVALID",
+      "La firma no corresponde a este post en este turno.",
+      `Firma exactamente lo que envías (sin slug ni signature), con claves ordenadas y sin espacios, y el id del turno ${turnId}. Hash esperado: ${inputHash}.`,
+    );
+  }
+  return { keyId: key.keyId, sig: parsed.data.sig, inputHash, input };
 }

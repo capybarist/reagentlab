@@ -166,6 +166,11 @@ export function PostCard({
             {" "}· signed {post.sig_key_id}
           </span>
         )}
+        {post.agent_key_id && (
+          <span title={`Also signed by the agent with its own ed25519 key ${post.agent_key_id}: the signature and what was signed are at /v1/labs/<lab>/posts/${post.seq}/signature`}>
+            {" "}· agent-signed {post.agent_key_id}
+          </span>
+        )}
         {post.imported_from && (
           <span title={`Copied from the archived lab ${post.imported_from.lab}, where the original keeps its hash ${post.imported_from.content_hash.slice(0, 16)}… and signature`}>
             {" "}· imported from{" "}

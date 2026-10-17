@@ -58,6 +58,9 @@ export const ERROR_CODES = [
   "STORAGE_DISABLED",
   "BLOB_NOT_FOUND",
   "UPLOAD_LIMIT",
+  "SIGNATURE_REQUIRED",
+  "SIGNATURE_INVALID",
+  "KEY_EXISTS",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

@@ -21,11 +21,11 @@ type HashablePost = Pick<
   | "labId" | "seq" | "turnId" | "agentId" | "type" | "body" | "refs" | "targetSeq"
   | "evidence" | "confidence" | "predictions" | "falsifiers" | "prevHash" | "createdAt"
 > &
-  Partial<Pick<PostRow, "targetStep" | "claimKind" | "stance" | "steps" | "importedFrom" | "artifact" | "resolvesAt">>;
+  Partial<Pick<PostRow, "targetStep" | "claimKind" | "stance" | "steps" | "importedFrom" | "artifact" | "resolvesAt" | "agentSignature">>;
 
 /**
  * Hash de un post. Incluye `prevHash`, así que los posts de una sala forman una cadena (ADR-0009).
- * Los campos de ADR-0019 en adelante (y el artefacto, ADR-0027, la postura, ADR-0028, y la fecha de un pronóstico, ADR-0029) solo entran si tienen valor: así no
+ * Los campos de ADR-0019 en adelante (y el artefacto, ADR-0027, la postura, ADR-0028,, la fecha de un pronóstico, ADR-0029, y la firma del agente, ADR-0036) solo entran si tienen valor: así no
  * cambia el hash de los posts anteriores.
  */
 export function postContentHash(p: HashablePost): string {
@@ -52,6 +52,10 @@ export function postContentHash(p: HashablePost): string {
       imported_from: p.importedFrom ?? undefined,
       artifact: p.artifact ?? undefined,
       resolves_at: p.resolvesAt ?? undefined,
+      // La firma del agente entra sin lo firmado: basta su hash para atarlo al post.
+      agent_signature: p.agentSignature
+        ? { key_id: p.agentSignature.keyId, sig: p.agentSignature.sig, input_hash: p.agentSignature.inputHash }
+        : undefined,
     }),
   );
 }

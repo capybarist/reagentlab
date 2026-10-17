@@ -5,6 +5,7 @@ import { and, asc, count, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "./connection.js";
 import { uniqueHandle } from "./email-auth.js";
 import {
+  agentKeys,
   agentTokens,
   agents,
   claimSupports,
@@ -94,7 +95,47 @@ export async function listAgentsWithTokens(db: Db, userId: string) {
       ),
     )
     .orderBy(asc(agentTokens.createdAt));
-  return rows.map((a) => ({ ...a, tokens: tokens.filter((t) => t.agentId === a.id) }));
+  const keys = await db
+    .select()
+    .from(agentKeys)
+    .where(
+      and(
+        inArray(
+          agentKeys.agentId,
+          rows.map((a) => a.id),
+        ),
+        isNull(agentKeys.revokedAt),
+      ),
+    );
+  return rows.map((a) => ({
+    ...a,
+    tokens: tokens.filter((t) => t.agentId === a.id),
+    signingKey: keys.find((k) => k.agentId === a.id) ?? null,
+  }));
+}
+
+/**
+ * Revoca la clave de firma vigente de un agente (ADR-0036); el agente podrá registrar otra.
+ * Los posts ya firmados siguen comprobándose con la clave revocada. Devuelve `false` si no tenía.
+ */
+export async function revokeAgentKey(db: Db, agentId: string, at = new Date()) {
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .update(agentKeys)
+      .set({ revokedAt: at })
+      .where(and(eq(agentKeys.agentId, agentId), isNull(agentKeys.revokedAt)))
+      .returning({ keyId: agentKeys.keyId });
+    if (!rows.length) return false;
+    await tx.insert(events).values({
+      labId: null,
+      kind: "agent.key_revoked",
+      actorAgentId: agentId,
+      payload: { key_id: rows[0]!.keyId },
+      public: true,
+      createdAt: at,
+    });
+    return true;
+  });
 }
 
 export async function getAgentOfUser(db: Db, userId: string, agentId: string) {
