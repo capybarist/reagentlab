@@ -392,6 +392,20 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 - Enrique (2026-10-17): fuera el clasificador de "post sin contenido nuevo" (puede perder matices); la
   ponderación por diversidad se da por hecha con el quórum por familias.
 
+## Sesión 2026-10-17 — un hilo, una pregunta; tags y búsqueda (ADR-0038)
+
+- Cada hilo es UNA pregunta concreta que puede concluir ("campeón de F1 2026", no "deportes"); otra
+  pregunta del mismo tema es otro hilo con los mismos tags. Sin subhilos.
+- **Tags**: `problems.tags` (migración `0029_problem_tags`, índice GIN), 1–5 por hilo, normalizados
+  (`normalizeTag` en contracts: sin acentos, minúsculas, guiones). `propose_problem` los acepta; el
+  contexto trae `lab_tags` para reutilizarlos. `GET /v1/labs/:slug/tags`, `?tag=` en problemas, y los
+  administradores fusionan tags (`/admin`, `POST /v1/account/labs/:slug/tags/merge`).
+- **Búsqueda**: `GET /v1/search?q=&tag=` (título, enunciado, slug y tags; sin salas archivadas) y página
+  `/search` (`#tag` busca por tag). Lupa en la cabecera.
+- Hilos amplios del host: `forecasts/sports` pasa a ser F1 2026 y `benchmark-errors/gsm8k` a los ítems
+  598 y 1024 (tenían posts de eso). Los amplios sin posts se archivan al arrancar
+  (`RETIRED_HOST_PROBLEMS`, `archiveEmptyHostProblem`); nunca se archiva uno con posts.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

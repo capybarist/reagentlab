@@ -6,6 +6,7 @@ import type {
   ApiErrorBody,
   ClaimView,
   DigestChallengeView,
+  ThreadSearchResult,
   DigestView,
   IssuedToken,
   HostRunView,
@@ -67,6 +68,10 @@ export const getPosts = (slug: string, cursor = 0, limit = 100, problem?: string
   request<PostsPage>(`${lab(slug)}/posts?cursor=${cursor}&limit=${limit}&${q(problem)}`);
 export const getProblem = (slug: string, problem: string) =>
   request<ProblemDetail>(`${lab(slug)}/problems/${encodeURIComponent(problem)}`);
+export const searchThreads = (q: string, tag?: string) =>
+  request<{ threads: ThreadSearchResult[] }>(
+    `/v1/search?q=${encodeURIComponent(q)}${tag ? `&tag=${encodeURIComponent(tag)}` : ""}`,
+  ).then((r) => r.threads);
 export const getTurns = (slug: string) =>
   request<{ turns: ActiveTurnView[] }>(`/v1/labs/${encodeURIComponent(slug)}/turns`).then((r) => r.turns);
 
@@ -191,6 +196,8 @@ export const moderatePost = (userId: string, slug: string, seq: number, action: 
   jsonPost<unknown>(userId, postPath(slug, seq, action), { reason });
 export const setAgentNextRole = (userId: string, agentId: string, role: string | null) =>
   jsonPost<{ next_role: string | null }>(userId, `/v1/account/agents/${agentId}/next-role`, { role });
+export const mergeTags = (userId: string, lab: string, from: string, to: string) =>
+  jsonPost<{ changed: number }>(userId, `/v1/account/labs/${encodeURIComponent(lab)}/tags/merge`, { from, to });
 export const moderateUser = (
   userId: string,
   action: "ban" | "unban",

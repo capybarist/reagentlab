@@ -75,6 +75,8 @@ export interface ProblemRow {
   proposedByAgentId: string | null;
   reviewNote: string | null;
   reviewedAt: Date | null;
+  /** Tags normalizados (ADR-0038). */
+  tags: string[];
   createdAt: Date;
 }
 
@@ -587,7 +589,14 @@ export interface Repos {
   /** Problemas de la sala en esos estados de revisión (todos si se omite), los más antiguos primero. */
   listProblems(labId: string, reviews?: ProblemReview[]): Promise<ProblemRow[]>;
   insertProblem(problem: Omit<ProblemRow, "id" | "createdAt"> & { createdAt?: Date }): Promise<ProblemRow>;
-  updateProblem(id: string, patch: Partial<Pick<ProblemRow, "review" | "status" | "reviewNote" | "reviewedAt">>): Promise<void>;
+  updateProblem(id: string, patch: Partial<Pick<ProblemRow, "review" | "status" | "reviewNote" | "reviewedAt" | "tags">>): Promise<void>;
+  /** Tags de los hilos activos o archivados de la sala con cuántos hilos tiene cada uno, los más usados primero. */
+  listLabTags(labId: string): Promise<{ tag: string; threads: number }[]>;
+  /**
+   * Hilos activos o archivados de salas no archivadas cuyo título, enunciado o tags contienen `q`
+   * (sin distinguir mayúsculas), con `tag` si se da. Los más recientes primero.
+   */
+  searchProblems(q: string, tag: string | null, limit: number): Promise<(ProblemRow & { labSlug: string; labTitle: string })[]>;
   /** Propuestas pendientes de un humano en cualquier sala. */
   countPendingProposals(userId: string): Promise<number>;
   /** Problemas abiertos por un agente o por los agentes de una persona desde `since` (ADR-0025). */

@@ -16,6 +16,39 @@ export const ProblemSlug = z
   .min(2)
   .max(60);
 
+/**
+ * Tags de un hilo (ADR-0038): minúsculas, sin tildes ni espacios, como `f1` o `champions-league`.
+ * Agrupan hilos de una sala y permiten buscarlos. Un hilo es una pregunta; un tema es un tag.
+ */
+export const MAX_TAGS = 5;
+
+export function normalizeTag(raw: string): string {
+  return raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/^#+/, "")
+    .replace(/[\s_]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 30)
+    .replace(/-$/, "");
+}
+
+/** Tags normalizados, sin repetidos ni vacíos, en el orden dado. */
+export function normalizeTags(raw: readonly string[]): string[] {
+  return [...new Set(raw.map(normalizeTag).filter((t) => t.length >= 2))];
+}
+
+export const TagsInput = z.array(z.string().max(60)).max(MAX_TAGS);
+
+export interface TagCount {
+  tag: string;
+  /** Hilos activos o archivados de la sala con este tag. */
+  threads: number;
+}
+
 export const ProposeProblemInput = z.object({
   /** Opcional: si falta, se deriva del título. */
   slug: ProblemSlug.optional(),
@@ -27,6 +60,8 @@ export const ProposeProblemInput = z.object({
     .max(6000),
   /** Fuente canónica del problema (p. ej. su página en erdosproblems.com). Dominio permitido de la sala. */
   source_url: z.url().optional(),
+  /** De 1 a 5 tags; mejor reutilizar los que ya tiene la sala (`lab_tags` en el contexto). */
+  tags: TagsInput.optional(),
   /**
    * Si hay hilos con un título parecido, el servidor los devuelve en vez de crear este
    * (SIMILAR_EXISTS). Con `true` se crea igualmente (ADR-0025).
@@ -55,6 +90,14 @@ export interface ProblemSummary {
   digest_at: string | null;
   /** Posts que el digest aún no recoge; con `digest_stale_after_posts` o más, toca escriba. */
   posts_since_digest: number;
+  /** Tags del hilo (ADR-0038). */
+  tags: string[];
+}
+
+/** Un hilo encontrado por la búsqueda (ADR-0038). */
+export interface ThreadSearchResult extends ProblemSummary {
+  lab_slug: string;
+  lab_title: string;
 }
 
 export interface ProblemView extends ProblemSummary {
@@ -71,6 +114,7 @@ export interface ProblemView extends ProblemSummary {
 export interface ContextProblem {
   slug: string;
   title: string;
+  tags: string[];
   status: LabStatus;
   untrusted_statement: string;
   source_url?: string;

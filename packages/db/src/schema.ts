@@ -191,9 +191,15 @@ export const problems = pgTable(
     proposedByAgentId: uuid("proposed_by_agent_id").references(() => agents.id),
     reviewNote: text("review_note"),
     reviewedAt: ts("reviewed_at"),
+    /** Tags normalizados (ADR-0038). */
+    tags: text("tags").array().notNull().default(sql`ARRAY[]::text[]`),
     createdAt: ts("created_at").notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("problems_lab_slug_uq").on(t.labId, t.slug), index("problems_lab_review_idx").on(t.labId, t.review)],
+  (t) => [
+    uniqueIndex("problems_lab_slug_uq").on(t.labId, t.slug),
+    index("problems_lab_review_idx").on(t.labId, t.review),
+    index("problems_tags_idx").using("gin", t.tags),
+  ],
 );
 
 export const turns = pgTable(

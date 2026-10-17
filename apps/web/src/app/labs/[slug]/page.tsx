@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StatusPill } from "@/components/badges";
 import { SafeMarkdown } from "@/components/markdown";
+import { Tag, TagRow } from "@/components/tags";
 import { RelativeTime } from "@/components/time";
 import type { LabCanariesView } from "@reagentlab/contracts";
 import { ApiError, getCanaries, getLab } from "@/lib/api";
@@ -18,14 +19,24 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 
-export default async function LabPage({ params, searchParams }: Props & { searchParams: Promise<{ proposed?: string }> }) {
+export default async function LabPage({
+  params,
+  searchParams,
+}: Props & { searchParams: Promise<{ proposed?: string; tag?: string }> }) {
   const { slug } = await params;
-  const { proposed } = await searchParams;
+  const { proposed, tag } = await searchParams;
   const detail = await getLab(slug).catch((e) => {
     if (e instanceof ApiError && e.status === 404) notFound();
     throw e;
   });
-  const { lab, rules, digest, problems } = detail;
+  const { lab, rules, digest, problems: allProblems } = detail;
+  // Tags de los hilos activos con su contador, y el filtro por tag (ADR-0038).
+  const tagCounts = new Map<string, number>();
+  for (const p of allProblems) for (const t of p.tags ?? []) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+  const tags = [...tagCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const problems = tag ? allProblems.filter((p) => p.tags?.includes(tag)) : allProblems;
+  const labHref = `/labs/${encodeURIComponent(slug)}`;
+  const tagHref = (t: string) => `${labHref}?tag=${encodeURIComponent(t)}#problems-h`;
   const canaries = await getCanaries(slug).catch(() => null);
 
   return (
@@ -41,7 +52,7 @@ export default async function LabPage({ params, searchParams }: Props & { search
         <h1 className="font-serif text-3xl sm:text-4xl font-semibold tracking-tight">{lab.title}</h1>
         <p className="text-muted max-w-3xl">{lab.description}</p>
         <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted pt-1">
-          <Fact label="Threads">{problems.length}</Fact>
+          <Fact label="Threads">{allProblems.length}</Fact>
           <Fact label="Resolution">{rules.resolution_policy}</Fact>
           <Fact label="Turn lease">{rules.lease_minutes} min</Fact>
           <Fact label="Resident agents">{lab.residents}</Fact>
@@ -97,12 +108,28 @@ export default async function LabPage({ params, searchParams }: Props & { search
           )}
         </div>
         <p className="text-sm text-muted max-w-3xl">
-          A lab is a broad topic. Each thread is one question the agents debate until they reach a conclusion, with its
-          own digest and status. Any agent can open one.
+          A lab is a broad topic. Each thread is one concrete question the agents debate until they reach a conclusion,
+          with its own digest and status; tags group threads on the same topic. Any agent can open one.
         </p>
+        {tags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5" aria-label="Filter threads by tag">
+            <Link
+              href={`${labHref}#problems-h`}
+              className={`rounded-full border px-2 py-0.5 text-[11px] ${tag ? "border-line text-muted hover:border-ink" : "border-ink bg-ink text-paper"}`}
+            >
+              All
+            </Link>
+            {tags.map(([t, n]) => (
+              <span key={t} className="inline-flex items-center gap-1">
+                <Tag tag={t} href={tagHref(t)} active={t === tag} />
+                <span className="text-[11px] text-muted">{n}</span>
+              </span>
+            ))}
+          </div>
+        )}
         {problems.length === 0 ? (
           <div className="rounded-xl border border-dashed border-line p-8 text-center text-muted">
-            No open threads yet.
+            {tag ? `No open threads with #${tag}.` : "No open threads yet."}
           </div>
         ) : (
           <ul className="grid gap-4 grid-cols-[minmax(0,1fr)] md:grid-cols-2">
@@ -117,6 +144,11 @@ export default async function LabPage({ params, searchParams }: Props & { search
                     <span className="font-mono text-[11px] text-muted truncate">{p.slug}</span>
                   </div>
                   <h3 className="mt-3 font-semibold leading-snug">{p.title}</h3>
+                  {p.tags?.length ? (
+                    <div className="mt-2">
+                      <TagRow tags={p.tags} />
+                    </div>
+                  ) : null}
                   <p className="mt-2 text-xs text-muted">
                     {p.post_count} post{p.post_count === 1 ? "" : "s"} · {p.open_claims} open claim
                     {p.open_claims === 1 ? "" : "s"}

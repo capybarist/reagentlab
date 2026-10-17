@@ -19,6 +19,11 @@ import {
   LabSection,
   ProposeLabInput,
   ProposeProblemInput,
+  TagsInput,
+  normalizeTag,
+  normalizeTags,
+  type TagCount,
+  type ThreadSearchResult,
   ROLE_POST_TYPES,
   ReviewProblemInput,
   RuleRefutationInput,
@@ -122,6 +127,10 @@ export interface ImportReport {
 
 const STALE_PROBLEM_DAYS = 30;
 const CONTEXT_OTHER_PROBLEMS = 20;
+/** Tags de la sala que ve un agente en su turno, los más usados (ADR-0038). */
+const CONTEXT_LAB_TAGS = 40;
+/** Hilos que devuelve una búsqueda. */
+const SEARCH_LIMIT = 50;
 
 /** Prioridad de los motivos para dar turno en un problema (menor = antes). */
 const REASON_RANK: Record<WakeReason, number> = {
@@ -212,10 +221,11 @@ export class LabService {
   }
 
   /** Problemas de la sala. Por defecto solo los activos; los propuestos los ven los administradores. */
-  async listProblems(slug: string, reviews: ProblemReview[] = ["active"]): Promise<ProblemView[]> {
+  async listProblems(slug: string, reviews: ProblemReview[] = ["active"], tag?: string): Promise<ProblemView[]> {
     return this.store.read(async (r) => {
       const lab = await requireLab(r, slug);
-      const rows = await r.listProblems(lab.id, reviews);
+      const wanted = tag ? normalizeTag(tag) : null;
+      const rows = (await r.listProblems(lab.id, reviews)).filter((p) => !wanted || p.tags.includes(wanted));
       const stats = await r.problemStats(lab.id);
       return Promise.all(
         rows.map(async (p) =>
@@ -363,7 +373,7 @@ export class LabService {
           throw new DomainError(
             "SIMILAR_EXISTS",
             `Ya hay hilos parecidos en la sala: ${similar.map((p) => `"${p.slug}" (${p.title})`).join(", ")}.`,
-            "Si es el mismo tema, trabaja en ese hilo. Si de verdad es otro, vuelve a llamar con confirm_new: true.",
+            "Un hilo es una pregunta concreta (ADR-0038). Si es la misma pregunta, trabaja en ese hilo. Si es otra pregunta del mismo tema, vuelve a llamar con confirm_new: true y los mismos tags.",
           );
         }
       }
@@ -379,10 +389,70 @@ export class LabService {
         proposedByAgentId: proposer.agentId ?? null,
         reviewNote: null,
         reviewedAt: null,
+        tags: normalizeTags(input.tags ?? []),
         createdAt: now,
       });
       await openProblem(r, lab, problem, now, proposer.agentId ?? null);
       return toProblemView(problem, lab.slug, undefined, await r.getUserHandle(proposer.userId));
+    });
+  }
+
+  /** Tags de la sala con cuántos hilos tiene cada uno (ADR-0038). */
+  async labTags(slug: string): Promise<TagCount[]> {
+    return this.store.read(async (r) => r.listLabTags((await requireLab(r, slug)).id));
+  }
+
+  /** Busca hilos por texto y tag en todas las salas abiertas (ADR-0038). */
+  async searchThreads(q: string, tag?: string): Promise<ThreadSearchResult[]> {
+    const text = q.trim().slice(0, 100);
+    const wanted = tag ? normalizeTag(tag) : null;
+    if (!text && !wanted) return [];
+    return this.store.read(async (r) => {
+      const rows = await r.searchProblems(text, wanted, SEARCH_LIMIT);
+      const stats = new Map<string, Awaited<ReturnType<Repos["problemStats"]>>>();
+      const out: ThreadSearchResult[] = [];
+      for (const p of rows) {
+        if (!stats.has(p.labId)) stats.set(p.labId, await r.problemStats(p.labId));
+        out.push({
+          ...toProblemSummary(p, stats.get(p.labId)!.find((s) => s.problemId === p.id)),
+          lab_slug: p.labSlug,
+          lab_title: p.labTitle,
+        });
+      }
+      return out;
+    });
+  }
+
+  /** Pone los tags de un hilo (administradores, ADR-0038). */
+  async setProblemTags(slug: string, problemSlug: string, tags: string[]): Promise<ProblemView> {
+    const parsed = TagsInput.safeParse(tags);
+    if (!parsed.success) throw validationError(parsed.error);
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug);
+      const p = await requireProblem(r, lab, problemSlug);
+      const next = normalizeTags(parsed.data);
+      await r.updateProblem(p.id, { tags: next });
+      return toProblemView({ ...p, tags: next }, lab.slug);
+    });
+  }
+
+  /**
+   * Fusiona un tag en otro en toda la sala (administradores, ADR-0038): `#formula1` → `#f1`.
+   * Devuelve cuántos hilos ha cambiado.
+   */
+  async mergeTag(slug: string, from: string, to: string): Promise<number> {
+    const a = normalizeTag(from);
+    const b = normalizeTag(to);
+    if (a.length < 2 || b.length < 2 || a === b) {
+      throw new DomainError("VALIDATION_FAILED", "Indica dos tags distintos válidos.");
+    }
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug);
+      const rows = (await r.listProblems(lab.id)).filter((p) => p.tags.includes(a));
+      for (const p of rows) {
+        await r.updateProblem(p.id, { tags: normalizeTags(p.tags.map((t) => (t === a ? b : t))) });
+      }
+      return rows.length;
     });
   }
 
@@ -464,6 +534,7 @@ export class LabService {
         proposedByAgentId: proposer.agentId ?? null,
         reviewNote: null,
         reviewedAt: null,
+        tags: normalizeTags(first.tags ?? []),
         createdAt: now,
       });
       await openProblem(r, lab, problem, now, proposer.agentId ?? null);
@@ -2247,6 +2318,7 @@ export class LabService {
       // Todos los polls abiertos de la sala, primero los del hilo del turno (ADR-0030).
       open_polls: await labPollsFirstHere(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id),
       other_problems: others,
+      lab_tags: (await r.listLabTags(lab.id)).slice(0, CONTEXT_LAB_TAGS),
     };
   }
 
