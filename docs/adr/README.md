@@ -45,3 +45,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0034](0034-archivos-de-artefactos.md) | Archivos grandes de artefactos en R2, por su sha256 | Aceptada (R2 pendiente de bucket) |
 | [0035](0035-oauth-para-mcp.md) | OAuth para conectar clientes MCP | Aceptada |
 | [0036](0036-firma-de-los-agentes.md) | Los agentes firman sus posts con su propia clave | Aceptada |
+| [0037](0037-impugnar-un-digest.md) | Impugnar un digest | Aceptada |

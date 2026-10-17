@@ -15,9 +15,11 @@ import type {
   CanaryRow,
   HostRunRow,
   BlobRow,
+  DigestChallengeRow,
 } from "@reagentlab/core";
 import type { CanaryResult, ClaimStatus, Evidence, PollResult, Role } from "@reagentlab/contracts";
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { Db } from "./connection.js";
 import {
   agents,
@@ -32,6 +34,7 @@ import {
   hostRuns,
   agentKeys,
   blobs,
+  digestChallenges,
   problems,
   posts,
   reputationEvents,
@@ -129,10 +132,35 @@ function toPost(r: {
   };
 }
 
+function toChallenge(r: {
+  c: typeof digestChallenges.$inferSelect;
+  challengerName: string;
+  challengerFamily: string;
+  rulerName: string | null;
+  rulerFamily: string | null;
+}): DigestChallengeRow {
+  return { ...r.c, challengerName: r.challengerName, challengerFamily: r.challengerFamily, rulerName: r.rulerName, rulerFamily: r.rulerFamily };
+}
+
 /** uuid que no existe, para `IN (...)` con lista vacía. */
 const NONE = "00000000-0000-0000-0000-000000000000";
 
 function makeRepos(db: Db): Repos {
+  const ruler = alias(agents, "ruler");
+  const challengeQuery = () =>
+    db
+      .select({
+        c: digestChallenges,
+        challengerName: agents.name,
+        challengerFamily: agents.modelFamily,
+        rulerName: ruler.name,
+        rulerFamily: ruler.modelFamily,
+      })
+      .from(digestChallenges)
+      .innerJoin(agents, eq(agents.id, digestChallenges.challengerAgentId))
+      .leftJoin(ruler, eq(ruler.id, digestChallenges.rulerAgentId))
+      .$dynamic();
+
   const visiblePosts = (labId: string) => and(eq(posts.labId, labId), sql`${posts.hiddenAt} IS NULL`);
 
   return {
@@ -220,6 +248,38 @@ function makeRepos(db: Db): Repos {
     async getBlob(sha256) {
       const [b] = await db.select().from(blobs).where(eq(blobs.sha256, sha256));
       return (b as BlobRow | undefined) ?? null;
+    },
+
+    async insertDigestChallenge(c) {
+      const [row] = await db.insert(digestChallenges).values(c).returning();
+      return { ...row!, status: row!.status };
+    },
+
+    async getDigestChallenge(id) {
+      const [row] = await challengeQuery().where(eq(digestChallenges.id, id));
+      return row ? toChallenge(row) : null;
+    },
+
+    async listDigestChallenges(problemId, digestId) {
+      const rows = await challengeQuery()
+        .where(
+          digestId
+            ? and(eq(digestChallenges.problemId, problemId), eq(digestChallenges.digestId, digestId))
+            : eq(digestChallenges.problemId, problemId),
+        )
+        .orderBy(desc(digestChallenges.createdAt));
+      return rows.map(toChallenge);
+    },
+
+    async updateDigestChallenge(id, patch) {
+      await db.update(digestChallenges).set(patch).where(eq(digestChallenges.id, id));
+    },
+
+    async supersedeDigestChallenges(problemId, at) {
+      await db
+        .update(digestChallenges)
+        .set({ status: "superseded", ruledAt: at })
+        .where(and(eq(digestChallenges.problemId, problemId), eq(digestChallenges.status, "pending")));
     },
 
     async getActiveAgentKey(agentId) {

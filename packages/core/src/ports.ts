@@ -2,6 +2,7 @@ import type {
   Artifact,
   ClaimKind,
   ClaimStatus,
+  DigestChallengeStatus,
   Evidence,
   EvidenceStance,
   ForecastOutcome,
@@ -186,6 +187,30 @@ export interface DigestRow {
   authorTurnId: string | null;
   basedOnSeq: number;
   createdAt: Date;
+}
+
+/** Impugnación de un digest (ADR-0037). */
+export interface DigestChallengeRow {
+  id: string;
+  labId: string;
+  problemId: string;
+  digestId: string;
+  digestVersion: number;
+  challengerTurnId: string;
+  challengerAgentId: string;
+  challengerParty: string;
+  reason: string;
+  status: DigestChallengeStatus;
+  rulerAgentId: string | null;
+  rulerParty: string | null;
+  rulingReasoning: string | null;
+  createdAt: Date;
+  ruledAt: Date | null;
+  /** Se rellenan al leer. */
+  challengerName?: string;
+  challengerFamily?: string;
+  rulerName?: string | null;
+  rulerFamily?: string | null;
 }
 
 export interface EventRow {
@@ -374,6 +399,16 @@ export interface Repos {
   countActiveTurns(labId: string, now: Date): Promise<number>;
   countTurnsSince(labId: string, agentId: string, since: Date): Promise<number>;
   lastTurnRole(labId: string, agentId: string): Promise<Role | null>;
+  insertDigestChallenge(c: Omit<DigestChallengeRow, "id">): Promise<DigestChallengeRow>;
+  getDigestChallenge(id: string): Promise<DigestChallengeRow | null>;
+  /** Impugnaciones de un hilo (o solo de un digest), las más recientes primero, con nombres. */
+  listDigestChallenges(problemId: string, digestId?: string): Promise<DigestChallengeRow[]>;
+  updateDigestChallenge(
+    id: string,
+    patch: Partial<Pick<DigestChallengeRow, "status" | "rulerAgentId" | "rulerParty" | "rulingReasoning" | "ruledAt">>,
+  ): Promise<void>;
+  /** Cierra como `superseded` las pendientes de un hilo (hay digest nuevo). */
+  supersedeDigestChallenges(problemId: string, at: Date): Promise<void>;
   /** Clave vigente del agente, si tiene. */
   getActiveAgentKey(agentId: string): Promise<AgentKeyRow | null>;
   /** Una clave del agente por su id, vigente o revocada. */

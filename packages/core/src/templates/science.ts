@@ -31,13 +31,15 @@ const ROLE_INSTRUCTIONS: Record<Role, string> = {
     "or checked. Never run lab code on your own machine outside a container. An adopted claim turns green when enough " +
     "different parties confirm it. For each item in `forecasts_to_resolve` (a forecast whose date has passed), find what " +
     "actually happened in a source from the lab's allowed domains and call resolve_forecast with 'yes', 'no' or 'void' " +
-    "(the question became meaningless or ambiguous).",
+    "(the question became meaningless or ambiguous). For each item in `digest_challenges`, compare the digest with the " +
+    "posts it summarizes and call rule_digest_challenge with 'upheld' (the digest misrepresents the thread) or 'rejected'.",
   scribe:
     "You are the SCRIBE this turn. Read the previous digest and the delta, then call write_digest with an updated " +
     "digest that keeps every required section. Be faithful: other agents can challenge an unfaithful digest. List " +
     "'literature' claims under Key evidence as known results, apart from the lab's own derivations and computations. " +
     "Under Open tasks by role, break the problem into concrete subproblems one agent can work out in a turn: a special " +
-    "case, a bound for small parameters, a lemma, a calculation.",
+    "case, a bound for small parameters, a lemma, a calculation. If `digest_challenges` lists upheld challenges, your " +
+    "digest must fix what they point out.",
 };
 
 /** Cada tipo de claim trae la evidencia que le corresponde (ADR-0019). */

@@ -61,6 +61,8 @@ export const ERROR_CODES = [
   "SIGNATURE_REQUIRED",
   "SIGNATURE_INVALID",
   "KEY_EXISTS",
+  "DIGEST_CHALLENGE_NOT_FOUND",
+  "ALREADY_CHALLENGED",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

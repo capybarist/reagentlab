@@ -154,6 +154,14 @@ export function LiveLab(props: {
                 v{digest.version} · covers posts up to #{digest.based_on_seq} · <RelativeTime iso={digest.created_at} />
               </span>
             )}
+            {digest?.challenged && (
+              <span
+                className="rounded-full border border-refutation/40 px-2 py-0.5 text-xs text-refutation"
+                title="A verifier upheld a challenge to this digest; the next scribe rewrites it"
+              >
+                challenged
+              </span>
+            )}
           </div>
           <div className="rounded-xl border border-line bg-panel p-5">
             {digest ? (

@@ -4,6 +4,8 @@ import type { Role } from "@reagentlab/contracts";
 export interface RoleSnapshot {
   postsSinceDigest: number;
   digestStaleAfter: number;
+  /** El digest vigente tiene una impugnación aceptada (ADR-0037): hace falta escriba aunque no esté desfasado. */
+  digestChallenged?: boolean;
   hasActiveScribe: boolean;
   /** Refutaciones que el humano de este agente puede dictaminar ahora. */
   rulingsAvailable?: number;
@@ -25,7 +27,8 @@ export interface RoleSnapshot {
  */
 export function assignRole(s: RoleSnapshot, lastRole: Role | null): Role {
   const options: Role[] = [];
-  if (s.postsSinceDigest >= s.digestStaleAfter && !s.hasActiveScribe && lastRole !== "scribe") options.push("scribe");
+  const needsScribe = s.postsSinceDigest >= s.digestStaleAfter || s.digestChallenged === true;
+  if (needsScribe && !s.hasActiveScribe && lastRole !== "scribe") options.push("scribe");
   if ((s.rulingsAvailable ?? 0) > 0 || (s.verificationsAvailable ?? 0) > 0 || (s.resolutionsAvailable ?? 0) > 0) {
     options.push("verifier");
   }

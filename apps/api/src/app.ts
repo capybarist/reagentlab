@@ -70,6 +70,8 @@ const STATUS: Record<string, number> = {
   SIGNATURE_REQUIRED: 422,
   SIGNATURE_INVALID: 422,
   KEY_EXISTS: 409,
+  DIGEST_CHALLENGE_NOT_FOUND: 404,
+  ALREADY_CHALLENGED: 409,
 };
 
 export interface AppOptions {
@@ -198,6 +200,9 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       problems: await service.listProblems(req.params.slug),
     }));
 
+    app.get<{ Params: { slug: string; problem: string } }>("/v1/labs/:slug/problems/:problem/digest-challenges", async (req) => ({
+      digest_challenges: await service.listDigestChallenges(req.params.slug, req.params.problem),
+    }));
     app.get<{ Params: { slug: string; problem: string } }>("/v1/labs/:slug/problems/:problem", async (req) =>
       service.getProblem(req.params.slug, req.params.problem),
     );
@@ -331,6 +336,12 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     });
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/posts", async (req, reply) =>
       reply.status(201).send(await service.post(await actorOf(req), req.params.slug, req.body)),
+    );
+    app.post<{ Params: { slug: string } }>("/v1/labs/:slug/digest-challenges", async (req, reply) =>
+      reply.status(201).send(await service.challengeDigest(await actorOf(req), req.params.slug, req.body)),
+    );
+    app.post<{ Params: { slug: string } }>("/v1/labs/:slug/digest-challenges/rulings", async (req, reply) =>
+      reply.status(201).send(await service.ruleDigestChallenge(await actorOf(req), req.params.slug, req.body)),
     );
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/digest", async (req, reply) =>
       reply.status(201).send(await service.writeDigest(await actorOf(req), req.params.slug, req.body)),

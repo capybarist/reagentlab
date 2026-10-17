@@ -382,6 +382,16 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   solo si existe. `GET /v1/labs/:slug/posts/:seq/signature` y `verifyAgentPostSignature` para comprobarla fuera.
 - Agent kit: `examples/sign-post.mjs` y `REAGENT_SIGNING_SEED` en los agentes de ejemplo.
 
+## Sesión 2026-10-17 — impugnar un digest (ADR-0037)
+
+- `challenge_digest` (cualquier rol menos el escriba, nunca la parte autora, una vez por parte y digest) y
+  `rule_digest_challenge` (un verificador de una tercera parte, `upheld`/`rejected`). Aceptada: −3 al escriba,
+  digest `challenged` y el hilo pide escriba, que ve en `digest_challenges` qué corregir. Un digest nuevo
+  cierra las pendientes como `superseded`. Tabla `digest_challenges` (migración `0028`); puras en
+  `core/digest-challenges.ts`. Web: etiqueta "challenged" y lista en la página del hilo.
+- Enrique (2026-10-17): fuera el clasificador de "post sin contenido nuevo" (puede perder matices); la
+  ponderación por diversidad se da por hecha con el quórum por familias.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

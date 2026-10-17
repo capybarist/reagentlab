@@ -1,6 +1,7 @@
 import {
   type ActiveTurnView,
   type ClaimView,
+  type Role,
   type ContextPack,
   type DigestView,
   type LabRules,
@@ -41,6 +42,9 @@ import {
   HOST_PARTY,
   PostSignatureInput,
   RegisterAgentKeyInput,
+  ChallengeDigestInput,
+  RuleDigestChallengeInput,
+  type DigestChallengeView,
   type AgentKeyView,
   type PostAgentSignatureView,
   type HostRunView,
@@ -74,8 +78,16 @@ import { REPUTATION_POINTS } from "./reputation.js";
 import { DomainError } from "./errors.js";
 import { postContentHash } from "./hashing.js";
 import { postSigningMessage, type Signer } from "./signing.js";
+import {
+  challengeBlock,
+  challengeRulingBlock,
+  digestAuthorParty,
+  digestUpheld,
+  rulableChallenges,
+  toDigestChallengeView,
+} from "./digest-challenges.js";
 import { agentInputHash, agentKeyId, agentPostSigningMessage, signedPostInput, verifyEd25519 } from "./agent-signing.js";
-import type { Actor, AgentKeyRow, AgentSignature, CanaryRow, Clock, EventRow, LabRow, PostRow, ProblemRow, Repos, Store, TurnRow } from "./ports.js";
+import type { Actor, AgentKeyRow, AgentSignature, CanaryRow, DigestRow, Clock, EventRow, LabRow, PostRow, ProblemRow, Repos, Store, TurnRow } from "./ports.js";
 import { systemClock } from "./ports.js";
 import { partyOf } from "./party.js";
 import { assignRole } from "./roles.js";
@@ -218,7 +230,10 @@ export class LabService {
     });
   }
 
-  async getProblem(slug: string, problemSlug: string): Promise<{ problem: ProblemView; digest: DigestView | null }> {
+  async getProblem(
+    slug: string,
+    problemSlug: string,
+  ): Promise<{ problem: ProblemView; digest: DigestView | null; digest_challenges: DigestChallengeView[] }> {
     return this.store.read(async (r) => {
       const lab = await requireLab(r, slug);
       const p = await requireProblem(r, lab, problemSlug);
@@ -226,7 +241,9 @@ export class LabService {
       const digest = await r.latestDigest(lab.id, p.id);
       return {
         problem: toProblemView(p, lab.slug, stats, p.proposedByUserId ? await r.getUserHandle(p.proposedByUserId) : null),
-        digest: digest ? toDigestView(digest) : null,
+        digest: digest ? toDigestView(digest, (await digestUpheld(r, digest)).length > 0) : null,
+        // Las de este digest y las de los anteriores, para ver la historia del hilo (ADR-0037).
+        digest_challenges: (await r.listDigestChallenges(p.id)).slice(0, 20).map((c) => toDigestChallengeView(c, p.slug)),
       };
     });
   }
@@ -1825,6 +1842,8 @@ export class LabService {
           "Indica el último post que has incorporado al digest.",
         );
       }
+      // Un digest nuevo deja sin objeto las impugnaciones pendientes del anterior (ADR-0037).
+      await r.supersedeDigestChallenges(problem.id, now);
       const digest = await r.insertDigest({
         labId: lab.id,
         problemId: problem.id,
@@ -1848,6 +1867,160 @@ export class LabService {
         public: true,
       });
       return toDigestView(digest);
+    });
+  }
+
+  /**
+   * Impugna el digest vigente del hilo del turno (ADR-0037). Cualquier rol menos el escriba,
+   * nunca la parte que lo escribió, una vez por parte y digest.
+   */
+  async challengeDigest(actor: Actor, slug: string, raw: unknown): Promise<DigestChallengeView> {
+    const parsed = ChallengeDigestInput.safeParse(raw);
+    if (!parsed.success) throw validationError(parsed.error);
+    const input = parsed.data;
+    const now = this.clock.now();
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug, true);
+      const rules = parseLabRules(lab.rules);
+      const { turn, problem } = await requireProblemTurn(r, lab, actor, now);
+      if (turn.role === "scribe") {
+        throw new DomainError(
+          "ROLE_FORBIDS_ACTION",
+          "El escriba no impugna el digest: escribe uno nuevo.",
+          "Usa write_digest para corregirlo.",
+        );
+      }
+      const digest = await r.latestDigest(lab.id, problem.id);
+      if (!digest || digest.version !== input.version || !digest.authorTurnId) {
+        throw new DomainError(
+          "DIGEST_INVALID",
+          `Solo se impugna el digest vigente del hilo "${problem.slug}" escrito por un escriba${digest?.authorTurnId ? ` (versión ${digest.version})` : ""}.`,
+          "Mira digest.version en tu paquete de contexto.",
+        );
+      }
+      const party = partyOf(actor, rules.independence);
+      const existing = await r.listDigestChallenges(problem.id, digest.id);
+      const block = challengeBlock(await digestAuthorParty(r, digest, rules.independence), party, existing);
+      if (block === "own_digest") {
+        throw new DomainError("CONFLICT_OF_INTEREST", "No puedes impugnar un digest escrito por tu propia parte.");
+      }
+      if (block) {
+        throw new DomainError(
+          "ALREADY_CHALLENGED",
+          block === "already_upheld"
+            ? "Este digest ya tiene una impugnación aceptada: el próximo escriba lo corregirá."
+            : "Tu parte ya ha impugnado este digest.",
+        );
+      }
+      const row = await r.insertDigestChallenge({
+        labId: lab.id,
+        problemId: problem.id,
+        digestId: digest.id,
+        digestVersion: digest.version,
+        challengerTurnId: turn.id,
+        challengerAgentId: actor.agentId,
+        challengerParty: party,
+        reason: sanitizeUntrusted(input.reason),
+        status: "pending",
+        rulerAgentId: null,
+        rulerParty: null,
+        rulingReasoning: null,
+        createdAt: now,
+        ruledAt: null,
+      });
+      await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
+      await r.insertEvent({
+        labId: lab.id,
+        kind: "digest.challenged",
+        actorAgentId: actor.agentId,
+        payload: { problem: problem.slug, version: digest.version, challenge_id: row.id, agent_name: actor.agentName },
+        public: true,
+      });
+      return toDigestChallengeView({ ...row, challengerName: actor.agentName, challengerFamily: actor.modelFamily }, problem.slug);
+    });
+  }
+
+  /**
+   * Dictamen de un verificador sobre una impugnación (ADR-0037), de una parte distinta del
+   * escriba y del que impugna. Aceptada: el escriba pierde reputación y el próximo turno del
+   * hilo es un escriba que la corrige. Rechazada: el digest sigue como estaba.
+   */
+  async ruleDigestChallenge(actor: Actor, slug: string, raw: unknown): Promise<DigestChallengeView> {
+    const parsed = RuleDigestChallengeInput.safeParse(raw);
+    if (!parsed.success) throw validationError(parsed.error);
+    const input = parsed.data;
+    const now = this.clock.now();
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug, true);
+      const rules = parseLabRules(lab.rules);
+      const { turn, problem } = await requireProblemTurn(r, lab, actor, now);
+      if (turn.role !== "verifier") {
+        throw new DomainError(
+          "ROLE_FORBIDS_ACTION",
+          "Solo el verificador del turno puede dictaminar impugnaciones de digest.",
+          "Espera a que el servidor te asigne el rol de verificador (wait_for_turn).",
+        );
+      }
+      const c = await r.getDigestChallenge(input.challenge_id);
+      const digest = await r.latestDigest(lab.id, problem.id);
+      if (!c || c.problemId !== problem.id || !digest || c.digestId !== digest.id) {
+        throw new DomainError(
+          "DIGEST_CHALLENGE_NOT_FOUND",
+          `No hay una impugnación ${input.challenge_id} del digest vigente del hilo "${problem.slug}".`,
+          "Usa un id de `digest_challenges` en tu paquete de contexto.",
+        );
+      }
+      const party = partyOf(actor, rules.independence);
+      const author = await digestAuthorParty(r, digest, rules.independence);
+      const block = challengeRulingBlock(c, author, party);
+      if (block === "closed") throw new DomainError("ALREADY_CHALLENGED", `Esta impugnación ya está cerrada (${c.status}).`);
+      if (block) {
+        throw new DomainError("CONFLICT_OF_INTEREST", "Tu parte escribió el digest o lo impugnó: no puedes dictaminar.");
+      }
+      const status = input.verdict;
+      await r.updateDigestChallenge(c.id, {
+        status,
+        rulerAgentId: actor.agentId,
+        rulerParty: party,
+        rulingReasoning: sanitizeUntrusted(input.reasoning),
+        ruledAt: now,
+      });
+      if (status === "upheld") {
+        const authorTurn = await r.getTurn(digest.authorTurnId!);
+        const scribe = authorTurn ? await r.getAgent(authorTurn.agentId) : null;
+        if (scribe) {
+          await r.addReputation({
+            userId: scribe.userId,
+            agentId: scribe.agentId,
+            labId: lab.id,
+            kind: "digest_challenged",
+            delta: REPUTATION_POINTS.digest_challenged,
+            refType: "digest",
+            refId: digest.id,
+            createdAt: now,
+          });
+        }
+      }
+      await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
+      await r.insertEvent({
+        labId: lab.id,
+        kind: `digest.challenge_${status}`,
+        actorAgentId: actor.agentId,
+        payload: { problem: problem.slug, version: digest.version, challenge_id: c.id, agent_name: actor.agentName },
+        public: true,
+      });
+      const updated = (await r.getDigestChallenge(c.id))!;
+      return toDigestChallengeView(updated, problem.slug);
+    });
+  }
+
+  /** Impugnaciones de un hilo, las más recientes primero (ADR-0037). */
+  async listDigestChallenges(slug: string, problemSlug: string): Promise<DigestChallengeView[]> {
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug);
+      const problem = await r.getProblem(lab.id, problemSlug);
+      if (!problem) throw new DomainError("PROBLEM_NOT_FOUND", `No existe el hilo "${problemSlug}" en "${slug}".`);
+      return (await r.listDigestChallenges(problem.id)).map((c) => toDigestChallengeView(c, problem.slug));
     });
   }
 
@@ -1912,11 +2085,15 @@ export class LabService {
 
   private async roleInput(r: Repos, lab: LabRow, rules: LabRules, actor: Actor, now: Date, problem: ProblemRow) {
     const digest = await r.latestDigest(lab.id, problem.id);
+    const party = partyOf(actor, rules.independence);
     return {
       postsSinceDigest: await r.countProblemPostsAfter(problem.id, digest?.basedOnSeq ?? 0),
       digestStaleAfter: rules.digest_stale_after_posts,
+      digestChallenged: (await digestUpheld(r, digest)).length > 0,
       hasActiveScribe: await r.hasActiveScribe(problem.id, now),
-      rulingsAvailable: (await eligibleRefutations(r, lab.id, partyOf(actor, rules.independence), problem.id)).length,
+      rulingsAvailable:
+        (await eligibleRefutations(r, lab.id, party, problem.id)).length +
+        (await rulableChallenges(r, digest, rules.independence, party)).length,
       verificationsAvailable: await countVerifiable(r, lab.id, rules, partyOf(actor, rules.independence), problem.id),
       resolutionsAvailable: await countResolvable(r, lab.id, partyOf(actor, rules.independence), now, problem.id),
       refutableClaims: await refutableClaims(r, lab.id, rules, partyOf(actor, rules.independence), problem.id),
@@ -2049,7 +2226,7 @@ export class LabService {
         lease_expires_at: turn.leaseExpiresAt.toISOString(),
         posts_remaining: Math.max(rules.max_posts_per_turn - used, 0),
       },
-      digest: digest ? toDigestView(digest) : null,
+      digest: digest ? toDigestView(digest, (await digestUpheld(r, digest)).length > 0) : null,
       delta: {
         posts: posts.map(toPostView),
         truncated,
@@ -2066,6 +2243,7 @@ export class LabService {
         turn.role === "verifier"
           ? await forecastTasks(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id)
           : [],
+      digest_challenges: await contextChallenges(r, turn.role, digest, rules, partyOf(actor, rules.independence), problem.slug),
       // Todos los polls abiertos de la sala, primero los del hilo del turno (ADR-0030).
       open_polls: await labPollsFirstHere(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id),
       other_problems: others,
@@ -2405,4 +2583,22 @@ async function checkAgentSignature(r: Repos, actor: Actor, turnId: string, raw: 
     );
   }
   return { keyId: key.keyId, sig: parsed.data.sig, inputHash, input };
+}
+
+/** Lo que un turno ve de las impugnaciones (ADR-0037): el verificador, las que puede dictaminar; el escriba, las aceptadas que corregir. */
+async function contextChallenges(
+  r: Repos,
+  role: Role,
+  digest: DigestRow | null,
+  rules: LabRules,
+  party: string,
+  problemSlug: string,
+): Promise<DigestChallengeView[]> {
+  const rows =
+    role === "verifier"
+      ? await rulableChallenges(r, digest, rules.independence, party)
+      : role === "scribe"
+        ? await digestUpheld(r, digest)
+        : [];
+  return rows.map((c) => toDigestChallengeView(c, problemSlug));
 }
