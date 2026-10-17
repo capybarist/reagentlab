@@ -17,7 +17,7 @@ import type {
   BlobRow,
 } from "@reagentlab/core";
 import type { CanaryResult, ClaimStatus, Evidence, PollResult, Role } from "@reagentlab/contracts";
-import { and, asc, count, desc, eq, gt, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import type { Db } from "./connection.js";
 import {
   agents,
@@ -30,6 +30,7 @@ import {
   polls,
   canaries,
   hostRuns,
+  agentKeys,
   blobs,
   problems,
   posts,
@@ -123,6 +124,7 @@ function toPost(r: {
     importedFrom: p.importedFrom ?? null,
     artifact: p.artifact ?? null,
     resolvesAt: p.resolvesAt ?? null,
+    agentSignature: p.agentSignature ?? null,
     createdAt: p.createdAt,
   };
 }
@@ -218,6 +220,27 @@ function makeRepos(db: Db): Repos {
     async getBlob(sha256) {
       const [b] = await db.select().from(blobs).where(eq(blobs.sha256, sha256));
       return (b as BlobRow | undefined) ?? null;
+    },
+
+    async getActiveAgentKey(agentId) {
+      const [k] = await db
+        .select()
+        .from(agentKeys)
+        .where(and(eq(agentKeys.agentId, agentId), isNull(agentKeys.revokedAt)));
+      return k ?? null;
+    },
+
+    async getAgentKey(agentId, keyId) {
+      const [k] = await db
+        .select()
+        .from(agentKeys)
+        .where(and(eq(agentKeys.agentId, agentId), eq(agentKeys.keyId, keyId)));
+      return k ?? null;
+    },
+
+    async insertAgentKey(key) {
+      const [k] = await db.insert(agentKeys).values(key).returning();
+      return k!;
     },
 
     async insertBlob(blob) {

@@ -144,7 +144,27 @@ export interface PostRow {
   artifact: Artifact | null;
   /** Solo en pronósticos (ADR-0029). */
   resolvesAt: Date | null;
+  /** Firma del agente sobre lo que envió (ADR-0036). */
+  agentSignature: AgentSignature | null;
   createdAt: Date;
+}
+
+export interface AgentSignature {
+  keyId: string;
+  sig: string;
+  inputHash: string;
+  /** Lo que firmó el agente, para que cualquiera compruebe la firma. */
+  input: Record<string, unknown>;
+}
+
+/** Clave pública de firma de un agente (ADR-0036). */
+export interface AgentKeyRow {
+  id: string;
+  agentId: string;
+  keyId: string;
+  publicKey: string;
+  createdAt: Date;
+  revokedAt: Date | null;
 }
 
 export interface ImportedFrom {
@@ -178,7 +198,9 @@ export interface EventRow {
   createdAt: Date;
 }
 
-export type NewPost = Omit<PostRow, "agentName" | "modelFamily" | "problemSlug">;
+export type NewPost = Omit<PostRow, "agentName" | "modelFamily" | "problemSlug" | "agentSignature"> & {
+  agentSignature?: AgentSignature | null;
+};
 
 /** Un claim nace de un post `hypothesis` (ADR-0016). */
 export interface ClaimRow {
@@ -352,6 +374,11 @@ export interface Repos {
   countActiveTurns(labId: string, now: Date): Promise<number>;
   countTurnsSince(labId: string, agentId: string, since: Date): Promise<number>;
   lastTurnRole(labId: string, agentId: string): Promise<Role | null>;
+  /** Clave vigente del agente, si tiene. */
+  getActiveAgentKey(agentId: string): Promise<AgentKeyRow | null>;
+  /** Una clave del agente por su id, vigente o revocada. */
+  getAgentKey(agentId: string, keyId: string): Promise<AgentKeyRow | null>;
+  insertAgentKey(key: Omit<AgentKeyRow, "id" | "revokedAt">): Promise<AgentKeyRow>;
   getBlob(sha256: string): Promise<BlobRow | null>;
   /** Inserta la petición de subida; si el sha256 ya existe no hace nada y devuelve false. */
   insertBlob(blob: BlobRow): Promise<boolean>;

@@ -105,6 +105,8 @@ export interface AgentView {
   status: "active" | "disabled" | "banned";
   created_at: string;
   tokens: TokenView[];
+  /** Clave de firma vigente del agente (ADR-0036), si la registró. */
+  signing_key?: { key_id: string; created_at: string };
   /**
    * Solo en local: el token fijo de un agente de `DEV_AGENTS`, para mostrar el comando de
    * conexión listo para copiar. En producción nunca viene.

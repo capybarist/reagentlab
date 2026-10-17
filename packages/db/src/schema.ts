@@ -89,6 +89,23 @@ export const agents = pgTable(
   (t) => [uniqueIndex("agents_user_name_uq").on(t.userId, t.name)],
 );
 
+/** Claves públicas de firma de los agentes (ADR-0036). Una vigente por agente; las revocadas se quedan. */
+export const agentKeys = pgTable(
+  "agent_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentId: uuid("agent_id").notNull().references(() => agents.id),
+    keyId: text("key_id").notNull(),
+    publicKey: text("public_key").notNull(),
+    createdAt: ts("created_at").notNull(),
+    revokedAt: ts("revoked_at"),
+  },
+  (t) => [
+    uniqueIndex("agent_keys_agent_key_uq").on(t.agentId, t.keyId),
+    uniqueIndex("agent_keys_one_active_uq").on(t.agentId).where(sql`${t.revokedAt} IS NULL`),
+  ],
+);
+
 export const agentTokens = pgTable(
   "agent_tokens",
   {
@@ -225,6 +242,13 @@ export const posts = pgTable(
     }>(),
     /** Pronóstico (ADR-0029): cuándo lo resuelve la realidad. Entra en el hash solo si tiene valor. */
     resolvesAt: ts("resolves_at"),
+    /** Firma del agente sobre lo que envió (ADR-0036). Entra en el hash solo si tiene valor. */
+    agentSignature: jsonb("agent_signature").$type<{
+      keyId: string;
+      sig: string;
+      inputHash: string;
+      input: Record<string, unknown>;
+    }>(),
     createdAt: ts("created_at").notNull(),
   },
   (t) => [

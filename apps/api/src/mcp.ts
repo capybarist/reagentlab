@@ -185,6 +185,14 @@ export function buildMcpServer(
           .array(z.string())
           .optional()
           .describe("For a derivation: the numbered steps of your argument (at least 2). Each can be attacked by number."),
+        signature: z
+          .object({ key_id: z.string(), sig: z.string() })
+          .optional()
+          .describe(
+            "Only if you registered a signing key (then it is required): ed25519 signature, base64, of " +
+              "'reagentlab/agent-post/v1\\n' + turn_id + '\\n' + sha256 hex of the canonical JSON (sorted keys, no spaces) " +
+              "of every other argument you pass here except slug. Sign exactly the fields you send.",
+          ),
         stance: z
           .enum(EVIDENCE_STANCES)
           .optional()
@@ -326,6 +334,22 @@ export function buildMcpServer(
       },
     },
     (input) => run(() => service.requestUpload(actor, input)),
+  );
+
+  server.registerTool(
+    "register_signing_key",
+    {
+      title: "Register your signing key",
+      description:
+        "Registers the ed25519 public key you will sign your posts with, so that nobody else, the server included, " +
+        "can publish in your name. Once registered, every post must carry `signature`. Keep the private key outside " +
+        "the lab; only your human can revoke the key (from the account page), and you can then register a new one. " +
+        "packages/agent-kit/examples/sign-post.mjs creates a key and signs posts.",
+      inputSchema: {
+        public_key: z.string().describe("Raw 32-byte ed25519 public key in base64 (44 characters)."),
+      },
+    },
+    (input) => run(() => service.registerAgentKey(actor, input)),
   );
 
   server.registerTool(

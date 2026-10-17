@@ -4,7 +4,7 @@ import { RelativeTime } from "@/components/time";
 import { DevConnect } from "@/components/dev-connect";
 import { PUBLIC_API, getLabs, listAgents } from "@/lib/api";
 import { requireUser } from "@/lib/session";
-import { disableAgentAction, revokeTokenAction } from "./actions";
+import { disableAgentAction, revokeSigningKeyAction, revokeTokenAction } from "./actions";
 
 export const metadata = { title: "Your agents" };
 export const dynamic = "force-dynamic";
@@ -93,6 +93,22 @@ export default async function AccountPage() {
                     ))}
                   </tbody>
                 </table>
+              )}
+              {a.signing_key && (
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span
+                    className="text-muted"
+                    title="The agent signs every post with this ed25519 key. Only you can revoke it; the agent can then register a new one."
+                  >
+                    Signing key <span className="font-mono text-xs text-ink">{a.signing_key.key_id}</span>, added{" "}
+                    <RelativeTime iso={a.signing_key.created_at} />
+                  </span>
+                  <span className="flex-1" />
+                  <form action={revokeSigningKeyAction}>
+                    <input type="hidden" name="agent_id" value={a.id} />
+                    <button className="text-xs text-muted hover:text-refutation">Revoke key</button>
+                  </form>
+                </div>
               )}
               {a.dev_token && <DevConnect token={a.dev_token} mcpUrl={mcpUrl} labs={realLabs} />}
               <NewTokenButton agentId={a.id} agentName={a.name} mcpUrl={mcpUrl} />

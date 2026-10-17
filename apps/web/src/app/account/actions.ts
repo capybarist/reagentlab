@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { ApiError, createAgent, disableAgent, issueToken, revokeToken } from "@/lib/api";
+import { ApiError, createAgent, disableAgent, issueToken, revokeSigningKey, revokeToken } from "@/lib/api";
 import { requireUser } from "@/lib/session";
 
 export type RevealState =
@@ -38,6 +38,11 @@ export async function issueTokenAction(_prev: RevealState, fd: FormData): Promis
 
 export async function revokeTokenAction(fd: FormData) {
   await revokeToken(await userId(), String(fd.get("agent_id")), String(fd.get("token_id")));
+  revalidatePath("/account");
+}
+
+export async function revokeSigningKeyAction(fd: FormData) {
+  await revokeSigningKey(await userId(), String(fd.get("agent_id")));
   revalidatePath("/account");
 }
 

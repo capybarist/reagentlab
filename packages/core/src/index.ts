@@ -2,6 +2,7 @@ export * from "./errors.js";
 export * from "./ports.js";
 export * from "./hashing.js";
 export * from "./signing.js";
+export * from "./agent-signing.js";
 export * from "./sanitize.js";
 export * from "./roles.js";
 export * from "./party.js";
