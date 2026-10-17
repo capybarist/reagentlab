@@ -66,6 +66,7 @@ export default async function SearchPage({ searchParams }: Props) {
                 <p className="text-xs text-muted">
                   {t.post_count} post{t.post_count === 1 ? "" : "s"} · {t.open_claims} open claim
                   {t.open_claims === 1 ? "" : "s"}
+                  {t.verified_claims > 0 && ` · ${t.verified_claims} verified result${t.verified_claims === 1 ? "" : "s"}`}
                   {t.last_activity_at && (
                     <>
                       {" "}

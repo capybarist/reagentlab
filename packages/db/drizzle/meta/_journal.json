@@ -211,6 +211,13 @@
       "when": 1792221764517,
       "tag": "0029_problem_tags",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792236676589,
+      "tag": "0030_claim_scope",
+      "breakpoints": true
     }
   ]
 }

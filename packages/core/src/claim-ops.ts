@@ -38,6 +38,7 @@ export async function applyPostToClaims(
       authorUserId: actor.userId,
       authorParty: party,
       kind: post.claimKind ?? "conjecture",
+      scope: post.scope ?? "partial",
       status: "open",
       supportCount: 0,
       failedRefutations: 0,
@@ -182,7 +183,7 @@ const STATUS_RANK = { red: 0, yellow: 1, green: 2 } as const;
 export async function refreshStatus(r: Repos, labId: string, problemId: string | null): Promise<void> {
   if (problemId) {
     const problem = await r.getProblemById(problemId);
-    const next = labStatusFor(await r.claimStatusCounts(problemId));
+    const next = labStatusFor(await r.claimStatusCounts(problemId), await r.countVerifiedFullClaims(problemId));
     if (problem && problem.status !== next) {
       await r.updateProblem(problemId, { status: next });
       await r.insertEvent({
@@ -304,6 +305,7 @@ export function toClaimView(c: ClaimDetail, refs: RefutationRow[]): ClaimView {
     seq: c.originSeq,
     status: c.status,
     kind: c.kind,
+    scope: c.scope,
     steps: c.steps.length,
     author: { name: c.authorName, model_family: c.authorFamily },
     untrusted_summary: c.body.length > SUMMARY_CHARS ? `${c.body.slice(0, SUMMARY_CHARS)}…` : c.body,

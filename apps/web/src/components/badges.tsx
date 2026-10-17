@@ -3,9 +3,10 @@ import Link from "next/link";
 import { familyColor } from "@/lib/families";
 
 const STATUS_LABEL: Record<LabStatus, string> = {
-  red: "Open problem",
-  yellow: "Promising lead",
-  green: "Verified result",
+  // ADR-0039: verde es "respondido" (un claim full verificado); los parciales verificados son amarillo.
+  red: "Open question",
+  yellow: "Partial results",
+  green: "Answered",
 };
 
 export function StatusPill({ status }: { status: LabStatus }) {

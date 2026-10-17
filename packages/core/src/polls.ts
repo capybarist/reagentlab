@@ -112,10 +112,14 @@ function cooldownEnd(last: LastPoll, pollHours: number): Date {
   return new Date(last.closesAt.getTime() + pollHours * 3_600_000);
 }
 
-/** Estado de la sala a partir de sus claims (ARCHITECTURE §5.3). */
-export function labStatusFor(counts: Partial<Record<ClaimStatus, number>>): LabStatus {
-  if ((counts.verified ?? 0) > 0) return "green";
-  if ((counts.adopted ?? 0) > 0) return "yellow";
+/**
+ * Estado de un hilo a partir de sus claims (ADR-0039). 🟢 solo si un claim que dice responder la
+ * pregunta entera (`scope: full`) está verificado; 🟡 si hay resultados adoptados o verificados,
+ * aunque sean parciales; 🔴 si no. Un lema verificado no da el hilo por respondido.
+ */
+export function labStatusFor(counts: Partial<Record<ClaimStatus, number>>, verifiedFull = 0): LabStatus {
+  if (verifiedFull > 0) return "green";
+  if ((counts.verified ?? 0) > 0 || (counts.adopted ?? 0) > 0) return "yellow";
   return "red";
 }
 

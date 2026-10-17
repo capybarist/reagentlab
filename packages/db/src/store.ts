@@ -115,6 +115,7 @@ function toPost(r: {
     targetStep: p.targetStep,
     claimKind: p.claimKind,
     stance: p.stance ?? null,
+    scope: p.scope ?? null,
     steps: p.steps as string[],
     evidence: p.evidence as Evidence[],
     confidence: p.confidence,
@@ -772,6 +773,14 @@ function makeRepos(db: Db): Repos {
       return Object.fromEntries(rows.map((r) => [r.status, Number(r.n)]));
     },
 
+    async countVerifiedFullClaims(problemId) {
+      const [r] = await db
+        .select({ n: count() })
+        .from(claims)
+        .where(and(eq(claims.problemId, problemId), eq(claims.status, "verified"), eq(claims.scope, "full")));
+      return Number(r?.n ?? 0);
+    },
+
     async getLabStatus(labId) {
       const [l] = await db.select({ status: labs.status }).from(labs).where(eq(labs.id, labId));
       return l?.status ?? null;
@@ -988,6 +997,7 @@ function makeRepos(db: Db): Repos {
         problem_id: string;
         post_count: number;
         open_claims: number;
+        verified_claims: number;
         last_post_at: Date | string | null;
         last_turn_at: Date | string | null;
         digest_version: number | null;
@@ -997,6 +1007,7 @@ function makeRepos(db: Db): Repos {
         SELECT pr.id AS problem_id,
           (SELECT count(*)::int FROM ${posts} p WHERE p.problem_id = pr.id AND p.hidden_at IS NULL) AS post_count,
           (SELECT count(*)::int FROM ${claims} c WHERE c.problem_id = pr.id AND c.status <> 'refuted') AS open_claims,
+          (SELECT count(*)::int FROM ${claims} c WHERE c.problem_id = pr.id AND c.status = 'verified') AS verified_claims,
           (SELECT max(p.created_at) FROM ${posts} p WHERE p.problem_id = pr.id AND p.hidden_at IS NULL) AS last_post_at,
           (SELECT max(t.started_at) FROM ${turns} t WHERE t.problem_id = pr.id) AS last_turn_at,
           d.version AS digest_version,
@@ -1014,6 +1025,7 @@ function makeRepos(db: Db): Repos {
         problem_id: string;
         post_count: number;
         open_claims: number;
+        verified_claims: number;
         last_post_at: Date | string | null;
         last_turn_at: Date | string | null;
         digest_version: number | null;
@@ -1023,6 +1035,7 @@ function makeRepos(db: Db): Repos {
         problemId: r.problem_id,
         postCount: Number(r.post_count),
         openClaims: Number(r.open_claims),
+        verifiedClaims: Number(r.verified_claims),
         lastActivityAt: r.last_post_at ? new Date(r.last_post_at) : null,
         lastTurnAt: r.last_turn_at ? new Date(r.last_turn_at) : null,
         digestVersion: r.digest_version === null ? null : Number(r.digest_version),

@@ -244,6 +244,8 @@ export const posts = pgTable(
     claimKind: text("claim_kind", { enum: ["derivation", "computation", "conjecture", "literature"] }),
     /** Solo en evidencias (ADR-0028). Null en las anteriores, que contaban como apoyo. */
     stance: text("stance", { enum: ["supports", "contradicts", "neutral"] }),
+    /** Solo en hipótesis que dicen responder el hilo entero (ADR-0039). Null en las parciales. */
+    scope: text("scope", { enum: ["full"] }),
     steps: jsonb("steps").notNull().default([]),
     evidence: jsonb("evidence").notNull().default([]),
     confidence: doublePrecision("confidence"),
@@ -339,6 +341,8 @@ export const claims = pgTable(
     /** Parte independiente del autor (ADR-0023): el id del humano, o `family:<familia>`. */
     authorParty: text("author_party").notNull(),
     kind: text("kind", { enum: ["derivation", "computation", "conjecture", "literature"] }).notNull().default("conjecture"),
+    /** ADR-0039: `full` si dice responder la pregunta entera del hilo. */
+    scope: text("scope", { enum: ["partial", "full"] }).notNull().default("partial"),
     status: text("status", { enum: ["open", "supported", "adopted", "verified", "refuted"] }).notNull().default("open"),
     supportCount: integer("support_count").notNull().default(0),
     failedRefutations: integer("failed_refutations").notNull().default(0),

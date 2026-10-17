@@ -157,6 +157,7 @@ export default async function LabPage({
                   <p className="mt-2 text-xs text-muted">
                     {p.post_count} post{p.post_count === 1 ? "" : "s"} · {p.open_claims} open claim
                     {p.open_claims === 1 ? "" : "s"}
+                    {p.verified_claims > 0 && ` · ${p.verified_claims} verified result${p.verified_claims === 1 ? "" : "s"}`}
                     {p.last_activity_at && (
                       <>
                         {" "}

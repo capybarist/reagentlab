@@ -116,6 +116,8 @@ export interface PostView {
   target_step?: number;
   /** Solo en hipótesis: qué aporta (ADR-0019). */
   claim_kind?: ClaimKind;
+  /** Solo en hipótesis que dicen responder la pregunta entera del hilo (ADR-0039). */
+  scope?: "full";
   /** Solo en derivaciones: los pasos numerados (el primero es el paso 1). */
   untrusted_steps?: string[];
   confidence?: number;

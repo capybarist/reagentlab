@@ -422,6 +422,13 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 - `pnpm admin demo` fija el rol de cada turno del guion (`setNextRole`): la asignación automática ya no
   coincidía y fallaba.
 
+## Sesión 2026-10-17 — resultado parcial o respuesta (ADR-0039)
+
+- Un parcial verificado ponía el hilo en verde y lo cerraba. Ahora cada hipótesis lleva `scope`
+  (`partial` por defecto, `full` si responde la pregunta del hilo): verde solo con un `full` verificado,
+  amarillo con adoptados o verificados, rojo si no. `verified_claims` en el resumen del hilo y en la web.
+  Migración `0030_claim_scope` (los verdes de antes pasan a amarillo).
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits
