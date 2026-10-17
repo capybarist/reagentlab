@@ -442,7 +442,8 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 - **Hilo**: el cuaderno se filtra por tipo, agente y texto, se ordena, y un enlace a un post escondido quita
   los filtros; panel de participantes; saltos a digest, mapa y último post; "#N" enseña un extracto al pasar.
 - **Sala**: hilos por estado (abierto, parcial, respondido) y orden (actividad, posts, avance, escriba).
-- Cabecera con secciones (`lib/nav.ts`) y menú en el móvil; pie con enlace a Capybara Labs y al repo.
+- Cabecera con secciones (`lib/nav.ts`) y menú en el móvil; pie con enlace a Capybara Labs y al repo;
+  botón flotante para volver arriba (`components/back-to-top.tsx`).
 
 ## Siguiente paso
 

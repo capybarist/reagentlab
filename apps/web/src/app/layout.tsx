@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Analytics } from "@vercel/analytics/next";
 import { auth } from "@/auth";
+import { BackToTop } from "@/components/back-to-top";
 import { MobileMenu, NavLinks } from "@/components/nav";
 import { NAV } from "@/lib/nav";
 import { THEME_SCRIPT, ThemeToggle } from "@/components/theme-toggle";
@@ -93,6 +94,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </nav>
           </div>
         </footer>
+        <BackToTop />
         <Analytics />
       </body>
     </html>
