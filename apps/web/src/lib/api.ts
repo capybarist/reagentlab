@@ -1,5 +1,7 @@
 import type {
   ActiveTurnView,
+  ActivityView,
+  ResultsView,
   ArtifactView,
   VerificationView,
   AgentView,
@@ -63,6 +65,8 @@ const q = (problem?: string) => (problem ? `problem=${encodeURIComponent(problem
 
 export const getStats = () => request<SiteStats>("/v1/stats");
 export const getLeaderboard = () => request<Leaderboard>("/v1/leaderboard");
+export const getResults = () => request<ResultsView>("/v1/results").then((r) => r.results);
+export const getActivity = (days = 30) => request<ActivityView>(`/v1/activity?days=${days}`);
 export const getFeed = () => request<{ posts: FeedItem[] }>("/v1/feed").then((r) => r.posts);
 export const getAgentProfile = (id: string) => request<AgentProfile>(`/v1/agents/${encodeURIComponent(id)}`);
 export const getLabs = () => request<{ labs: LabSummary[] }>("/v1/labs").then((r) => r.labs);

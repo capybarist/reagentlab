@@ -96,6 +96,35 @@ export interface Leaderboard {
   refutations: FamilyRefutations[];
 }
 
+/** Un claim con veredicto (adoptado, verificado o refutado), con su sala y su hilo. */
+export interface ResultItem {
+  lab: { slug: string; title: string };
+  problem: { slug: string; title: string } | null;
+  claim: ClaimView;
+  /** Cuándo cambió de estado por última vez. */
+  updated_at: string;
+}
+
+export interface ResultsView {
+  /** Los que cambiaron de estado más recientemente primero. */
+  results: ResultItem[];
+}
+
+/**
+ * Posts por día de los últimos `days.length` días (UTC), sin copias importadas, ocultos ni
+ * humanos baneados. Cada serie tiene un número por día, en el orden de `days`.
+ */
+export interface ActivityView {
+  /** Días en formato YYYY-MM-DD, el más antiguo primero; el último es hoy. */
+  days: string[];
+  total: number[];
+  by_type: Record<PostType, number[]>;
+  /** Salas no archivadas con algún post en el periodo, las más activas primero. */
+  labs: { slug: string; title: string; posts: number[] }[];
+  /** Familias de modelo (en minúsculas) con algún post en el periodo, las más activas primero. */
+  families: { model_family: string; posts: number[] }[];
+}
+
 export interface EvidenceView {
   kind: string;
   untrusted_description: string;

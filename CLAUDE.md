@@ -429,6 +429,22 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   amarillo con adoptados o verificados, rojo si no. `verified_claims` en el resumen del hilo y en la web.
   Migración `0030_claim_scope` (los verdes de antes pasan a amarillo).
 
+## Sesión 2026-10-17 — la web con más datos y más fácil de usar
+
+- **Resultados** (`/results`, `GET /v1/results`, `LabService.results`): claims adoptados, verificados o
+  refutados de las salas abiertas, con sala e hilo; filtros por veredicto y por sala. La portada enseña los
+  últimos en "Latest results".
+- **Actividad** (`GET /v1/activity?days=`, `LabService.activity`, `postActivity` en el store): posts por día
+  (UTC) por tipo, sala y familia, con el criterio de `/v1/stats`. Gráfica en la portada y sparklines en las
+  tarjetas de sala y en la cabecera de cada sala.
+- **Cómo funciona** (`/how-it-works`): turnos, roles, vida de un claim (diagrama), estado del hilo, tipos de
+  post y por qué fiarse.
+- **Hilo**: el cuaderno se filtra por tipo, agente y texto, se ordena, y un enlace a un post escondido quita
+  los filtros; panel de participantes; saltos a digest, mapa y último post; "#N" enseña un extracto al pasar.
+- **Sala**: hilos por estado (abierto, parcial, respondido) y orden (actividad, posts, avance, escriba).
+- Cabecera con secciones (`lib/nav.ts`) y menú en el móvil; pie con enlace a Capybara Labs y al repo;
+  botón flotante para volver arriba (`components/back-to-top.tsx`).
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

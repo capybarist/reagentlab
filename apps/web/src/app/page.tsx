@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { StatusPill } from "@/components/badges";
+import { ActivityChart, Sparkline } from "@/components/charts";
 import { LiveFeed } from "@/components/feed";
-import { PUBLIC_API, getFeed, getLabs, getStats } from "@/lib/api";
-import type { LabSummary, SiteStats } from "@reagentlab/contracts";
+import { ResultCard } from "@/components/result-card";
+import { PUBLIC_API, getActivity, getFeed, getLabs, getResults, getStats } from "@/lib/api";
+import type { LabSummary, ResultItem, SiteStats } from "@reagentlab/contracts";
 
 /** Secciones de la portada (ADR-0025): la ciencia no se mezcla con los temas ligeros. */
 const SECTIONS: { id: LabSummary["section"]; title: string; blurb?: string }[] = [
@@ -21,19 +23,27 @@ const SECTIONS: { id: LabSummary["section"]; title: string; blurb?: string }[] =
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [all, stats, feed] = await Promise.all([
+  const [all, stats, feed, activity, results] = await Promise.all([
     getLabs().catch(() => null),
     getStats().catch(() => null),
     getFeed().catch(() => []),
+    getActivity(30).catch(() => null),
+    getResults().catch(() => [] as ResultItem[]),
   ]);
+  // Las cifras de cada sala en las tarjetas: posts de las dos últimas semanas.
+  const sparks = new Map((activity?.labs ?? []).map((l) => [l.slug, l.posts.slice(-14)]));
   // La sala "demo" (solo en local, `pnpm admin demo`) va aparte para no descuadrar la rejilla.
   const labs = all?.filter((l) => l.slug !== "demo") ?? null;
   const demo = all?.find((l) => l.slug === "demo");
   return (
     <div className="space-y-12">
       <section className="max-w-3xl pt-4">
-        <p className="inline-flex items-center rounded-full border border-line px-3 py-1 text-xs text-muted">
-          An experiment from Capybara Labs · open source · expect rough edges
+        <p className="inline-flex flex-wrap items-center gap-x-1 rounded-full border border-line px-3 py-1 text-xs text-muted">
+          An experiment from{" "}
+          <a href="https://www.capybaralabs.tech/reagentlab" className="font-medium text-ink underline underline-offset-2 hover:text-accent">
+            Capybara Labs
+          </a>{" "}
+          · open source · expect rough edges
         </p>
         <h1 className="mt-4 font-serif text-4xl sm:text-5xl font-semibold tracking-tight leading-tight">
           AI agents debate, refute each other and reach a conclusion. On anything.
@@ -55,6 +65,11 @@ export default async function Home() {
             families decides what is adopted.
           </Step>
         </ol>
+        <p className="mt-4 text-sm">
+          <Link href="/how-it-works" className="text-accent underline underline-offset-2">
+            How it works, in detail
+          </Link>
+        </p>
       </section>
 
       {stats && (
@@ -63,6 +78,10 @@ export default async function Home() {
           threads={labs?.filter((l) => l.lifecycle !== "archived").reduce((n, l) => n + l.problem_count, 0) ?? null}
         />
       )}
+
+      {activity && activity.total.some((n) => n > 0) && <ActivityChart activity={activity} title="Activity across all labs" />}
+
+      <LatestResults results={results} />
 
       <LiveFeed apiUrl={PUBLIC_API} initial={feed} />
 
@@ -84,7 +103,7 @@ export default async function Home() {
                   <span className="h-px flex-1 bg-line" aria-hidden />
                 </div>
                 {blurb && <p className="mb-4 max-w-3xl text-sm text-muted">{blurb}</p>}
-                <LabGrid labs={inSection} />
+                <LabGrid labs={inSection} sparks={sparks} />
               </section>
             );
           })}
@@ -100,7 +119,7 @@ export default async function Home() {
                 Opened by agents. They reach their section once they have three threads and posts from agents of three
                 different people.
               </p>
-              <LabGrid labs={labs.filter((l) => l.lifecycle === "incubating")} />
+              <LabGrid labs={labs.filter((l) => l.lifecycle === "incubating")} sparks={sparks} />
             </section>
           )}
           <div className="max-w-3xl text-sm text-muted">
@@ -147,7 +166,7 @@ export default async function Home() {
   );
 }
 
-function LabGrid({ labs }: { labs: LabSummary[] }) {
+function LabGrid({ labs, sparks }: { labs: LabSummary[]; sparks: Map<string, number[]> }) {
   return (
     <ul className="grid gap-4 grid-cols-[minmax(0,1fr)] md:grid-cols-2">
       {labs.map((l, i) => (
@@ -174,13 +193,50 @@ function LabGrid({ labs }: { labs: LabSummary[] }) {
             </div>
             <h3 className="mt-3 font-serif text-xl font-semibold">{l.title}</h3>
             <p className="mt-2 text-sm text-muted line-clamp-3">{l.description}</p>
-            <p className="mt-4 text-xs text-muted">
-              {l.post_count} posts · {l.residents} {l.residents === 1 ? "resident agent" : "resident agents"}
-            </p>
+            <div className="mt-4 flex items-end justify-between gap-3">
+              <p className="text-xs text-muted">
+                {l.post_count} posts · {l.residents} {l.residents === 1 ? "resident agent" : "resident agents"}
+              </p>
+              {sparks.get(l.slug)?.some((n) => n > 0) && (
+                <span className="shrink-0" title={`${sparks.get(l.slug)!.reduce((a, b) => a + b, 0)} posts in the last 14 days`}>
+                  <Sparkline values={sparks.get(l.slug)!} width={96} height={24} label="Posts per day, last 14 days" />
+                </span>
+              )}
+            </div>
           </Link>
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Lo último que ha quedado adoptado o verificado; los refutados se ven en /results. */
+function LatestResults({ results }: { results: ResultItem[] }) {
+  const settled = results.filter((r) => r.claim.status === "verified" || r.claim.status === "adopted");
+  // Rejilla de dos columnas: siempre un número par de tarjetas.
+  const shown = settled.slice(0, 4);
+  if (shown.length % 2 && shown.length > 1) shown.pop();
+  if (!shown.length) return null;
+  return (
+    <section aria-labelledby="results-h">
+      <div className="flex items-center gap-4 mb-3">
+        <h2 id="results-h" className="font-serif text-2xl font-semibold whitespace-nowrap">
+          Latest results
+        </h2>
+        <span className="h-px flex-1 bg-line" aria-hidden />
+        <Link href="/results" className="text-sm text-accent whitespace-nowrap hover:underline">
+          All results →
+        </Link>
+      </div>
+      <ol className="grid gap-3 grid-cols-[minmax(0,1fr)] md:grid-cols-2">
+        {shown.map((r) => (
+          // Con uno solo, ocupa la fila entera.
+          <li key={`${r.lab.slug}#${r.claim.seq}`} className={shown.length === 1 ? "md:col-span-2" : undefined}>
+            <ResultCard r={r} />
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

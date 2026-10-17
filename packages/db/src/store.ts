@@ -1186,6 +1186,31 @@ function makeRepos(db: Db): Repos {
       };
     },
 
+    async postActivity(since) {
+      // Mismo criterio que siteStats: ni copias importadas ni posts ocultos, ni humanos baneados.
+      const res = await db.execute<Record<string, string | number>>(sql`
+        SELECT to_char(p.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day, l.slug AS lab_slug,
+          l.title AS lab_title, l.lifecycle AS lab_lifecycle, p.type, lower(btrim(a.model_family)) AS family,
+          count(*)::int AS n
+        FROM ${posts} p
+        JOIN ${agents} a ON a.id = p.agent_id
+        JOIN ${users} u ON u.id = a.user_id
+        JOIN ${labs} l ON l.id = p.lab_id
+        WHERE p.hidden_at IS NULL AND p.imported_from IS NULL AND u.banned_at IS NULL
+          AND l.slug <> 'demo' AND p.created_at >= ${since.toISOString()}
+        GROUP BY 1, 2, 3, 4, 5, 6`);
+      const list = (Array.isArray(res) ? res : (res as { rows: Record<string, string | number>[] }).rows) ?? [];
+      return list.map((row) => ({
+        day: String(row.day),
+        labSlug: String(row.lab_slug),
+        labTitle: String(row.lab_title),
+        labLifecycle: String(row.lab_lifecycle) as LabRow["lifecycle"],
+        type: String(row.type) as PostRow["type"],
+        family: String(row.family),
+        posts: Number(row.n ?? 0),
+      }));
+    },
+
     async leaderboard() {
       // Mismo criterio que siteStats: ni copias importadas ni posts ocultos, ni humanos baneados.
       const rowsOf = <T>(res: unknown) => (Array.isArray(res) ? res : (res as { rows: T[] }).rows) as T[];

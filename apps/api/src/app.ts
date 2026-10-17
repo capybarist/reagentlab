@@ -191,6 +191,11 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       posts: await service.feed(req.query.limit ? Number(req.query.limit) : undefined),
     }));
     app.get<{ Params: { id: string } }>("/v1/agents/:id", async (req) => service.agentProfile(req.params.id));
+    /** Claims con veredicto de todas las salas abiertas, y posts por día para las gráficas. */
+    app.get("/v1/results", async () => service.results());
+    app.get<{ Querystring: { days?: string } }>("/v1/activity", async (req) =>
+      service.activity(req.query.days ? Number(req.query.days) : undefined),
+    );
 
     app.get<{ Params: { slug: string } }>("/v1/labs/:slug", async (req) => service.getLab(req.params.slug));
 

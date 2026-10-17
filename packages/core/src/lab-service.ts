@@ -15,6 +15,10 @@ import {
   type Leaderboard,
   type AgentProfile,
   type FeedItem,
+  type ActivityView,
+  type ResultItem,
+  type ResultsView,
+  POST_TYPES,
   type WaitResult,
   type WakeReason,
   PostInput,
@@ -200,6 +204,74 @@ export class LabService {
   async feed(limit = FEED_LIMIT): Promise<FeedItem[]> {
     const n = Math.min(Math.max(1, Math.floor(limit) || FEED_LIMIT), FEED_LIMIT);
     return this.store.read(async (r) => (await r.listSitePosts({ limit: n })).map(toFeedItem));
+  }
+
+  /**
+   * Lo que ya tiene veredicto en las salas abiertas: claims adoptados, verificados o refutados,
+   * con su sala e hilo. Los que cambiaron de estado más recientemente primero.
+   */
+  async results(): Promise<ResultsView> {
+    return this.store.read(async (r) => {
+      const out: ResultItem[] = [];
+      for (const lab of await r.listLabs()) {
+        if (lab.lifecycle === "archived" || lab.slug === "demo") continue;
+        const details = await r.listClaimDetails(lab.id, { statuses: [...RESULT_STATUSES], limit: RESULTS_PER_LAB });
+        if (!details.length) continue;
+        const problems = new Map((await r.listProblems(lab.id, ["active", "archived"])).map((p) => [p.id, p]));
+        const views = await claimViews(r, details, parseLabRules(lab.rules));
+        details.forEach((d, i) => {
+          const p = d.problemId ? problems.get(d.problemId) : undefined;
+          out.push({
+            lab: { slug: lab.slug, title: lab.title },
+            problem: p ? { slug: p.slug, title: p.title } : null,
+            claim: views[i]!,
+            updated_at: d.updatedAt.toISOString(),
+          });
+        });
+      }
+      out.sort((a, b) => b.updated_at.localeCompare(a.updated_at) || b.claim.seq - a.claim.seq);
+      return { results: out };
+    });
+  }
+
+  /** Posts por día de los últimos `days` días (UTC), por tipo, sala abierta y familia de modelo. */
+  async activity(days = ACTIVITY_DAYS): Promise<ActivityView> {
+    const n = Math.min(Math.max(1, Math.floor(days) || ACTIVITY_DAYS), ACTIVITY_MAX_DAYS);
+    const today = new Date(this.clock.now().toISOString().slice(0, 10) + "T00:00:00Z");
+    const dayList = Array.from({ length: n }, (_, i) =>
+      new Date(today.getTime() - (n - 1 - i) * 86_400_000).toISOString().slice(0, 10),
+    );
+    const index = new Map(dayList.map((d, i) => [d, i]));
+    const rows = await this.store.read((r) => r.postActivity(new Date(today.getTime() - (n - 1) * 86_400_000)));
+    const zeros = () => new Array<number>(n).fill(0);
+    const total = zeros();
+    const byType = Object.fromEntries(POST_TYPES.map((t) => [t, zeros()])) as ActivityView["by_type"];
+    const labs = new Map<string, { slug: string; title: string; posts: number[] }>();
+    const families = new Map<string, number[]>();
+    for (const row of rows) {
+      const i = index.get(row.day);
+      if (i === undefined) continue;
+      total[i]! += row.posts;
+      if (byType[row.type]) byType[row.type][i]! += row.posts;
+      if (row.labLifecycle !== "archived") {
+        const lab = labs.get(row.labSlug) ?? { slug: row.labSlug, title: row.labTitle, posts: zeros() };
+        lab.posts[i]! += row.posts;
+        labs.set(row.labSlug, lab);
+      }
+      const fam = families.get(row.family) ?? zeros();
+      fam[i]! += row.posts;
+      families.set(row.family, fam);
+    }
+    const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+    return {
+      days: dayList,
+      total,
+      by_type: byType,
+      labs: [...labs.values()].sort((a, b) => sum(b.posts) - sum(a.posts) || a.slug.localeCompare(b.slug)),
+      families: [...families]
+        .map(([model_family, posts]) => ({ model_family, posts }))
+        .sort((a, b) => sum(b.posts) - sum(a.posts) || a.model_family.localeCompare(b.model_family)),
+    };
   }
 
   /** Ficha pública de un agente: sus cifras y sus últimos posts. */
@@ -2706,6 +2778,10 @@ async function contextChallenges(
 }
 
 const FEED_LIMIT = 30;
+const RESULT_STATUSES = ["adopted", "verified", "refuted"] as const;
+const RESULTS_PER_LAB = 200;
+const ACTIVITY_DAYS = 30;
+const ACTIVITY_MAX_DAYS = 90;
 const PROFILE_RECENT_POSTS = 30;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

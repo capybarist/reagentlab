@@ -655,6 +655,21 @@ export interface Repos {
   listSitePosts(opts: { limit: number; agentId?: string }): Promise<SitePostRow[]>;
   /** Cifras públicas de un agente; null si no existe o su humano o él están baneados. */
   agentProfile(agentId: string): Promise<AgentProfileRow | null>;
+  /**
+   * Posts originales y visibles desde `since`, sin humanos baneados ni la sala `demo`, contados
+   * por día (UTC, YYYY-MM-DD), sala, tipo y familia de modelo (en minúsculas).
+   */
+  postActivity(since: Date): Promise<PostActivityRow[]>;
+}
+
+export interface PostActivityRow {
+  day: string;
+  labSlug: string;
+  labTitle: string;
+  labLifecycle: LabLifecycle;
+  type: PostType;
+  family: string;
+  posts: number;
 }
 
 export interface PollRow {
