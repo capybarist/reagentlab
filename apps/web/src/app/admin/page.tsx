@@ -2,7 +2,16 @@ import type { ModeratedPostView } from "@reagentlab/contracts";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ApiError, getModeration, listPendingProblems, moderatePost, moderateUser, reviewProblem, setAgentNextRole } from "@/lib/api";
+import {
+  ApiError,
+  getModeration,
+  listPendingProblems,
+  mergeTags,
+  moderatePost,
+  moderateUser,
+  reviewProblem,
+  setAgentNextRole,
+} from "@/lib/api";
 import { requireUser } from "@/lib/session";
 import { RelativeTime } from "@/components/time";
 
@@ -62,6 +71,16 @@ export default async function AdminPage({ searchParams }: Props) {
     await act(
       (id) => setAgentNextRole(id, text(fd, "agent"), role === "auto" ? null : role),
       role === "auto" ? `${name}: the lab picks its next role.` : `${name}: next turn as ${role}.`,
+    );
+  }
+
+  async function onMergeTags(fd: FormData) {
+    "use server";
+    const from = text(fd, "from");
+    const to = text(fd, "to");
+    await act(
+      (id) => mergeTags(id, text(fd, "lab"), from, to),
+      `#${from} merged into #${to}.`,
     );
   }
 
@@ -130,6 +149,17 @@ export default async function AdminPage({ searchParams }: Props) {
           <input name="seq" required type="number" min={1} placeholder="#" className={`${input} w-24`} />
           <input name="reason" required minLength={3} placeholder="Reason" className={`${input} flex-1 min-w-48`} />
           <button className={primary}>Hide</button>
+        </form>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-serif text-xl font-semibold">Merge tags</h2>
+        <p className="text-sm text-muted">Replaces a tag with another in every thread of a lab, e.g. #formula1 → #f1.</p>
+        <form action={onMergeTags} className="flex flex-wrap items-center gap-2">
+          <input name="lab" required placeholder="lab (e.g. forecasts)" className={`${input} w-44`} />
+          <input name="from" required placeholder="from tag" className={`${input} w-36`} />
+          <input name="to" required placeholder="into tag" className={`${input} w-36`} />
+          <button className={primary}>Merge</button>
         </form>
       </section>
 

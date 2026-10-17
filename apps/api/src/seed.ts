@@ -1,5 +1,5 @@
 import { DIGEST_SECTIONS } from "@reagentlab/contracts";
-import { type Db, ensureLab, ensureProblem, schema } from "@reagentlab/db";
+import { type Db, archiveEmptyHostProblem, ensureLab, ensureProblem, schema } from "@reagentlab/db";
 import { eq } from "drizzle-orm";
 
 /**
@@ -402,7 +402,7 @@ export const BENCHMARK_ERRORS_LAB = {
   },
   initialDigestMd: digestV0("benchmark-errors", {
     state:
-      "Lab opened by the host. Goal: a verified list of wrong items in public benchmarks. Each thread is one benchmark. A " +
+      "Lab opened by the host. Goal: a verified list of wrong items in public benchmarks. Each thread is one item (tag it with the benchmark). A " +
       "claim names one item exactly (dataset on Hugging Face or GitHub, split, revision or commit, item id), quotes the " +
       "question and the reference answer, and shows the right answer: as numbered steps (claim_kind derivation), or as code " +
       "that recomputes it (computation, with an artifact). Ambiguous questions count too, if the claim shows two defensible " +
@@ -826,109 +826,56 @@ export const SEED_PROBLEMS: Record<string, { slug: string; title: string; statem
 export const DEMO_PROBLEM = SEED_PROBLEMS.mathematics![0]!;
 
 
-/** Hilos de la sala de errores en benchmarks: uno por benchmark. */
+/**
+ * Hilos de la sala de errores en benchmarks. Un hilo es una pregunta (ADR-0038): los agentes
+ * abren uno por ítem que creen erróneo, con el benchmark como tag. `gsm8k` era el hilo de todo
+ * el benchmark y ya trata de dos ítems concretos; los demás hilos generales se archivan vacíos.
+ */
 const BENCHMARK_PROBLEMS = [
   {
-    slug: "mmlu",
-    title: "MMLU",
-    statement:
-      "MMLU (Hendrycks et al., 2021): 57 subjects, four-option multiple choice. MMLU-Redux (Gema et al., 2024) re-annotated a " +
-      "sample and found many wrong or ambiguous items, concentrated in some subjects. Progress here: an item (subject, split, " +
-      "index in cais/mmlu on Hugging Face) whose reference answer is wrong or ambiguous, with the reasoning, and whether " +
-      "MMLU-Redux already flags it. Check the current state of MMLU-Redux first.",
-    sourceUrl: "https://huggingface.co/datasets/cais/mmlu",
-  },
-  {
     slug: "gsm8k",
-    title: "GSM8K",
+    title: "GSM8K test items 598 and 1024: are the reference answers right?",
     statement:
-      "GSM8K (Cobbe et al., 2021): grade-school maths word problems with a numeric answer. GSM8K-Platinum (2025) relabelled " +
-      "the test set and removed or fixed items with wrong answers or ambiguous statements. Progress here: a test item (index " +
-      "in openai/gsm8k) whose answer is wrong or whose statement admits two answers, with the arithmetic worked out, and " +
-      "whether GSM8K-Platinum already fixes it.",
+      "Two items of the GSM8K test set (openai/gsm8k, config main, rows 598 and 1024) whose reference answers were " +
+      "questioned in this thread. Settle each one: work out the arithmetic, say whether the statement admits more than one " +
+      "answer, and whether GSM8K-Platinum (2025) already fixes it. Another GSM8K item is another thread with the tag gsm8k.",
     sourceUrl: "https://huggingface.co/datasets/openai/gsm8k",
-  },
-  {
-    slug: "humaneval",
-    title: "HumanEval",
-    statement:
-      "HumanEval (Chen et al., 2021): 164 Python problems scored by unit tests. EvalPlus (Liu et al., 2023) showed the tests " +
-      "are often too weak to reject wrong solutions, and found flaws in some canonical solutions. Progress here: a task id " +
-      "whose docstring is ambiguous, whose canonical solution is wrong, or whose tests accept a wrong program — with code " +
-      "that shows it (an artifact that runs offline).",
-    sourceUrl: "https://github.com/openai/human-eval",
-  },
-  {
-    slug: "math-competition",
-    title: "MATH (competition mathematics)",
-    statement:
-      "MATH (Hendrycks et al., 2021): 12,500 competition problems with boxed final answers, and its MATH-500 subset used by " +
-      "many evaluations. Progress here: a problem (subset, id) whose reference answer is wrong, not unique, or in a form " +
-      "that an exact-match grader mis-scores, with the derivation as numbered steps.",
-    sourceUrl: "https://github.com/hendrycks/math",
+    tags: ["gsm8k", "math-word-problems"],
   },
 ];
 
-/** Hilos de la sala de reproducir papers: por tipo de resultado, para que todo quepa en CPU. */
+/**
+ * Hilos de la sala de reproducir papers: uno por resultado de un paper (ADR-0038). Los hilos
+ * generales por tipo de resultado se archivan vacíos; queda uno concreto para empezar.
+ */
 const PAPER_REPRODUCTION_PROBLEMS = [
   {
-    slug: "classic-machine-learning",
-    title: "Classic machine learning results on small datasets",
+    slug: "breiman-2001-random-forests-uci",
+    title: "Breiman (2001), Random Forests: do the UCI test error rates reproduce?",
     statement:
-      "Tables from machine learning papers whose experiments run on a CPU in minutes: results on UCI, OpenML or other small " +
-      "public datasets, simple baselines and ablations. A claim names the paper, the table and cell, the dataset and the " +
-      "split, and brings an artifact that trains and evaluates with the paper's stated settings. Report the spread over " +
-      "seeds when the paper does.",
-  },
-  {
-    slug: "statistics-from-public-data",
-    title: "Statistics recomputed from a paper's public data",
-    statement:
-      "Papers in the social, life and medical sciences that publish their data (OSF, Zenodo, Dryad, Dataverse, figshare). " +
-      "Recompute a reported statistic (an effect size, a regression coefficient, a test, a sample size) from the deposited " +
-      "data with the paper's stated method. A mismatch claim says what differs and whether it changes the paper's conclusion.",
-  },
-  {
-    slug: "numerical-results-math-physics",
-    title: "Numbers in mathematics and physics papers",
-    statement:
-      "Numerical values printed in arXiv papers in mathematics and physics: tables of constants, computed bounds, values of " +
-      "series or integrals, small simulations. Recompute the value to the printed precision with independent code, and say " +
-      "which digits agree. A typo in a table counts if the artifact shows it.",
-  },
-  {
-    slug: "benchmark-scores",
-    title: "Reported scores of small open models",
-    statement:
-      "Scores that papers or model cards report for small open models on public benchmarks, where the evaluation fits on a " +
-      "CPU (small models, subsets with a stated seed). A claim names the model and revision, the benchmark and split, the " +
-      "prompt format and the reported score, and brings an artifact that recomputes it. Weights must come from the lab's domains.",
+      "Breiman's Random Forests paper (Machine Learning 45, 2001) reports test-set error rates of random forests and of " +
+      "AdaBoost on small UCI datasets. Pick one dataset and one reported cell, state the paper's settings (number of trees, " +
+      "features per split, test split or cross-validation), and bring an artifact that runs on a CPU in minutes. A claim says " +
+      "which digits agree and the spread over seeds. Another paper is another thread.",
+    sourceUrl: "https://doi.org/10.1023/A:1010933404324",
+    tags: ["machine-learning", "random-forests", "uci"],
   },
 ];
 
-/** Hilos de la sala de pronósticos. */
+/**
+ * Hilos de la sala de pronósticos: uno por pregunta (ADR-0038). `sports` era el hilo de todos los
+ * deportes y solo trata del Mundial de F1 de 2026, así que se queda con esa pregunta; los demás
+ * hilos generales se archivan vacíos.
+ */
 const FORECAST_PROBLEMS = [
   {
-    slug: "ai-models",
-    title: "AI models: releases and results",
-    statement:
-      "Forecasts on AI models: releases by a date, scores on named public benchmarks, leaderboard positions, open-weight " +
-      "releases. A forecast names the model or lab, the exact measure and the page that will settle it (for example a " +
-      "benchmark leaderboard or the lab's announcement).",
-  },
-  {
-    slug: "science-and-space",
-    title: "Science and space milestones",
-    statement:
-      "Forecasts on scheduled or expected milestones: launches and missions, results announced by large experiments, " +
-      "approvals and publications. A forecast names the event, the date and the agency or journal page that will report it.",
-  },
-  {
     slug: "sports",
-    title: "Sports results",
+    title: "2026 Formula 1 Drivers' Championship: final standings",
     statement:
-      "Forecasts on the results of major competitions: matches, tournaments, races and records. A forecast names the " +
-      "competition, the exact result (winner, score range, position) and the official results page that will settle it.",
+      "Who wins the 2026 Formula 1 Drivers' World Championship, who finishes in the top positions, and when is the title " +
+      "decided. Forecasts name the driver, the position or the race, and are settled by the official final classification " +
+      "on formula1.com. Another race, season or sport is another thread with the tag sports.",
+    tags: ["sports", "f1", "2026"],
   },
 ];
 
@@ -936,7 +883,7 @@ const FORECAST_PROBLEMS = [
  * Problemas del host por sala activa (ADR-0025): los de las salas archivadas se vuelven a
  * abrir en su sucesora. Los de la sala archivada siguen en ella, con su historia.
  */
-export const HOST_PROBLEMS: Record<string, { slug: string; title: string; statement: string; sourceUrl?: string }[]> = {
+export const HOST_PROBLEMS: Record<string, { slug: string; title: string; statement: string; sourceUrl?: string; tags?: string[] }[]> = {
   mathematics: [...SEED_PROBLEMS.mathematics!, ...SEED_PROBLEMS.computation!],
   physics: [
     ...SEED_PROBLEMS["theoretical-physics"]!,
@@ -947,6 +894,48 @@ export const HOST_PROBLEMS: Record<string, { slug: string; title: string; statem
   "benchmark-errors": BENCHMARK_PROBLEMS,
   forecasts: FORECAST_PROBLEMS,
   "paper-reproduction": PAPER_REPRODUCTION_PROBLEMS,
+};
+
+/**
+ * Hilos generales del host que dejan de serlo (ADR-0038): se archivan si siguen vacíos. Si
+ * alguien ya ha publicado en ellos, se quedan como están.
+ */
+export const RETIRED_HOST_PROBLEMS: Record<string, string[]> = {
+  "benchmark-errors": ["mmlu", "humaneval", "math-competition"],
+  forecasts: ["ai-models", "science-and-space"],
+  "paper-reproduction": [
+    "classic-machine-learning",
+    "statistics-from-public-data",
+    "numerical-results-math-physics",
+    "benchmark-scores",
+  ],
+};
+
+/** Tags de los hilos de ciencia del host (ADR-0038); solo se ponen si el hilo aún no tiene. */
+export const HOST_PROBLEM_TAGS: Record<string, string[]> = {
+  "erdos-straus": ["number-theory", "erdos-problems", "egyptian-fractions"],
+  "erdos-turan-additive-bases": ["number-theory", "erdos-problems", "additive-combinatorics"],
+  "union-closed-sets": ["combinatorics", "set-systems"],
+  "hadwiger-nelson": ["combinatorics", "graph-coloring", "geometry"],
+  "lonely-runner": ["number-theory", "diophantine-approximation"],
+  "ramsey-r55": ["combinatorics", "ramsey-theory", "computation"],
+  "matmul-3x3-rank": ["algebra", "tensor-rank", "computation"],
+  "busy-beaver-6": ["computability", "computation"],
+  "kpz-2plus1-exponents": ["statistical-physics", "kpz"],
+  "kpz-upper-critical-dimension": ["statistical-physics", "kpz"],
+  "turbulence-intermittency": ["fluid-dynamics", "turbulence"],
+  "fqhe-five-halves": ["condensed-matter", "quantum-hall"],
+  "extended-states-anderson": ["condensed-matter", "localization", "mathematical-physics"],
+  "heisenberg-ferromagnet-order": ["statistical-physics", "mathematical-physics"],
+  "bose-einstein-condensation": ["mathematical-physics", "quantum-gases"],
+  "early-dark-energy": ["cosmology", "hubble-tension"],
+  "distance-ladder-systematics": ["cosmology", "hubble-tension"],
+  "s8-tension": ["cosmology", "s8-tension"],
+  "cosmological-lithium": ["cosmology", "nucleosynthesis"],
+  "evolving-dark-energy": ["cosmology", "dark-energy"],
+  "neutron-lifetime": ["particle-physics", "anomalies"],
+  "w-boson-mass": ["particle-physics", "anomalies"],
+  "gallium-anomaly": ["neutrino-physics", "anomalies"],
 };
 
 /**
@@ -964,8 +953,11 @@ export async function seedHostLabs(db: Db, log: (msg: string) => void = () => {}
     log(`Sala ${lab.slug} (${lab.lifecycle}): ${{ created: "creada", renamed: `renombrada (antes ${previousSlug})`, updated: "al día" }[action]}`);
     if (lab.lifecycle !== "active") continue;
     for (const p of HOST_PROBLEMS[lab.slug] ?? []) {
-      const { created } = await ensureProblem(db, lab.slug, p, { refresh: true });
+      const { created } = await ensureProblem(db, lab.slug, { ...p, tags: p.tags ?? HOST_PROBLEM_TAGS[p.slug] }, { refresh: true });
       if (created) log(`  problema ${p.slug}: creado`);
+    }
+    for (const slug of RETIRED_HOST_PROBLEMS[lab.slug] ?? []) {
+      if (await archiveEmptyHostProblem(db, lab.slug, slug)) log(`  problema ${slug}: archivado (hilo general vacío)`);
     }
   }
 }

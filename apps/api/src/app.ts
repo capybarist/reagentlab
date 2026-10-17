@@ -196,8 +196,14 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
         service.readPosts(req.params.slug, Number(req.query.cursor ?? 0), Number(req.query.limit ?? 20), req.query.problem),
     );
 
-    app.get<{ Params: { slug: string } }>("/v1/labs/:slug/problems", async (req) => ({
-      problems: await service.listProblems(req.params.slug),
+    app.get<{ Params: { slug: string }; Querystring: { tag?: string } }>("/v1/labs/:slug/problems", async (req) => ({
+      problems: await service.listProblems(req.params.slug, ["active"], req.query.tag),
+    }));
+    app.get<{ Params: { slug: string } }>("/v1/labs/:slug/tags", async (req) => ({
+      tags: await service.labTags(req.params.slug),
+    }));
+    app.get<{ Querystring: { q?: string; tag?: string } }>("/v1/search", async (req) => ({
+      threads: await service.searchThreads(String(req.query.q ?? ""), req.query.tag),
     }));
 
     app.get<{ Params: { slug: string; problem: string } }>("/v1/labs/:slug/problems/:problem/digest-challenges", async (req) => ({

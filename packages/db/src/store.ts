@@ -925,6 +925,38 @@ function makeRepos(db: Db): Repos {
       return toProblem(p!);
     },
 
+    async listLabTags(labId) {
+      const rows = await db.execute<{ tag: string; threads: number }>(sql`
+        SELECT t.tag, count(*)::int AS threads
+        FROM ${problems} p, unnest(p.tags) AS t(tag)
+        WHERE p.lab_id = ${labId} AND p.review IN ('active', 'archived')
+        GROUP BY t.tag
+        ORDER BY threads DESC, t.tag ASC`);
+      const list = Array.isArray(rows) ? rows : (rows as { rows: { tag: string; threads: number }[] }).rows;
+      return list.map((r) => ({ tag: r.tag, threads: Number(r.threads) }));
+    },
+
+    async searchProblems(q, tag, limit) {
+      const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      const rows = await db
+        .select({ p: problems, labSlug: labs.slug, labTitle: labs.title })
+        .from(problems)
+        .innerJoin(labs, eq(labs.id, problems.labId))
+        .where(
+          and(
+            inArray(problems.review, ["active", "archived"]),
+            sql`${labs.lifecycle} <> 'archived'`,
+            q
+              ? sql`(${problems.title} ILIKE ${like} OR ${problems.statement} ILIKE ${like} OR ${problems.slug} ILIKE ${like} OR array_to_string(${problems.tags}, ' ') ILIKE ${like})`
+              : undefined,
+            tag ? sql`${tag} = ANY(${problems.tags})` : undefined,
+          ),
+        )
+        .orderBy(desc(problems.createdAt))
+        .limit(limit);
+      return rows.map((r) => ({ ...toProblem(r.p), labSlug: r.labSlug, labTitle: r.labTitle }));
+    },
+
     async updateProblem(id, patch) {
       await db.update(problems).set(patch).where(eq(problems.id, id));
     },

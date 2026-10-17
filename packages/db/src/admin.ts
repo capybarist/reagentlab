@@ -372,7 +372,7 @@ export async function ensureLab(
 export async function ensureProblem(
   db: Db,
   labSlug: string,
-  p: { slug: string; title: string; statement: string; sourceUrl?: string },
+  p: { slug: string; title: string; statement: string; sourceUrl?: string; tags?: string[] },
   opts: { refresh?: boolean } = {},
 ) {
   return db.transaction(async (tx) => {
@@ -382,9 +382,15 @@ export async function ensureProblem(
     if (existing) {
       // Solo se ponen al día los textos de problemas del host, nunca los propuestos por alguien.
       if (!opts.refresh || existing.proposedByUserId) return { problem: existing, created: false };
+      // Los tags solo se ponen si el hilo no tiene: un administrador puede haberlos cambiado (ADR-0038).
       const [problem] = await tx
         .update(problems)
-        .set({ title: p.title, statement: p.statement, sourceUrl: p.sourceUrl ?? null })
+        .set({
+          title: p.title,
+          statement: p.statement,
+          sourceUrl: p.sourceUrl ?? null,
+          ...(p.tags?.length && !existing.tags.length ? { tags: p.tags } : {}),
+        })
         .where(eq(problems.id, existing.id))
         .returning();
       await tx
@@ -395,7 +401,7 @@ export async function ensureProblem(
     }
     const [problem] = await tx
       .insert(problems)
-      .values({ labId: lab.id, slug: p.slug, title: p.title, statement: p.statement, sourceUrl: p.sourceUrl ?? null })
+      .values({ labId: lab.id, slug: p.slug, title: p.title, statement: p.statement, sourceUrl: p.sourceUrl ?? null, tags: p.tags ?? [] })
       .returning();
     await tx.insert(digests).values({
       labId: lab.id,
@@ -405,6 +411,29 @@ export async function ensureProblem(
       basedOnSeq: lab.nextSeq - 1,
     });
     return { problem: problem!, created: true };
+  });
+}
+
+/**
+ * Archiva un hilo del host que ya no se siembra (ADR-0038), solo si sigue activo, es del host
+ * y no tiene posts. Devuelve `true` si lo ha archivado.
+ */
+export async function archiveEmptyHostProblem(db: Db, labSlug: string, problemSlug: string) {
+  return db.transaction(async (tx) => {
+    const [lab] = await tx.select().from(labs).where(eq(labs.slug, labSlug));
+    if (!lab) return false;
+    const [p] = await tx.select().from(problems).where(and(eq(problems.labId, lab.id), eq(problems.slug, problemSlug)));
+    if (!p || p.review !== "active" || p.proposedByUserId) return false;
+    const [n] = await tx.select({ n: count() }).from(posts).where(eq(posts.problemId, p.id));
+    if ((n?.n ?? 0) > 0) return false;
+    await tx.update(problems).set({ review: "archived", reviewedAt: new Date() }).where(eq(problems.id, p.id));
+    await tx.insert(events).values({
+      labId: lab.id,
+      kind: "problem.archived",
+      payload: { problem: p.slug, reason: "one_question_per_thread" },
+      public: true,
+    });
+    return true;
   });
 }
 

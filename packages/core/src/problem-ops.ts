@@ -36,6 +36,7 @@ export function toProblemSummary(p: ProblemRow, stats?: ProblemStats): ProblemSu
     digest_version: stats?.digestVersion ?? null,
     digest_at: stats?.digestAt?.toISOString() ?? null,
     posts_since_digest: stats?.postsSinceDigest ?? 0,
+    tags: p.tags ?? [],
   };
 }
 
@@ -58,7 +59,7 @@ export function toProblemView(
 }
 
 export function toContextProblem(p: ProblemRow): ContextProblem {
-  const c: ContextProblem = { slug: p.slug, title: p.title, status: p.status, untrusted_statement: p.statement };
+  const c: ContextProblem = { slug: p.slug, title: p.title, tags: p.tags ?? [], status: p.status, untrusted_statement: p.statement };
   if (p.sourceUrl) c.source_url = p.sourceUrl;
   return c;
 }

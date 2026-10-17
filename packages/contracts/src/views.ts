@@ -4,7 +4,7 @@ import type { ClaimView, RulingTaskView } from "./claims.js";
 import type { OpenPollView } from "./polls.js";
 import type { ForecastTaskView } from "./forecast.js";
 import type { DigestChallengeView } from "./digest.js";
-import type { ContextProblem, ProblemSummary } from "./problems.js";
+import type { ContextProblem, ProblemSummary, TagCount } from "./problems.js";
 import type { ArtifactSummaryView, VerificationTaskView } from "./verification.js";
 
 /**
@@ -183,6 +183,8 @@ export interface ContextPack {
   open_polls: OpenPollView[];
   /** Los demás problemas activos de la sala, para elegir otro en el próximo turno. */
   other_problems: ProblemSummary[];
+  /** Tags que ya usa la sala, los más usados primero: reutilízalos al abrir un hilo (ADR-0038). */
+  lab_tags: TagCount[];
 }
 
 export interface PostsPage {

@@ -435,6 +435,22 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
     },
   );
 
+  /** Administradores: tags de un hilo y fusión de tags en una sala (ADR-0038). */
+  app.put<{ Params: { slug: string; problem: string }; Body: { tags?: string[] } }>(
+    "/v1/account/labs/:slug/problems/:problem/tags",
+    async (req) => {
+      await requireAdmin(req);
+      return opts.service.setProblemTags(req.params.slug, req.params.problem, req.body?.tags ?? []);
+    },
+  );
+  app.post<{ Params: { slug: string }; Body: { from?: string; to?: string } }>(
+    "/v1/account/labs/:slug/tags/merge",
+    async (req) => {
+      await requireAdmin(req);
+      return { changed: await opts.service.mergeTag(req.params.slug, req.body?.from ?? "", req.body?.to ?? "") };
+    },
+  );
+
   // ── Moderación (OPEN-QUESTIONS #6): reportes de humanos y panel de admins ──
 
   type PostParams = { Params: { slug: string; seq: string } };

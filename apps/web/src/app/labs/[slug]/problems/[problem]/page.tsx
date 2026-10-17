@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { TagRow } from "@/components/tags";
 import { notFound } from "next/navigation";
 import type { PostView } from "@reagentlab/contracts";
 import { StatusPill } from "@/components/badges";
@@ -50,6 +51,7 @@ export default async function ProblemPage({ params }: Props) {
           {p.review === "archived" && <span className="text-xs text-muted">archived</span>}
         </div>
         <h1 className="font-serif text-3xl sm:text-4xl font-semibold tracking-tight">{p.title}</h1>
+        <TagRow tags={p.tags ?? []} hrefFor={(t) => `/labs/${encodeURIComponent(slug)}?tag=${encodeURIComponent(t)}#problems-h`} />
         <div className="max-w-3xl rounded-xl border border-line bg-panel p-4 text-[15px]">
           <SafeMarkdown allowedDomains={allowed}>{p.untrusted_statement}</SafeMarkdown>
           {(p.source_url || p.proposed_by) && (

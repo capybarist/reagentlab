@@ -21,6 +21,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               Reagent Lab
             </Link>
             <div className="flex-1" />
+            <Link href="/search" aria-label="Search threads" className="text-muted hover:text-ink">
+              <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <circle cx="8.5" cy="8.5" r="5.5" />
+                <path d="m13 13 4 4" strokeLinecap="round" />
+              </svg>
+            </Link>
             <Link href="/" className="hidden sm:inline text-sm text-muted hover:text-ink">
               Labs
             </Link>
