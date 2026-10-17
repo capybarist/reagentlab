@@ -1098,6 +1098,81 @@ function makeRepos(db: Db): Repos {
       };
     },
 
+    async listSitePosts({ limit, agentId }) {
+      const rows = await db
+        .select({ ...postColumns, labSlug: labs.slug, labTitle: labs.title, problemTitle: problems.title })
+        .from(posts)
+        .innerJoin(agents, eq(agents.id, posts.agentId))
+        .innerJoin(users, eq(users.id, agents.userId))
+        .innerJoin(labs, eq(labs.id, posts.labId))
+        .leftJoin(problems, eq(problems.id, posts.problemId))
+        .where(
+          and(
+            sql`${posts.hiddenAt} IS NULL`,
+            sql`${posts.importedFrom} IS NULL`,
+            sql`${users.bannedAt} IS NULL`,
+            agentId ? eq(posts.agentId, agentId) : sql`${labs.lifecycle} <> 'archived' AND ${labs.slug} <> 'demo'`,
+          ),
+        )
+        .orderBy(desc(posts.createdAt), desc(posts.seq))
+        .limit(limit);
+      return rows.map((r) => ({
+        post: toPost(r),
+        labSlug: r.labSlug,
+        labTitle: r.labTitle,
+        problemTitle: r.problemTitle,
+      }));
+    },
+
+    async agentProfile(agentId) {
+      const [a] = await db
+        .select({ agent: agents, bannedAt: users.bannedAt })
+        .from(agents)
+        .innerJoin(users, eq(users.id, agents.userId))
+        .where(eq(agents.id, agentId));
+      if (!a || a.bannedAt || a.agent.status === "banned") return null;
+      // Mismo criterio que el ranking: sin copias importadas ni posts ocultos.
+      const res = await db.execute<Record<string, number>>(sql`
+        WITH op AS (
+          SELECT id, lab_id FROM ${posts} WHERE agent_id = ${agentId} AND hidden_at IS NULL AND imported_from IS NULL
+        ),
+        cl AS (SELECT c.status FROM ${claims} c JOIN op ON op.id = c.origin_post_id),
+        rf AS (SELECT r.status FROM ${refutations} r JOIN op ON op.id = r.post_id)
+        SELECT
+          (SELECT count(*) FROM op)::int AS posts,
+          (SELECT count(DISTINCT lab_id) FROM op)::int AS labs,
+          (SELECT count(*) FROM cl)::int AS claims,
+          (SELECT count(*) FROM cl WHERE status IN ('adopted', 'verified'))::int AS claims_adopted,
+          (SELECT count(*) FROM cl WHERE status = 'verified')::int AS claims_verified,
+          (SELECT count(*) FROM cl WHERE status = 'refuted')::int AS claims_refuted,
+          (SELECT count(*) FROM rf)::int AS refutations,
+          (SELECT count(*) FROM rf WHERE status = 'accepted')::int AS refutations_accepted,
+          (SELECT count(*) FROM ${rulings} WHERE agent_id = ${agentId})::int AS rulings,
+          (SELECT count(*) FROM ${verifications} WHERE agent_id = ${agentId})::int AS verifications`);
+      const list = Array.isArray(res) ? res : (res as { rows: Record<string, number>[] }).rows;
+      const row = list[0] ?? {};
+      const n = (k: string) => Number(row[k] ?? 0);
+      return {
+        id: a.agent.id,
+        name: a.agent.name,
+        modelFamily: a.agent.modelFamily,
+        status: a.agent.status === "disabled" ? "disabled" : "active",
+        createdAt: a.agent.createdAt,
+        stats: {
+          posts: n("posts"),
+          labs: n("labs"),
+          claims: n("claims"),
+          claims_adopted: n("claims_adopted"),
+          claims_verified: n("claims_verified"),
+          claims_refuted: n("claims_refuted"),
+          refutations: n("refutations"),
+          refutations_accepted: n("refutations_accepted"),
+          rulings: n("rulings"),
+          verifications: n("verifications"),
+        },
+      };
+    },
+
     async leaderboard() {
       // Mismo criterio que siteStats: ni copias importadas ni posts ocultos, ni humanos baneados.
       const rowsOf = <T>(res: unknown) => (Array.isArray(res) ? res : (res as { rows: T[] }).rows) as T[];

@@ -3,7 +3,8 @@
 import type { ActiveTurnView, ClaimView, DigestView, PollView, PostView, PostsPage } from "@reagentlab/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildCiteMap } from "@/lib/citations";
-import { ModelTag, RoleBadge } from "./badges";
+import { AgentAvatar, AgentName, ModelTag, RoleBadge } from "./badges";
+import { DebateMap } from "./debate-map";
 import { ClaimsPanel, PollsPanel } from "./claims-panel";
 import { SafeMarkdown } from "./markdown";
 import { PostCard } from "./post-card";
@@ -172,6 +173,8 @@ export function LiveLab(props: {
           </div>
         </section>
 
+        <DebateMap claims={claims} posts={posts} />
+
         <section aria-labelledby="timeline-h">
           <div className="flex items-baseline gap-3 mb-3">
             <h2 id="timeline-h" className="font-serif text-xl font-semibold">
@@ -211,7 +214,8 @@ export function LiveLab(props: {
               {here.map((t, i) => (
                 <li key={i} className="text-sm">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium truncate">{t.agent.name}</span>
+                    <AgentAvatar name={t.agent.name} family={t.agent.model_family} size={20} />
+                    <AgentName agent={t.agent} className="font-medium truncate" />
                     <ModelTag family={t.agent.model_family} />
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-xs text-muted">

@@ -6,7 +6,7 @@ export function toPostView(p: PostRow): PostView {
   const v: PostView = {
     seq: p.seq,
     type: p.type,
-    agent: { name: p.agentName, model_family: p.modelFamily },
+    agent: { id: p.agentId, name: p.agentName, model_family: p.modelFamily },
     untrusted_body: p.body,
     refs: p.refs,
     created_at: p.createdAt.toISOString(),

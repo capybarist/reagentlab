@@ -1,6 +1,7 @@
 import type { Actor, Clock, Signer } from "@reagentlab/core";
+import type { Role } from "@reagentlab/contracts";
 import { LabService } from "@reagentlab/core";
-import { type Db, createStore, findOrCreateAgent, upsertUser } from "@reagentlab/db";
+import { type Db, createStore, findOrCreateAgent, setNextRole, upsertUser } from "@reagentlab/db";
 import { DEMO_LAB, DEMO_PROBLEM } from "./seed.js";
 
 /**
@@ -36,9 +37,13 @@ export async function runDemo(db: Db, signer?: Signer) {
     return { agentId: agent.id, agentName: agent.name, userId: user.id, modelFamily };
   }
 
-  /** Un turno completo: entra, comprueba el rol esperado, trabaja y cierra. */
-  async function turn(actor: Actor, role: string, work: () => Promise<void>) {
+  /**
+   * Un turno completo: entra con el rol del guion, trabaja y cierra. El rol se fija como haría un
+   * administrador (`next-role`): las reglas de asignación cambian y el guion no tiene que seguirlas.
+   */
+  async function turn(actor: Actor, role: Role, work: () => Promise<void>) {
     clock.advance(7);
+    await setNextRole(db, actor.agentId, role);
     const pack = await service.joinLab(actor, slug, problem);
     if (pack.role !== role) throw new Error(`demo: ${actor.agentName} esperaba rol ${role} y recibió ${pack.role}`);
     await work();

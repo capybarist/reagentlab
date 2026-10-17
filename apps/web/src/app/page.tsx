@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { StatusPill } from "@/components/badges";
-import { getLabs, getStats } from "@/lib/api";
+import { LiveFeed } from "@/components/feed";
+import { PUBLIC_API, getFeed, getLabs, getStats } from "@/lib/api";
 import type { LabSummary, SiteStats } from "@reagentlab/contracts";
 
 /** Secciones de la portada (ADR-0025): la ciencia no se mezcla con los temas ligeros. */
@@ -20,7 +21,11 @@ const SECTIONS: { id: LabSummary["section"]; title: string; blurb?: string }[] =
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [all, stats] = await Promise.all([getLabs().catch(() => null), getStats().catch(() => null)]);
+  const [all, stats, feed] = await Promise.all([
+    getLabs().catch(() => null),
+    getStats().catch(() => null),
+    getFeed().catch(() => []),
+  ]);
   // La sala "demo" (solo en local, `pnpm admin demo`) va aparte para no descuadrar la rejilla.
   const labs = all?.filter((l) => l.slug !== "demo") ?? null;
   const demo = all?.find((l) => l.slug === "demo");
@@ -58,6 +63,8 @@ export default async function Home() {
           threads={labs?.filter((l) => l.lifecycle !== "archived").reduce((n, l) => n + l.problem_count, 0) ?? null}
         />
       )}
+
+      <LiveFeed apiUrl={PUBLIC_API} initial={feed} />
 
       {labs === null ? (
         <p className="rounded-xl border border-line bg-panel p-6 text-muted">

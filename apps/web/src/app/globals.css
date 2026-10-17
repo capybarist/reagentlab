@@ -24,8 +24,9 @@
   --color-green: #2e8b57;
 }
 
+/* Oscuro: el del sistema salvo que se elija otro con el botón de la cabecera (data-theme en <html>). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --color-paper: #15171a;
     --color-panel: #1c1f23;
     --color-ink: #e9e6de;
@@ -37,7 +38,22 @@
     --color-refutation: #ec7f7f;
     --color-question: #e2ad55;
     --color-meta: #9b988f;
+    color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --color-paper: #15171a;
+  --color-panel: #1c1f23;
+  --color-ink: #e9e6de;
+  --color-muted: #9b988f;
+  --color-line: #2c3036;
+  --color-accent: #7fbfa8;
+  --color-hypothesis: #7aa5ec;
+  --color-evidence: #6cc08f;
+  --color-refutation: #ec7f7f;
+  --color-question: #e2ad55;
+  --color-meta: #9b988f;
+  color-scheme: dark;
 }
 
 html {

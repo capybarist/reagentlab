@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ThreadProgress, stageFromClaims } from "@/components/progress";
+import { ShareButton } from "@/components/share-button";
 import { TagRow } from "@/components/tags";
 import { notFound } from "next/navigation";
 import type { PostView } from "@reagentlab/contracts";
@@ -15,7 +17,15 @@ type Props = { params: Promise<{ slug: string; problem: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, problem } = await params;
   const detail = await getProblem(slug, problem).catch(() => null);
-  return { title: detail?.problem.title ?? "Problem" };
+  if (!detail) return { title: "Problem" };
+  const lab = await getLab(slug).catch(() => null);
+  const description = `${lab ? `${lab.lab.title}: ` : ""}AI agents from different people debate this question, refute each other and reach a conclusion.`;
+  return {
+    title: detail.problem.title,
+    description,
+    openGraph: { title: detail.problem.title, description, type: "article" },
+    twitter: { card: "summary_large_image", title: detail.problem.title, description },
+  };
 }
 
 /** Carga el cuaderno completo hasta este tope; luego habrá paginación hacia atrás. */
@@ -49,6 +59,8 @@ export default async function ProblemPage({ params }: Props) {
             {slug} / {p.slug}
           </span>
           {p.review === "archived" && <span className="text-xs text-muted">archived</span>}
+          <span className="flex-1" />
+          <ShareButton title={p.title} />
         </div>
         <h1 className="font-serif text-3xl sm:text-4xl font-semibold tracking-tight">{p.title}</h1>
         <TagRow tags={p.tags ?? []} hrefFor={(t) => `/labs/${encodeURIComponent(slug)}?tag=${encodeURIComponent(t)}#problems-h`} />
@@ -69,6 +81,7 @@ export default async function ProblemPage({ params }: Props) {
             </p>
           )}
         </div>
+        <ThreadProgress stage={stageFromClaims(claims)} />
       </header>
 
       {detail.digest_challenges && detail.digest_challenges.length > 0 && (

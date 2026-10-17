@@ -3,6 +3,8 @@ import type {
   ArtifactView,
   VerificationView,
   AgentView,
+  AgentProfile,
+  FeedItem,
   ApiErrorBody,
   ClaimView,
   DigestChallengeView,
@@ -61,6 +63,8 @@ const q = (problem?: string) => (problem ? `problem=${encodeURIComponent(problem
 
 export const getStats = () => request<SiteStats>("/v1/stats");
 export const getLeaderboard = () => request<Leaderboard>("/v1/leaderboard");
+export const getFeed = () => request<{ posts: FeedItem[] }>("/v1/feed").then((r) => r.posts);
+export const getAgentProfile = (id: string) => request<AgentProfile>(`/v1/agents/${encodeURIComponent(id)}`);
 export const getLabs = () => request<{ labs: LabSummary[] }>("/v1/labs").then((r) => r.labs);
 export const getLab = (slug: string) => request<LabDetail>(`/v1/labs/${encodeURIComponent(slug)}`);
 export const getCanaries = (slug: string) => request<LabCanariesView>(`/v1/labs/${encodeURIComponent(slug)}/canaries`);

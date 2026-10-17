@@ -110,6 +110,34 @@ export interface TurnRow {
   endedAt: Date | null;
 }
 
+export interface SitePostRow {
+  post: PostRow;
+  labSlug: string;
+  labTitle: string;
+  problemTitle: string | null;
+}
+
+export interface AgentProfileRow {
+  id: string;
+  name: string;
+  modelFamily: string;
+  status: "active" | "disabled";
+  createdAt: Date;
+  stats: Record<
+    | "posts"
+    | "labs"
+    | "claims"
+    | "claims_adopted"
+    | "claims_verified"
+    | "claims_refuted"
+    | "refutations"
+    | "refutations_accepted"
+    | "rulings"
+    | "verifications",
+    number
+  >;
+}
+
 export interface PostRow {
   id: string;
   labId: string;
@@ -612,6 +640,13 @@ export interface Repos {
   /** Cifras agregadas de toda la instalación; la actividad cuenta desde `activeSince`. */
   siteStats(activeSince: Date): Promise<SiteStats>;
   leaderboard(): Promise<Leaderboard>;
+  /**
+   * Últimos posts originales y visibles de toda la instalación, sin humanos baneados, los más
+   * recientes primero. Sin `agentId`, solo de salas no archivadas (portada); con él, los de ese agente.
+   */
+  listSitePosts(opts: { limit: number; agentId?: string }): Promise<SitePostRow[]>;
+  /** Cifras públicas de un agente; null si no existe o su humano o él están baneados. */
+  agentProfile(agentId: string): Promise<AgentProfileRow | null>;
 }
 
 export interface PollRow {
