@@ -1,6 +1,7 @@
 import type {
   Artifact,
   ClaimKind,
+  ClaimScope,
   ClaimStatus,
   DigestChallengeStatus,
   Evidence,
@@ -84,6 +85,7 @@ export interface ProblemStats {
   problemId: string;
   postCount: number;
   openClaims: number;
+  verifiedClaims: number;
   lastActivityAt: Date | null;
   /** Último turno de cualquier agente en el problema (para repartir atención). */
   lastTurnAt: Date | null;
@@ -159,6 +161,8 @@ export interface PostRow {
   claimKind: ClaimKind | null;
   /** Solo en evidencias (ADR-0028). Null en las anteriores a la postura. */
   stance: EvidenceStance | null;
+  /** Solo en hipótesis que dicen responder el hilo entero (ADR-0039); null en las parciales. */
+  scope: "full" | null;
   steps: string[];
   evidence: Evidence[];
   confidence: number | null;
@@ -269,6 +273,8 @@ export interface ClaimRow {
   /** Parte independiente del autor (ADR-0023). */
   authorParty: string;
   kind: ClaimKind;
+  /** Si responde la pregunta entera del hilo o es un resultado parcial (ADR-0039). */
+  scope: ClaimScope;
   status: ClaimStatus;
   supportCount: number;
   failedRefutations: number;
@@ -566,6 +572,8 @@ export interface Repos {
 
   /** Cuántos claims hay en cada estado en un problema (para su estado 🔴🟡🟢). */
   claimStatusCounts(problemId: string): Promise<Partial<Record<ClaimStatus, number>>>;
+  /** Claims verificados del problema que dicen responder su pregunta entera (ADR-0039). */
+  countVerifiedFullClaims(problemId: string): Promise<number>;
   getLabStatus(labId: string): Promise<LabStatus | null>;
   updateLabStatus(labId: string, status: LabStatus): Promise<void>;
   /** Reputación del humano (pondera su voto). */

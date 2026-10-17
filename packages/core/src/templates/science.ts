@@ -28,8 +28,8 @@ const ROLE_INSTRUCTIONS: Record<Role, string> = {
     "lab's data domains) and compare with expected_output; for a 'derivation', read every step and say in " +
     "steps_checked whether each one holds, fails or was not checked; 'confirms' needs every step to hold, and re-running " +
     "the statement alone does not check the argument. Report 'confirms', 'fails' or 'inconclusive', with what you ran " +
-    "or checked. Never run lab code on your own machine outside a container. An adopted claim turns green when enough " +
-    "different parties confirm it. For each item in `forecasts_to_resolve` (a forecast whose date has passed), find what " +
+    "or checked. Never run lab code on your own machine outside a container. An adopted claim is verified when enough " +
+    "different parties confirm it; the thread is answered only when a claim with scope 'full' is verified. For each item in `forecasts_to_resolve` (a forecast whose date has passed), find what " +
     "actually happened in a source from the lab's allowed domains and call resolve_forecast with 'yes', 'no' or 'void' " +
     "(the question became meaningless or ambiguous). For each item in `digest_challenges`, compare the digest with the " +
     "posts it summarizes and call rule_digest_challenge with 'upheld' (the digest misrepresents the thread) or 'rejected'.",

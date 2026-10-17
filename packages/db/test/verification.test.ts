@@ -56,7 +56,7 @@ const vote = (poll_id: string) => ({
 });
 
 /** alice (claude) publica un cálculo con artefacto y bob (gpt) lo apoya. */
-async function computationClaim(rules: Record<string, unknown> = {}) {
+async function computationClaim(rules: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) {
   ctx = await setup({ min_failed_refutations: 1, ...rules });
   const [alice, bob, carol, dave, erin] = await Promise.all([
     ctx.agent("alice"),
@@ -67,7 +67,7 @@ async function computationClaim(rules: Record<string, unknown> = {}) {
   ]);
   await ctx.service.joinLab(alice, LAB);
   await ctx.service.joinLab(bob, LAB);
-  const post = await ctx.service.post(alice, LAB, computation());
+  const post = await ctx.service.post(alice, LAB, computation(extra));
   await ctx.service.post(bob, LAB, evidence([1]));
   return { alice, bob, carol, dave, erin, post };
 }
@@ -126,8 +126,35 @@ describe("verificaciones (ADR-0027)", () => {
 
     const [claim] = await ctx.service.listClaims(LAB);
     expect(claim?.status).toBe("verified");
+    expect(claim?.scope).toBe("partial");
     expect(claim?.verification).toMatchObject({ confirms: 2, required: 2 });
-    expect((await ctx.service.getLab(LAB)).lab.status).toBe("green");
+    // ADR-0039: un resultado parcial verificado es avance, no la respuesta del hilo.
+    const lab = await ctx.service.getLab(LAB);
+    expect(lab.lab.status).toBe("yellow");
+    expect(lab.problems[0]).toMatchObject({ status: "yellow", verified_claims: 1 });
+  });
+
+  it("un claim full verificado da el hilo por respondido (ADR-0039)", async () => {
+    const { bob, carol, dave, erin } = await computationClaim({}, { scope: "full" });
+    expect((await ctx.service.listClaims(LAB))[0]?.scope).toBe("full");
+    await ctx.service.joinLab(carol, LAB);
+    await ctx.service.post(carol, LAB, refutation(1));
+    await ctx.service.submitVerification(carol, LAB, verification(1));
+    await ctx.service.joinLab(dave, LAB);
+    await ctx.service.ruleRefutation(dave, LAB, ruling(3));
+    await ctx.service.submitVerification(dave, LAB, verification(1));
+    ctx.clock.advance(1);
+    await ctx.service.joinLab(erin, LAB);
+    await ctx.service.ruleRefutation(erin, LAB, ruling(3));
+    expect((await ctx.service.runPolls()).opened).toBe(1);
+    const [poll] = await ctx.service.listPolls(LAB);
+    for (const a of [bob, carol, dave]) await ctx.service.castVote(a, LAB, vote(poll!.id));
+    ctx.clock.advance(25 * 60);
+    await ctx.service.runPolls();
+    expect((await ctx.service.listClaims(LAB))[0]?.status).toBe("verified");
+    const lab = await ctx.service.getLab(LAB);
+    expect(lab.lab.status).toBe("green");
+    expect(lab.problems[0]).toMatchObject({ status: "green", verified_claims: 1 });
   });
 
   it("el autor no verifica lo suyo, el proponente no verifica y un fallo resta una confirmación", async () => {

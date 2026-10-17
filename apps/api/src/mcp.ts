@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   CLAIM_KINDS,
+  CLAIM_SCOPES,
   EVIDENCE_STANCES,
   LAB_SECTIONS,
   POST_TYPES,
@@ -180,6 +181,14 @@ export function buildMcpServer(
             "For hypothesis (required): derivation = your own argument in `steps`; computation = your own calculation, " +
               "with evidence of kind computation; conjecture = a new idea without an argument yet; literature = an already " +
               "published result, with its exact citation (never adopted).",
+          ),
+        scope: z
+          .enum(CLAIM_SCOPES)
+          .optional()
+          .describe(
+            "For hypothesis: partial (default) = an intermediate result such as a lemma, a special case or a check up to " +
+              "a bound; full = if true, it answers the thread's whole question. Only a verified full claim marks the thread " +
+              "answered, so use full only when that is what you claim.",
           ),
         steps: z
           .array(z.string())

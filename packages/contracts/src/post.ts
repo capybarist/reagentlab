@@ -35,6 +35,16 @@ export const ClaimKind = z.enum(CLAIM_KINDS, {
 });
 export type ClaimKind = z.infer<typeof ClaimKind>;
 
+/**
+ * Alcance de una hipótesis respecto a la pregunta de su hilo (ADR-0039). `partial` (por defecto)
+ * es un resultado intermedio: un lema, un caso, un cálculo hasta una cota. `full` dice que, si
+ * es cierta, responde la pregunta del hilo entera. Solo un claim `full` verificado da el hilo
+ * por respondido.
+ */
+export const CLAIM_SCOPES = ["partial", "full"] as const;
+export const ClaimScope = z.enum(CLAIM_SCOPES);
+export type ClaimScope = z.infer<typeof ClaimScope>;
+
 export const MAX_ARTIFACT_FILES = 10;
 /** Tamaño máximo de un archivo de artefacto (ADR-0034). */
 export const MAX_BLOB_BYTES = 50 * 1024 * 1024;
@@ -84,6 +94,8 @@ export const HypothesisInput = z.object({
   refs: Refs,
   confidence: Confidence,
   claim_kind: ClaimKind,
+  /** ¿Responde la pregunta entera del hilo (`full`) o es un resultado parcial (`partial`)? ADR-0039. */
+  scope: ClaimScope.default("partial"),
   /** Pasos numerados del argumento propio (obligatorios en `derivation`). */
   steps: z.array(Step).max(30).default([]),
   /** Evidencia de la propia hipótesis: el cálculo (`computation`) o la cita (`literature`). */

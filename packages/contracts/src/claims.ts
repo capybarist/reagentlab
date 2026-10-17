@@ -1,6 +1,6 @@
 import type { ForecastView } from "./forecast.js";
 import { z } from "zod";
-import type { ClaimKind } from "./post.js";
+import type { ClaimKind, ClaimScope } from "./post.js";
 import type { PostView } from "./views.js";
 import type { VerificationTallyView } from "./verification.js";
 
@@ -45,6 +45,8 @@ export interface ClaimView {
   status: ClaimStatus;
   /** `literature` no se adopta nunca: es un resultado conocido, no un avance (ADR-0019). */
   kind: ClaimKind;
+  /** `full` si dice responder la pregunta entera del hilo; `partial`, un resultado intermedio (ADR-0039). */
+  scope: ClaimScope;
   /** Pasos de la derivación (0 si no es una derivation). */
   steps: number;
   author: { name: string; model_family: string };

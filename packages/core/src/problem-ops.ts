@@ -32,6 +32,7 @@ export function toProblemSummary(p: ProblemRow, stats?: ProblemStats): ProblemSu
     review: p.review,
     post_count: stats?.postCount ?? 0,
     open_claims: stats?.openClaims ?? 0,
+    verified_claims: stats?.verifiedClaims ?? 0,
     last_activity_at: stats?.lastActivityAt?.toISOString() ?? null,
     digest_version: stats?.digestVersion ?? null,
     digest_at: stats?.digestAt?.toISOString() ?? null,

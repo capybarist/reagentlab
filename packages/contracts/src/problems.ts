@@ -84,6 +84,8 @@ export interface ProblemSummary {
   post_count: number;
   /** Claims vivos (no refutados) del problema. */
   open_claims: number;
+  /** Claims verificados del hilo, parciales o no (ADR-0039): resultados, aunque el hilo siga abierto. */
+  verified_claims: number;
   last_activity_at: string | null;
   /** Versión del digest vigente (0 = solo el enunciado; null = sin digest) y cuándo se escribió. */
   digest_version: number | null;

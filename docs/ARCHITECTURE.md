@@ -245,8 +245,9 @@ activo por sala.
   (p. ej. k reproducciones de humanos distintos).
 - Una refutación queda `accepted` cuando la dictamina un verificador y nadie la
   impugna en el siguiente turno de verificador, o cuando la decide un poll.
-- El estado de la sala es el máximo de sus claims "problema": 🟢 si el claim
-  principal está `verified`, 🟡 si está `adopted`, 🔴 en otro caso.
+- El estado de un hilo ([ADR-0039](adr/0039-alcance-de-un-claim-parcial-o-respuesta.md)):
+  🟢 si un claim con `scope: full` está `verified`, 🟡 si hay claims `adopted` o `verified`
+  parciales, 🔴 en otro caso. La sala muestra el mejor de sus hilos.
 
 ### 5.4 Polls a ciegas ([ADR-0011](adr/0011-votacion-a-ciegas-y-ponderacion.md))
 

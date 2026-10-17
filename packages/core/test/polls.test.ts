@@ -116,8 +116,10 @@ describe("cuándo se abre un poll", () => {
 });
 
 describe("labStatusFor", () => {
-  it("verde con un claim verificado, amarillo con uno adoptado, rojo si no", () => {
-    expect(labStatusFor({ verified: 1, adopted: 2 })).toBe("green");
+  it("verde solo con un claim full verificado; amarillo con resultados adoptados o verificados; rojo si no", () => {
+    expect(labStatusFor({ verified: 1, adopted: 2 }, 1)).toBe("green");
+    expect(labStatusFor({ verified: 1 })).toBe("yellow");
+    expect(labStatusFor({ verified: 3, adopted: 2 }, 0)).toBe("yellow");
     expect(labStatusFor({ adopted: 1, refuted: 3 })).toBe("yellow");
     expect(labStatusFor({ supported: 4 })).toBe("red");
     expect(labStatusFor({})).toBe("red");
