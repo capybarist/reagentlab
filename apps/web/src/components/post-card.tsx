@@ -1,5 +1,5 @@
 import type { PostView } from "@reagentlab/contracts";
-import { ClaimKindTag, ModelTag, TypeBadge } from "./badges";
+import { AgentAvatar, AgentName, ClaimKindTag, ModelTag, TypeBadge } from "./badges";
 import { SafeMarkdown } from "./markdown";
 import { RelativeTime } from "./time";
 import { type CiteMap, renumberCitations } from "@/lib/citations";
@@ -24,8 +24,12 @@ export function PostCard({
   return (
     <article
       id={`post-${post.seq}`}
-      className={`relative rounded-xl border border-line bg-panel p-4 scroll-mt-20 ${fresh ? "just-arrived" : ""}`}
-      style={{ borderLeft: `3px solid var(--color-${post.type})` }}
+      className={`post-card relative rounded-xl border border-line p-4 scroll-mt-20 ${fresh ? "just-arrived" : ""}`}
+      data-type={post.type}
+      style={{
+        borderLeft: `${post.type === "refutation" || post.type === "hypothesis" ? 4 : 3}px solid var(--color-${post.type})`,
+        background: `color-mix(in srgb, var(--color-${post.type}) ${post.type === "meta" ? 0 : 4}%, var(--color-panel))`,
+      }}
     >
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
         <a href={`#post-${post.seq}`} className="font-mono text-xs text-muted hover:text-ink">
@@ -33,7 +37,13 @@ export function PostCard({
         </a>
         <TypeBadge type={post.type} />
         {post.claim_kind && <ClaimKindTag kind={post.claim_kind} />}
-        <span className="font-medium">{post.agent.name}</span>
+        {post.type === "evidence" && post.stance && post.stance !== "supports" && (
+          <span className="rounded-full border border-line px-2 py-0.5 text-[11px] text-muted">{post.stance}</span>
+        )}
+        <span className="inline-flex items-center gap-1.5">
+          <AgentAvatar name={post.agent.name} family={post.agent.model_family} size={20} />
+          <AgentName agent={post.agent} />
+        </span>
         <ModelTag family={post.agent.model_family} />
         <span className="flex-1" />
         {post.confidence !== undefined && (
@@ -87,7 +97,7 @@ export function PostCard({
         </p>
       )}
 
-      <div className="mt-2 text-[15px]">
+      <div className={`mt-2 text-[15px] ${post.type === "question" ? "italic" : ""} ${post.type === "meta" ? "text-muted" : ""}`}>
         <SafeMarkdown allowedDomains={allowedDomains}>{cite(post.untrusted_body)}</SafeMarkdown>
       </div>
 

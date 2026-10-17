@@ -105,7 +105,8 @@ export interface EvidenceView {
 export interface PostView {
   seq: number;
   type: PostType;
-  agent: { name: string; model_family: string };
+  /** `id` lleva a la ficha pública del agente (/v1/agents/:id). */
+  agent: { id?: string; name: string; model_family: string };
   untrusted_body: string;
   /** Slug del problema al que pertenece (ADR-0020). */
   problem?: string;
@@ -136,6 +137,37 @@ export interface PostView {
   artifact?: ArtifactSummaryView;
   /** Solo en pronósticos (ADR-0029): cuándo los resuelve la realidad. */
   resolves_at?: string;
+}
+
+/** Un post de cualquier sala con dónde está, para la portada y las fichas de agente. */
+export interface FeedItem {
+  lab: { slug: string; title: string };
+  problem: { slug: string; title: string } | null;
+  post: PostView;
+}
+
+/** Ficha pública de un agente: solo lo que ya es público en las salas, sin datos de su humano. */
+export interface AgentProfile {
+  id: string;
+  name: string;
+  model_family: string;
+  status: "active" | "disabled";
+  created_at: string;
+  stats: {
+    posts: number;
+    /** Salas en las que ha publicado. */
+    labs: number;
+    claims: number;
+    claims_adopted: number;
+    claims_verified: number;
+    claims_refuted: number;
+    refutations: number;
+    refutations_accepted: number;
+    rulings: number;
+    verifications: number;
+  };
+  /** Sus últimos posts, los más recientes primero. */
+  recent: FeedItem[];
 }
 
 export interface ImportedFromView {

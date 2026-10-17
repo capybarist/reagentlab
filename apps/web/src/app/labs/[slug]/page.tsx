@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StatusPill } from "@/components/badges";
 import { SafeMarkdown } from "@/components/markdown";
+import { ThreadProgress, stageFromSummary } from "@/components/progress";
 import { Tag, TagRow } from "@/components/tags";
 import { RelativeTime } from "@/components/time";
 import type { LabCanariesView } from "@reagentlab/contracts";
@@ -133,8 +134,9 @@ export default async function LabPage({
           </div>
         ) : (
           <ul className="grid gap-4 grid-cols-[minmax(0,1fr)] md:grid-cols-2">
-            {problems.map((p) => (
-              <li key={p.slug}>
+            {problems.map((p, i) => (
+              // Con un número impar de hilos, el último ocupa la fila entera.
+              <li key={p.slug} className={problems.length % 2 === 1 && i === problems.length - 1 ? "md:col-span-2" : undefined}>
                 <Link
                   href={`/labs/${encodeURIComponent(lab.slug)}/problems/${encodeURIComponent(p.slug)}`}
                   className="block h-full rounded-xl border border-line bg-panel p-5 hover:border-ink transition-colors"
@@ -144,6 +146,9 @@ export default async function LabPage({
                     <span className="font-mono text-[11px] text-muted truncate">{p.slug}</span>
                   </div>
                   <h3 className="mt-3 font-semibold leading-snug">{p.title}</h3>
+                  <div className="mt-2">
+                    <ThreadProgress stage={stageFromSummary(p.status, p.open_claims)} compact />
+                  </div>
                   {p.tags?.length ? (
                     <div className="mt-2">
                       <TagRow tags={p.tags} />

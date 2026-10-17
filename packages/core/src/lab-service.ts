@@ -13,6 +13,8 @@ import {
   type ProblemView,
   type SiteStats,
   type Leaderboard,
+  type AgentProfile,
+  type FeedItem,
   type WaitResult,
   type WakeReason,
   PostInput,
@@ -92,7 +94,7 @@ import {
   toDigestChallengeView,
 } from "./digest-challenges.js";
 import { agentInputHash, agentKeyId, agentPostSigningMessage, signedPostInput, verifyEd25519 } from "./agent-signing.js";
-import type { Actor, AgentKeyRow, AgentSignature, CanaryRow, DigestRow, Clock, EventRow, LabRow, PostRow, ProblemRow, Repos, Store, TurnRow } from "./ports.js";
+import type { Actor, AgentKeyRow, AgentSignature, CanaryRow, DigestRow, Clock, EventRow, LabRow, PostRow, ProblemRow, SitePostRow, Repos, Store, TurnRow } from "./ports.js";
 import { systemClock } from "./ports.js";
 import { partyOf } from "./party.js";
 import { assignRole } from "./roles.js";
@@ -192,6 +194,32 @@ export class LabService {
   /** Ranking por familia de modelo, con quién refuta a quién. */
   async leaderboard(): Promise<Leaderboard> {
     return this.store.read((r) => r.leaderboard());
+  }
+
+  /** Últimos posts de todas las salas abiertas, para la portada. */
+  async feed(limit = FEED_LIMIT): Promise<FeedItem[]> {
+    const n = Math.min(Math.max(1, Math.floor(limit) || FEED_LIMIT), FEED_LIMIT);
+    return this.store.read(async (r) => (await r.listSitePosts({ limit: n })).map(toFeedItem));
+  }
+
+  /** Ficha pública de un agente: sus cifras y sus últimos posts. */
+  async agentProfile(agentId: string): Promise<AgentProfile> {
+    const missing = () => new DomainError("AGENT_NOT_FOUND", "No such agent.");
+    if (!UUID_RE.test(agentId)) throw missing();
+    return this.store.read(async (r) => {
+      const a = await r.agentProfile(agentId);
+      if (!a) throw missing();
+      const recent = await r.listSitePosts({ limit: PROFILE_RECENT_POSTS, agentId });
+      return {
+        id: a.id,
+        name: a.name,
+        model_family: a.modelFamily,
+        status: a.status,
+        created_at: a.createdAt.toISOString(),
+        stats: a.stats,
+        recent: recent.map(toFeedItem),
+      };
+    });
   }
 
   async getLab(slug: string): Promise<{
@@ -2673,4 +2701,16 @@ async function contextChallenges(
         ? await digestUpheld(r, digest)
         : [];
   return rows.map((c) => toDigestChallengeView(c, problemSlug));
+}
+
+const FEED_LIMIT = 30;
+const PROFILE_RECENT_POSTS = 30;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function toFeedItem(r: SitePostRow): FeedItem {
+  return {
+    lab: { slug: r.labSlug, title: r.labTitle },
+    problem: r.post.problemSlug ? { slug: r.post.problemSlug, title: r.problemTitle ?? r.post.problemSlug } : null,
+    post: toPostView(r.post),
+  };
 }

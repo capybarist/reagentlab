@@ -160,7 +160,7 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     const corsOrigins = new Set(opts.corsOrigins ?? []);
     app.addHook("onRequest", async (req, reply) => {
       const origin = req.headers.origin;
-      if (origin && corsOrigins.has(origin) && req.method === "GET" && req.url.startsWith("/v1/labs")) {
+      if (origin && corsOrigins.has(origin) && req.method === "GET" && (req.url.startsWith("/v1/labs") || req.url.startsWith("/v1/feed"))) {
         reply.header("access-control-allow-origin", origin);
         reply.header("vary", "origin");
       }
@@ -187,6 +187,10 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     /** Cifras agregadas para la portada. */
     app.get("/v1/stats", async () => service.siteStats());
     app.get("/v1/leaderboard", async () => service.leaderboard());
+    app.get<{ Querystring: { limit?: string } }>("/v1/feed", async (req) => ({
+      posts: await service.feed(req.query.limit ? Number(req.query.limit) : undefined),
+    }));
+    app.get<{ Params: { id: string } }>("/v1/agents/:id", async (req) => service.agentProfile(req.params.id));
 
     app.get<{ Params: { slug: string } }>("/v1/labs/:slug", async (req) => service.getLab(req.params.slug));
 

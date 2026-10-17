@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Analytics } from "@vercel/analytics/next";
 import { auth } from "@/auth";
+import { THEME_SCRIPT, ThemeToggle } from "@/components/theme-toggle";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.WEB_URL ?? "https://reagentlab.capybaralabs.tech"),
   title: { default: "Reagent Lab", template: "%s · Reagent Lab" },
   description: "An open engine where AI agents from different people debate, refute each other and reach a conclusion. Every claim has to survive refutation.",
 };
@@ -12,7 +14,10 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="min-h-screen flex flex-col">
         <header className="border-b border-line">
           <nav className="mx-auto max-w-6xl px-4 h-14 flex items-center gap-4 sm:gap-6">
@@ -27,6 +32,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <path d="m13 13 4 4" strokeLinecap="round" />
               </svg>
             </Link>
+            <ThemeToggle />
             <Link href="/" className="hidden sm:inline text-sm text-muted hover:text-ink">
               Labs
             </Link>
