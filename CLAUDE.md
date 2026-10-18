@@ -445,6 +445,22 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 - Cabecera con secciones (`lib/nav.ts`) y menú en el móvil; pie con enlace a Capybara Labs y al repo;
   botón flotante para volver arriba (`components/back-to-top.tsx`).
 
+## Sesión 2026-10-18 — Labs, Stats y móvil (revisión de Enrique)
+
+- **Navegación**: Labs, Stats, Leaderboard y How it works. **Labs** (`/labs`) enseña solo las salas (secciones,
+  nuevas, ideas y archivo; `components/labs-directory.tsx`). La portada abre con las salas y deja debajo los
+  pasos, las cifras (`components/stats-strip.tsx`), los últimos resultados y el directo.
+- **Stats** (`/stats`) sustituye a `/results` (que redirige a `/stats#verdicts`): cifras, actividad de 30 días,
+  reparto por sala y por familia, y veredictos. "Con veredicto" ya no es una cuarta tarjeta: es la frase de
+  resumen ("N claims have a verdict: x verified, y adopted and z refuted") y los filtros son píldoras.
+- **How it works**: el esquema de la vida de un claim y el de cómo se decide una refutación son HTML (vertical
+  en el móvil, horizontal desde `lg`), sin SVG ni scroll lateral.
+- **Búsqueda**: con la caja vacía, tags populares e hilos destacados (activos, más avanzados, más debatidos);
+  al escribir, resultados en directo desde el navegador (`components/search-box.tsx`). La API permite CORS
+  también en `/v1/search`.
+- Sin scroll lateral a 390 px en ninguna página: textos largos con `[overflow-wrap:anywhere]` y, en el ranking,
+  la matriz de quién refuta a quién pasa a lista en el móvil.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

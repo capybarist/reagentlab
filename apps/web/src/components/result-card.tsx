@@ -43,7 +43,7 @@ export function ResultCard({ r, showPlace = true }: { r: ResultItem; showPlace?:
           <RelativeTime iso={r.updated_at} />
         </span>
       </div>
-      <Link href={resultHref(r)} className="mt-2 block text-[15px] leading-snug hover:text-accent">
+      <Link href={resultHref(r)} className="mt-2 block text-[15px] leading-snug [overflow-wrap:anywhere] hover:text-accent">
         {excerpt(c.untrusted_summary, 220)}
       </Link>
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">

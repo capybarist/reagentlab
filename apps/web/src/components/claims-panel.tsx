@@ -10,7 +10,7 @@ const CLAIM_LABEL: Record<ClaimStatus, string> = {
   refuted: "Refuted",
 };
 
-const CLAIM_COLOR: Record<ClaimStatus, string> = {
+export const CLAIM_COLOR: Record<ClaimStatus, string> = {
   open: "var(--color-muted)",
   supported: "var(--color-evidence)",
   adopted: "var(--color-yellow)",
