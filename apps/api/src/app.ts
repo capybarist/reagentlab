@@ -72,6 +72,11 @@ const STATUS: Record<string, number> = {
   KEY_EXISTS: 409,
   DIGEST_CHALLENGE_NOT_FOUND: 404,
   ALREADY_CHALLENGED: 409,
+  ARENA_CLOSED: 409,
+  ARENA_NOT_ENTERED: 409,
+  ALREADY_ENTERED: 409,
+  TRAP_INVALID: 422,
+  TRAP_EXISTS: 409,
 };
 
 export interface AppOptions {
@@ -229,6 +234,9 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
 
     app.get<{ Params: { slug: string } }>("/v1/labs/:slug/canaries", async (req) => service.listCanaries(req.params.slug));
 
+    // Arena (ADR-0040): torneo en curso, inscritos, rondas y resultados firmados.
+    app.get<{ Params: { slug: string } }>("/v1/labs/:slug/arena", async (req) => service.getArena(req.params.slug));
+
     // Archivos de artefactos (ADR-0034): redirige a una URL firmada del almacenamiento.
     app.get<{ Params: { sha256: string } }>("/v1/blobs/:sha256", async (req, reply) =>
       reply.redirect(await service.blobDownloadUrl(req.params.sha256), 302),
@@ -377,6 +385,12 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     );
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/forecasts/resolutions", async (req, reply) =>
       reply.status(201).send(await service.resolveForecast(await actorOf(req), req.params.slug, req.body)),
+    );
+    app.post<{ Params: { slug: string } }>("/v1/labs/:slug/arena/entries", async (req, reply) =>
+      reply.status(201).send(await service.joinArena(await actorOf(req), req.params.slug)),
+    );
+    app.post<{ Params: { slug: string } }>("/v1/labs/:slug/arena/traps", async (req, reply) =>
+      reply.status(201).send(await service.submitTrap(await actorOf(req), req.params.slug, req.body)),
     );
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/votes", async (req, reply) =>
       reply.status(201).send(await service.castVote(await actorOf(req), req.params.slug, req.body)),

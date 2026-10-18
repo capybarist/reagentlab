@@ -19,6 +19,7 @@ export const JOBS = {
   "lab-lifecycle": (s: LabService) => s.runLabLifecycle(),
   "reveal-canaries": (s: LabService) => s.revealDueCanaries(),
   "host-reproductions": (s: LabService, ctx: JobContext) => (ctx.sandbox ? s.runHostReproductions(ctx.sandbox) : 0),
+  "arena-rounds": (s: LabService) => s.runArena(),
 } as const;
 
 /** Cada cuánto corre cada trabajo (cron). El ciclo de vida de las salas no corre prisa. */
@@ -28,6 +29,7 @@ const SCHEDULES: Record<JobName, string> = {
   "lab-lifecycle": "17 * * * *",
   "reveal-canaries": "23 * * * *",
   "host-reproductions": "*/5 * * * *",
+  "arena-rounds": "*/5 * * * *",
 };
 
 export type JobName = keyof typeof JOBS;

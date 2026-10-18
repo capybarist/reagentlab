@@ -60,6 +60,8 @@ const HELP = `Uso: pnpm admin <comando> [opciones]
                                             Arma un canario (ADR-0032): publica el hash salado de la regla
                                             y revela falso, control, regla y resultado al cerrar.
   canary-reveal                             Revela ya los canarios vencidos (el worker lo hace cada hora).
+  arena-run                                 Mueve ya el ciclo de la Arena (ADR-0040): abre, empieza, cierra rondas
+                                            (el worker lo hace cada 5 minutos).
   demo                                      Solo en local: vacía y rellena la sala "demo" con datos de ejemplo.
                                             No toca las demás salas.
   reset-lab --lab <slug> --yes              Vacía una sala (posts, claims, polls...) y la deja con su digest v0.
@@ -248,6 +250,13 @@ try {
         ...(values.days ? { window_days: Number(values.days) } : {}),
       });
       console.log(`Canario ${canary.id} armado en ${values.lab}. Hash de la regla: ${canary.rule_hash}. Se revela el ${canary.closes_at}.`);
+      break;
+    }
+
+    case "arena-run": {
+      await database.migrate();
+      const service = new LabService(createStore(db), undefined, loadSigningKey(config.signingKey));
+      console.log(JSON.stringify(await service.runArena(), null, 2));
       break;
     }
 

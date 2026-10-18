@@ -26,6 +26,10 @@ import type {
   VerificationMethod,
   CanaryResult,
   CanaryStatus,
+  ArenaEliminationReason,
+  ArenaEntryStatus,
+  ArenaRoundResult,
+  ArenaTournamentStatus,
 } from "@reagentlab/contracts";
 
 /** Quién actúa: un agente concreto de un humano concreto. */
@@ -385,6 +389,62 @@ export interface CanaryRow {
   sigKeyId: string | null;
 }
 
+/** Torneo de la Arena (ADR-0040). */
+export interface ArenaTournamentRow {
+  id: string;
+  labId: string;
+  number: number;
+  status: ArenaTournamentStatus;
+  startsAt: Date;
+  postponements: number;
+  currentRound: number;
+  championEntryId: string | null;
+  createdAt: Date;
+  finishedAt: Date | null;
+}
+
+export interface ArenaEntryRow {
+  id: string;
+  tournamentId: string;
+  agentId: string;
+  userId: string;
+  party: string;
+  house: boolean;
+  status: ArenaEntryStatus;
+  eliminatedRound: number | null;
+  eliminatedReason: ArenaEliminationReason | null;
+  totalScore: number;
+  joinedAt: Date;
+}
+
+export interface ArenaRoundRow {
+  id: string;
+  tournamentId: string;
+  number: number;
+  problemId: string;
+  startedAt: Date;
+  endsAt: Date;
+  closedAt: Date | null;
+  result: ArenaRoundResult | null;
+  serverSig: string | null;
+  sigKeyId: string | null;
+}
+
+export interface ArenaTrapRow {
+  id: string;
+  roundId: string;
+  entryId: string;
+  seqA: number;
+  seqB: number;
+  /** Secretos hasta que cierra la ronda. */
+  brokenSeq: number;
+  brokenStep: number | null;
+  witness: string;
+  salt: string;
+  commitment: string;
+  createdAt: Date;
+}
+
 export interface RefutationRow {
   id: string;
   labId: string;
@@ -463,6 +523,28 @@ export interface Repos {
   /** Canarios armados con la ventana cerrada, de todas las salas. */
   listDueCanaries(now: Date): Promise<CanaryRow[]>;
   updateCanary(id: string, patch: Partial<Pick<CanaryRow, "status" | "revealedAt" | "result" | "serverSig" | "sigKeyId">>): Promise<void>;
+  insertArenaTournament(t: Omit<ArenaTournamentRow, "id">): Promise<ArenaTournamentRow>;
+  /** Torneos de la sala, los más recientes primero. */
+  listArenaTournaments(labId: string, limit: number): Promise<ArenaTournamentRow[]>;
+  updateArenaTournament(
+    id: string,
+    patch: Partial<Pick<ArenaTournamentRow, "status" | "startsAt" | "postponements" | "currentRound" | "championEntryId" | "finishedAt">>,
+  ): Promise<void>;
+  /** Inscribe a un agente. Devuelve null si su parte ya está inscrita en el torneo. */
+  insertArenaEntry(e: Omit<ArenaEntryRow, "id">): Promise<ArenaEntryRow | null>;
+  /** Inscritos del torneo, con el nombre y la familia del agente, por orden de inscripción. */
+  listArenaEntries(tournamentId: string): Promise<(ArenaEntryRow & { agentName: string; modelFamily: string })[]>;
+  updateArenaEntry(id: string, patch: Partial<Pick<ArenaEntryRow, "status" | "eliminatedRound" | "eliminatedReason" | "totalScore">>): Promise<void>;
+  insertArenaRound(r: Omit<ArenaRoundRow, "id">): Promise<ArenaRoundRow>;
+  /** Rondas del torneo, por número. */
+  listArenaRounds(tournamentId: string): Promise<ArenaRoundRow[]>;
+  updateArenaRound(id: string, patch: Partial<Pick<ArenaRoundRow, "closedAt" | "result" | "serverSig" | "sigKeyId">>): Promise<void>;
+  /** Guarda la trampa. Devuelve null si el inscrito ya tenía una en la ronda. */
+  insertArenaTrap(t: Omit<ArenaTrapRow, "id">): Promise<ArenaTrapRow | null>;
+  /** Trampas de unas rondas, por orden de entrega. */
+  listArenaTraps(roundIds: string[]): Promise<ArenaTrapRow[]>;
+  /** Turnos del agente en un problema, en cualquier estado. */
+  countAgentTurnsInProblem(problemId: string, agentId: string): Promise<number>;
   /** Devuelve y borra el rol fijado por un administrador para el próximo turno del agente. */
   takeNextRole(agentId: string): Promise<Role | null>;
   /** Último turno del agente en la sala, en cualquier estado. */

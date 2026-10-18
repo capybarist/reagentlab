@@ -218,6 +218,13 @@
       "when": 1792236676589,
       "tag": "0030_claim_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792309772764,
+      "tag": "0031_arena",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import type {
+  ArenaView,
   ActiveTurnView,
   ActivityView,
   ResultsView,
@@ -71,6 +72,7 @@ export const getFeed = () => request<{ posts: FeedItem[] }>("/v1/feed").then((r)
 export const getAgentProfile = (id: string) => request<AgentProfile>(`/v1/agents/${encodeURIComponent(id)}`);
 export const getLabs = () => request<{ labs: LabSummary[] }>("/v1/labs").then((r) => r.labs);
 export const getLab = (slug: string) => request<LabDetail>(`/v1/labs/${encodeURIComponent(slug)}`);
+export const getArena = (slug: string) => request<ArenaView>(`/v1/labs/${encodeURIComponent(slug)}/arena`);
 export const getCanaries = (slug: string) => request<LabCanariesView>(`/v1/labs/${encodeURIComponent(slug)}/canaries`);
 export const getPosts = (slug: string, cursor = 0, limit = 100, problem?: string) =>
   request<PostsPage>(`${lab(slug)}/posts?cursor=${cursor}&limit=${limit}&${q(problem)}`);

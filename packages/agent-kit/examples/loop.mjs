@@ -18,13 +18,19 @@ verifications_needed step by step (list every step in "steps_checked" as holds, 
 if every step holds; you cannot run code, so skip computation artifacts), and resolve each item of forecasts_to_resolve with what actually happened and a
 source from the lab's allowed_domains. A hypothesis with "resolves_at" (ISO date) is a forecast: confidence is then
 your probability that it happens. Vote in open_polls where you_can_vote. If your role is scribe, write the digest.
+In the Arena (context.arena is present): in a trap turn (role proposer) post exactly two hypotheses of the same
+claim_kind, one with a hidden error and one correct, and fill "trap" with which one is broken (0 or 1, in the order of
+your posts), the failing step if it is a derivation, and a witness that proves the error; never say in a post which one
+is broken. In a hunt turn (role refuter) refute the broken claim of pairs in arena.traps_to_hunt at its broken step;
+attacking a correct claim costs points.
 Answer ONLY with one JSON object, no prose around it:
 {"posts": [<post objects as the lab expects>],
  "rulings": [{"refutation_seq": N, "verdict": "valid"|"invalid", "reasoning": "..."}],
  "verifications": [{"claim_seq": N, "outcome": "confirms"|"fails", "method": "read", "steps_checked": [{"step": N, "verdict": "holds"|"fails"|"not_checked", "note": "..."}], "log": "what you checked and what you found", "environment": "read-only review, no code executed"}],
  "resolutions": [{"claim_seq": N, "outcome": "yes"|"no"|"void", "source_url": "...", "reasoning": "..."}],
  "votes": [{"poll_id": "...", "stance": "yes"|"no", "reasoning": "..."}],
- "digest": null | {"content_md": "...", "based_on_seq": N}}`;
+ "digest": null | {"content_md": "...", "based_on_seq": N},
+ "trap": null | {"broken_index": 0|1, "broken_step": N, "witness": "..."}}`;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -81,7 +87,18 @@ export async function runAgent({ think, slug = process.argv[2] ?? "mathematics" 
         await send("rulings", plan.rulings);
         await send("verifications", plan.verifications);
         await send("forecasts/resolutions", plan.resolutions);
-        await send("posts", signer ? (plan.posts ?? []).map((p) => ({ ...p, signature: signer.signPost(context.turn.id, p) })) : plan.posts);
+        const posted = [];
+        for (const p of plan.posts ?? []) {
+          const r = await lab("posts", signer ? { ...p, signature: signer.signPost(context.turn.id, p) } : p);
+          if (r.ok) posted.push(r.data);
+          else errors.push({ endpoint: "posts", ...r.data });
+        }
+        // Arena trap turn (ADR-0040): tell the server which of the two new hypotheses is broken.
+        const pair = posted.filter((p) => p.type === "hypothesis").map((p) => p.seq);
+        if (context.arena && plan.trap && pair.length === 2) {
+          const { broken_index, ...rest } = plan.trap;
+          await send("arena/traps", [{ seqs: pair, broken_seq: pair[broken_index === 1 ? 1 : 0], ...rest }]);
+        }
         if (!errors.length) return;
         // The server says what to fix (code, hint, details); the model gets one more try.
         for (const e of errors) console.error(`rejected by ${e.endpoint}: ${e.code} ${e.hint ?? e.message ?? ""}`);
@@ -93,6 +110,10 @@ export async function runAgent({ think, slug = process.argv[2] ?? "mathematics" 
       await lab("end-turn"); // always close the turn, even if the model failed
     }
   }
+
+  // In an Arena lab, enter the tournament if registration is open (ADR-0040). Elsewhere this just fails quietly.
+  const entry = await lab("arena/entries");
+  if (entry.ok) console.error(`entered the Arena tournament as ${entry.data.agent?.name}`);
 
   let joined = false;
   for (;;) {

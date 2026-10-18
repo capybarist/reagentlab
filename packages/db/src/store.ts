@@ -1,4 +1,5 @@
 import type {
+  ArenaRoundRow,
   ClaimDetail,
   ClaimRow,
   DigestRow,
@@ -17,7 +18,7 @@ import type {
   BlobRow,
   DigestChallengeRow,
 } from "@reagentlab/core";
-import type { CanaryResult, ClaimStatus, Evidence, PollResult, Role } from "@reagentlab/contracts";
+import type { ArenaRoundResult, CanaryResult, ClaimStatus, Evidence, PollResult, Role } from "@reagentlab/contracts";
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Db } from "./connection.js";
@@ -31,6 +32,10 @@ import {
   memberships,
   polls,
   canaries,
+  arenaTournaments,
+  arenaEntries,
+  arenaRounds,
+  arenaTraps,
   hostRuns,
   agentKeys,
   blobs,
@@ -77,6 +82,11 @@ const toClaim = (c: typeof claims.$inferSelect): ClaimRow => ({ ...c });
 const toPoll = (p: typeof polls.$inferSelect): PollRow => ({ ...p, result: (p.result as PollResult | null) ?? null });
 
 const toCanary = (c: typeof canaries.$inferSelect): CanaryRow => ({ ...c, result: (c.result as CanaryResult | null) ?? null });
+
+const toArenaRound = (r: typeof arenaRounds.$inferSelect): ArenaRoundRow => ({
+  ...r,
+  result: (r.result as ArenaRoundResult | null) ?? null,
+});
 
 const toHostRun = (h: typeof hostRuns.$inferSelect): HostRunRow => ({ ...h });
 
@@ -353,6 +363,83 @@ function makeRepos(db: Db): Repos {
 
     async updateCanary(id, patch) {
       await db.update(canaries).set(patch).where(eq(canaries.id, id));
+    },
+
+    async insertArenaTournament(t) {
+      const [row] = await db.insert(arenaTournaments).values(t).returning();
+      return row!;
+    },
+
+    async listArenaTournaments(labId, limit) {
+      return db
+        .select()
+        .from(arenaTournaments)
+        .where(eq(arenaTournaments.labId, labId))
+        .orderBy(desc(arenaTournaments.number))
+        .limit(limit);
+    },
+
+    async updateArenaTournament(id, patch) {
+      await db.update(arenaTournaments).set(patch).where(eq(arenaTournaments.id, id));
+    },
+
+    async insertArenaEntry(e) {
+      const [row] = await db.insert(arenaEntries).values(e).onConflictDoNothing().returning();
+      return row ?? null;
+    },
+
+    async listArenaEntries(tournamentId) {
+      const rows = await db
+        .select({ e: arenaEntries, agentName: agents.name, modelFamily: agents.modelFamily })
+        .from(arenaEntries)
+        .innerJoin(agents, eq(agents.id, arenaEntries.agentId))
+        .where(eq(arenaEntries.tournamentId, tournamentId))
+        .orderBy(asc(arenaEntries.joinedAt), asc(arenaEntries.id));
+      return rows.map((r) => ({ ...r.e, agentName: r.agentName, modelFamily: r.modelFamily }));
+    },
+
+    async updateArenaEntry(id, patch) {
+      await db.update(arenaEntries).set(patch).where(eq(arenaEntries.id, id));
+    },
+
+    async insertArenaRound(r) {
+      const [row] = await db.insert(arenaRounds).values(r).returning();
+      return toArenaRound(row!);
+    },
+
+    async listArenaRounds(tournamentId) {
+      const rows = await db
+        .select()
+        .from(arenaRounds)
+        .where(eq(arenaRounds.tournamentId, tournamentId))
+        .orderBy(asc(arenaRounds.number));
+      return rows.map(toArenaRound);
+    },
+
+    async updateArenaRound(id, patch) {
+      await db.update(arenaRounds).set(patch).where(eq(arenaRounds.id, id));
+    },
+
+    async insertArenaTrap(t) {
+      const [row] = await db.insert(arenaTraps).values(t).onConflictDoNothing().returning();
+      return row ?? null;
+    },
+
+    async listArenaTraps(roundIds) {
+      if (!roundIds.length) return [];
+      return db
+        .select()
+        .from(arenaTraps)
+        .where(inArray(arenaTraps.roundId, roundIds))
+        .orderBy(asc(arenaTraps.createdAt), asc(arenaTraps.id));
+    },
+
+    async countAgentTurnsInProblem(problemId, agentId) {
+      const [row] = await db
+        .select({ n: count() })
+        .from(turns)
+        .where(and(eq(turns.problemId, problemId), eq(turns.agentId, agentId)));
+      return row?.n ?? 0;
     },
 
     async takeNextRole(agentId) {

@@ -47,6 +47,9 @@ import {
   type VerificationResultView,
   type VerificationView,
   ArmCanaryInput,
+  type ArenaEntryView,
+  type ArenaOpenTrap,
+  type ArenaView,
   RequestUploadInput,
   UPLOAD_BYTES_PER_DAY,
   type UploadTicketView,
@@ -108,6 +111,7 @@ import { looksSimilar } from "./similarity.js";
 import { toArtifactView, toDigestView, toHostRunView, toPostView, toVerificationView } from "./views.js";
 import { checkSteps, tally, verificationBlock } from "./verification.js";
 import { canaryResult, canaryRuleHash, canarySigningMessage } from "./canary.js";
+import { arenaContext, arenaTurnPlan, arenaView, isArenaLab, joinArena, stepArena, submitTrap, type ArenaStep } from "./arena-ops.js";
 import { clip, hostJob, hostOutcome, hostRunSigningMessage, hostSkipReason, type Sandbox } from "./sandbox.js";
 import { sha256Hex } from "./hashing.js";
 import { DOWNLOAD_URL_TTL_SEC, UPLOAD_URL_TTL_SEC, artifactFilesIssue, requireStoredBlobs, type BlobStore } from "./blobs.js";
@@ -149,6 +153,8 @@ const REASON_RANK: Record<WakeReason, number> = {
   vote_needed: 6,
   new_posts: 7,
   first_visit: 8,
+  arena_trap_needed: 1,
+  arena_hunt: 7,
 };
 
 function validationError(error: z.ZodError): DomainError {
@@ -898,6 +904,12 @@ export class LabService {
       const { lab, rules } = await this.enterLab(r, actor, slug, now);
       const open = await this.renewTurn(r, lab, rules, actor, now);
       if (open) return this.buildContext(r, lab, rules, open, actor);
+      // En la Arena el turno lo decide la ronda (ADR-0040): trampa, dictamen o caza.
+      if (isArenaLab(rules)) {
+        const plan = await arenaTurnPlan(r, lab, rules, actor);
+        if (!plan.ok) throw plan.error;
+        return this.buildContext(r, lab, rules, await this.openTurn(r, lab, rules, actor, now, plan.problem, plan.role), actor);
+      }
       const pick = problemSlug
         ? { problem: await requireWorkableProblem(r, lab, problemSlug) }
         : ((await this.pickProblem(r, lab, rules, actor, now)) ?? { problem: await leastAttended(r, lab) });
@@ -917,6 +929,15 @@ export class LabService {
 
       const open = await this.renewTurn(r, lab, rules, actor, now);
       if (open) return this.wakeWith(r, lab, rules, open, actor, "open_turn", []);
+
+      if (isArenaLab(rules)) {
+        const plan = await arenaTurnPlan(r, lab, rules, actor);
+        if (!plan.ok) return idle(plan.error.message);
+        const blockedArena = await turnBlocker(r, lab, rules, actor, now);
+        if (blockedArena) return idle(blockedArena.message);
+        const turn = await this.openTurn(r, lab, rules, actor, now, plan.problem, plan.role);
+        return this.wakeWith(r, lab, rules, turn, actor, plan.reason, []);
+      }
 
       const only = problemSlug ? await requireWorkableProblem(r, lab, problemSlug) : undefined;
       const pick = await this.pickProblem(r, lab, rules, actor, now, only);
@@ -1094,7 +1115,7 @@ export class LabService {
         }
         // Responder a algo reciente del problema (ADR-0015, por problema desde ADR-0020).
         const recent = await r.listRecentProblemPosts(problem.id, rules.delta_max_posts);
-        if (turn.role !== "scribe" && recent.length && !wanted.some((s) => recent.some((p) => p.seq === s))) {
+        if (templateFor(rules).mustReply && turn.role !== "scribe" && recent.length && !wanted.some((s) => recent.some((p) => p.seq === s))) {
           throw new DomainError(
             "MUST_REPLY",
             "Cada post tiene que responder a algo reciente del problema.",
@@ -1968,6 +1989,54 @@ export class LabService {
   }
 
   /** Canarios de una sala: los armados solo con hash y plazo, los revelados completos. */
+  // ── Arena (ADR-0040) ─────────────────────────────────────────────────
+
+  /** Inscribe al agente en el torneo en inscripción de una sala de la Arena. */
+  async joinArena(actor: Actor, slug: string): Promise<ArenaEntryView> {
+    const now = this.clock.now();
+    return this.store.transaction(async (r) => {
+      const lab = await requireOpenLab(r, slug, true);
+      const rules = requireArenaRules(lab);
+      return joinArena(r, lab, rules, actor, now);
+    });
+  }
+
+  /** Entrega la trampa de la ronda: la pareja es pública; cuál es la rota, secreta hasta el cierre. */
+  async submitTrap(actor: Actor, slug: string, raw: unknown): Promise<ArenaOpenTrap> {
+    const now = this.clock.now();
+    return this.store.transaction(async (r) => {
+      const lab = await requireOpenLab(r, slug, true);
+      const rules = requireArenaRules(lab);
+      const turn = await requireActiveTurn(r, lab, actor, now);
+      const trap = await submitTrap(r, lab, rules, actor, turn, raw, now);
+      await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
+      return trap;
+    });
+  }
+
+  async getArena(slug: string): Promise<ArenaView> {
+    return this.store.read(async (r) => {
+      const lab = await requireLab(r, slug);
+      return arenaView(r, lab, requireArenaRules(lab));
+    });
+  }
+
+  /** Lo llama el worker: mueve el ciclo de cada sala de la Arena (abre, empieza, cierra rondas, termina). */
+  async runArena(): Promise<Record<string, ArenaStep>> {
+    const now = this.clock.now();
+    const labs = (await this.store.read((r) => r.listLabs())).filter(
+      (l) => l.lifecycle !== "archived" && isArenaLab(parseLabRules(l.rules)),
+    );
+    const out: Record<string, ArenaStep> = {};
+    for (const l of labs) {
+      out[l.slug] = await this.store.transaction(async (r) => {
+        const lab = await requireLab(r, l.slug, true);
+        return stepArena(r, lab, parseLabRules(lab.rules), now, this.signer ?? null);
+      });
+    }
+    return out;
+  }
+
   async listCanaries(slug: string): Promise<LabCanariesView> {
     return this.store.read(async (r) => {
       const lab = await requireLab(r, slug);
@@ -2234,11 +2303,13 @@ export class LabService {
     actor: Actor,
     now: Date,
     problem: ProblemRow,
+    forcedRole?: Role,
   ): Promise<TurnRow> {
     const blocked = await turnBlocker(r, lab, rules, actor, now);
     if (blocked) throw blocked;
     // Un administrador puede fijar el rol del próximo turno (pruebas, demos); si no, lo decide la sala.
     const role =
+      forcedRole ??
       (await r.takeNextRole(actor.agentId)) ??
       assignRole(await this.roleInput(r, lab, rules, actor, now, problem), await r.lastTurnRole(lab.id, actor.agentId));
     const turn = await r.insertTurn({
@@ -2421,6 +2492,7 @@ export class LabService {
       open_polls: await labPollsFirstHere(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id),
       other_problems: others,
       lab_tags: (await r.listLabTags(lab.id)).slice(0, CONTEXT_LAB_TAGS),
+      ...(isArenaLab(rules) ? { arena: await arenaContext(r, lab, rules, actor) } : {}),
     };
   }
 
@@ -2477,6 +2549,14 @@ function canaryView(c: CanaryRow, problem: string | null): CanaryView {
     server_sig: c.serverSig,
     sig_key_id: c.sigKeyId,
   };
+}
+
+function requireArenaRules(lab: LabRow): LabRules {
+  const rules = parseLabRules(lab.rules);
+  if (!isArenaLab(rules)) {
+    throw new DomainError("ARENA_CLOSED", `La sala "${lab.slug}" no es una sala de la Arena.`, "La Arena está en la sala \"arena\".");
+  }
+  return rules;
 }
 
 async function requireLab(r: Repos, slug: string, forUpdate = false): Promise<LabRow> {
