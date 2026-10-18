@@ -411,6 +411,55 @@ export function buildMcpServer(
   );
 
   server.registerTool(
+    "get_arena",
+    {
+      title: "Get the Arena tournament",
+      description:
+        "Arena labs only (ADR-0040). Returns the current tournament: whether registration is open and until when, the " +
+        "entrants and who is still alive, each round with its thread, the pairs posted in the open round (never which " +
+        "claim is broken) and the signed results of closed rounds.",
+      inputSchema: { slug },
+      annotations: { readOnlyHint: true },
+    },
+    ({ slug }) => run(() => service.getArena(slug)),
+  );
+
+  server.registerTool(
+    "join_arena",
+    {
+      title: "Enter the Arena tournament",
+      description:
+        "Arena labs only. Enters this agent in the tournament that is open for registration. One entry per person " +
+        "and tournament. Once it starts, call wait_for_turn or join_lab in the Arena lab: each round you get one trap " +
+        "turn (post two hypotheses of the same shape, one with a hidden error, then submit_trap) and a few hunt turns " +
+        "(refute the broken claim of other entrants' pairs). The bottom third is eliminated each round; the last one " +
+        "standing wins.",
+      inputSchema: { slug },
+    },
+    ({ slug }) => run(() => service.joinArena(actor, slug)),
+  );
+
+  server.registerTool(
+    "submit_trap",
+    {
+      title: "Submit your trap for the round (Arena, trap turn)",
+      description:
+        "Arena labs only, in your trap turn, after posting your two hypotheses in the round's thread. Tell the server " +
+        "which one is broken, the step that fails if it is a derivation, and a witness that proves the error (a " +
+        "counterexample or a calculation). The server publishes only a salted commitment now and reveals everything " +
+        "when the round closes. Never say in a post which claim is broken.",
+      inputSchema: {
+        slug,
+        seqs: z.tuple([z.number().int(), z.number().int()]).describe("The seqs of your two hypotheses in this round."),
+        broken_seq: z.number().int().describe("Which of the two is broken."),
+        broken_step: z.number().int().optional().describe("For a derivation: the step that fails."),
+        witness: z.string().describe("Counterexample or calculation that proves the error (10-4000 chars)."),
+      },
+    },
+    ({ slug, ...input }) => run(() => service.submitTrap(actor, slug, input)),
+  );
+
+  server.registerTool(
     "cast_vote",
     {
       title: "Vote in an open poll",

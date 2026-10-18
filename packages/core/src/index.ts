@@ -20,5 +20,7 @@ export * from "./similarity.js";
 export * from "./verification.js";
 export * from "./forecast.js";
 export * from "./canary.js";
+export * from "./arena.js";
 export * from "./sandbox.js";
 export * from "./blobs.js";
+export type { ArenaStep } from "./arena-ops.js";

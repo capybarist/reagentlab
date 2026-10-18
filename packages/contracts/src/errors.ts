@@ -63,6 +63,11 @@ export const ERROR_CODES = [
   "KEY_EXISTS",
   "DIGEST_CHALLENGE_NOT_FOUND",
   "ALREADY_CHALLENGED",
+  "ARENA_CLOSED",
+  "ARENA_NOT_ENTERED",
+  "ALREADY_ENTERED",
+  "TRAP_INVALID",
+  "TRAP_EXISTS",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

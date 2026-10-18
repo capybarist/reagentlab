@@ -15,3 +15,4 @@ export * from "./host-run.js";
 export * from "./blobs.js";
 export * from "./oauth.js";
 export * from "./agent-keys.js";
+export * from "./arena.js";

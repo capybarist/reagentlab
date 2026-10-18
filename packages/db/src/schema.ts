@@ -668,3 +668,77 @@ export const oauthCodes = pgTable("oauth_codes", {
   usedAt: ts("used_at"),
   createdAt: ts("created_at").notNull(),
 });
+
+/** Torneos de la Arena (ADR-0040): uno en inscripción o en curso por sala. */
+export const arenaTournaments = pgTable(
+  "arena_tournaments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    labId: uuid("lab_id").notNull().references(() => labs.id),
+    number: integer("number").notNull(),
+    status: text("status", { enum: ["registration", "running", "finished"] }).notNull().default("registration"),
+    startsAt: ts("starts_at").notNull(),
+    postponements: integer("postponements").notNull().default(0),
+    currentRound: integer("current_round").notNull().default(0),
+    championEntryId: uuid("champion_entry_id"),
+    createdAt: ts("created_at").notNull(),
+    finishedAt: ts("finished_at"),
+  },
+  (t) => [uniqueIndex("arena_tournaments_lab_number_uq").on(t.labId, t.number)],
+);
+
+/** Inscritos de un torneo: uno por parte (ADR-0023/0024). */
+export const arenaEntries = pgTable(
+  "arena_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tournamentId: uuid("tournament_id").notNull().references(() => arenaTournaments.id),
+    agentId: uuid("agent_id").notNull().references(() => agents.id),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    party: text("party").notNull(),
+    house: boolean("house").notNull().default(false),
+    status: text("status", { enum: ["alive", "eliminated"] }).notNull().default("alive"),
+    eliminatedRound: integer("eliminated_round"),
+    eliminatedReason: text("eliminated_reason", { enum: ["lowest_score", "no_trap", "bad_trap"] }),
+    totalScore: integer("total_score").notNull().default(0),
+    joinedAt: ts("joined_at").notNull(),
+  },
+  (t) => [uniqueIndex("arena_entries_tournament_party_uq").on(t.tournamentId, t.party)],
+);
+
+/** Rondas: cada una es un hilo, con su resultado firmado al cerrar. */
+export const arenaRounds = pgTable(
+  "arena_rounds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tournamentId: uuid("tournament_id").notNull().references(() => arenaTournaments.id),
+    number: integer("number").notNull(),
+    problemId: uuid("problem_id").notNull().references(() => problems.id),
+    startedAt: ts("started_at").notNull(),
+    endsAt: ts("ends_at").notNull(),
+    closedAt: ts("closed_at"),
+    result: jsonb("result"),
+    serverSig: text("server_sig"),
+    sigKeyId: text("sig_key_id"),
+  },
+  (t) => [uniqueIndex("arena_rounds_tournament_number_uq").on(t.tournamentId, t.number)],
+);
+
+/** Trampas: la pareja es pública; cuál es la rota, el paso, el testigo y la sal, secretos hasta el cierre. */
+export const arenaTraps = pgTable(
+  "arena_traps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roundId: uuid("round_id").notNull().references(() => arenaRounds.id),
+    entryId: uuid("entry_id").notNull().references(() => arenaEntries.id),
+    seqA: integer("seq_a").notNull(),
+    seqB: integer("seq_b").notNull(),
+    brokenSeq: integer("broken_seq").notNull(),
+    brokenStep: integer("broken_step"),
+    witness: text("witness").notNull(),
+    salt: text("salt").notNull(),
+    commitment: text("commitment").notNull(),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("arena_traps_round_entry_uq").on(t.roundId, t.entryId)],
+);

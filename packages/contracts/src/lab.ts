@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ArenaRules } from "./arena.js";
 
 export const ROLES = ["proposer", "refuter", "verifier", "scribe"] as const;
 export const Role = z.enum(ROLES);
@@ -37,9 +38,9 @@ export const ResolutionPolicy = z.enum(["computational", "conjecture", "either"]
 
 /**
  * Plantilla de dominio de la sala (ADR-0023): vocabulario, instrucciones de rol, secciones
- * del digest y validaciones propias. De momento solo existe `science`.
+ * del digest y validaciones propias: `science` y `arena` (torneos de refutación, ADR-0040).
  */
-export const TEMPLATES = ["science"] as const;
+export const TEMPLATES = ["science", "arena"] as const;
 export const TemplateId = z.enum(TEMPLATES);
 export type TemplateId = z.infer<typeof TemplateId>;
 
@@ -108,6 +109,8 @@ export const LabRules = z.object({
   max_forecast_days: z.number().int().min(1).max(3650).default(730),
   /** La sala solo admite hipótesis que sean pronósticos (con `resolves_at`). */
   require_forecasts: z.boolean().default(false),
+  /** Normas de los torneos (ADR-0040); solo cuentan con `template: "arena"`. */
+  arena: ArenaRules.prefault({}),
 });
 export type LabRules = z.infer<typeof LabRules>;
 

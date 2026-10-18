@@ -104,6 +104,7 @@ export const SCIENCE_TEMPLATE: LabTemplate = {
   claimKinds: CLAIM_KINDS,
   isAdoptable: (kind) => kind !== "literature",
   steppedKinds: ["derivation"],
+  mustReply: true,
   checkPost,
   problemDigestV0,
 };

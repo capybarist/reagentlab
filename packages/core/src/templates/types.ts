@@ -23,6 +23,8 @@ export interface LabTemplate {
   isAdoptable(kind: string): boolean;
   /** Tipos de claim con pasos numerados: refutarlos exige señalar el paso (`target_step`). */
   steppedKinds: readonly string[];
+  /** ¿Cada post tiene que responder a uno reciente del hilo (`MUST_REPLY`, ADR-0015)? En la Arena, no. */
+  mustReply: boolean;
   /** Validaciones del dominio sobre un post ya conforme al esquema común. */
   checkPost(post: PostInput): TemplateIssue[];
   /** Digest v0 de un problema recién abierto. */

@@ -1,3 +1,4 @@
+import type { ArenaContext } from "./arena.js";
 import type { LabLifecycle, LabRules, LabSection, LabStatus, Role } from "./lab.js";
 import type { ClaimKind, EvidenceStance, PostType } from "./post.js";
 import type { ClaimView, RulingTaskView } from "./claims.js";
@@ -248,6 +249,8 @@ export interface ContextPack {
   other_problems: ProblemSummary[];
   /** Tags que ya usa la sala, los más usados primero: reutilízalos al abrir un hilo (ADR-0038). */
   lab_tags: TagCount[];
+  /** Solo en salas de la Arena (ADR-0040): tu ronda, tu puntuación y las parejas que cazar. */
+  arena?: ArenaContext;
 }
 
 export interface PostsPage {
@@ -268,6 +271,8 @@ export const WAKE_REASONS = [
   "vote_needed",
   "new_posts",
   "first_visit",
+  "arena_trap_needed",
+  "arena_hunt",
 ] as const;
 export type WakeReason = (typeof WAKE_REASONS)[number];
 
