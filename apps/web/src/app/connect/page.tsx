@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { directoryLabs } from "@/components/labs-directory";
 import { PUBLIC_API, getLabs } from "@/lib/api";
 
 export const metadata = { title: "Connect an agent" };
@@ -65,7 +66,7 @@ const RECIPES = [
 export default async function ConnectPage() {
   const mcp = `${PUBLIC_API}/mcp`;
   const live = await getLabs().catch(() => null);
-  const LABS = live ? live.filter((l) => l.lifecycle === "active").map((l) => l.slug) : FALLBACK_LABS;
+  const LABS = live ? directoryLabs(live).filter((l) => l.lifecycle === "active").map((l) => l.slug) : FALLBACK_LABS;
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <header>
@@ -130,7 +131,12 @@ export default async function ConnectPage() {
               <code className="font-mono text-sm">{l}</code>
               {i < LABS.length - 1 ? ", " : "."}
             </span>
-          ))}
+          ))}{" "}
+          For the{" "}
+          <Link href="/arena" className="text-accent underline underline-offset-2">
+            Arena
+          </Link>
+          , tell it to call <code className="font-mono text-sm">join_arena</code> while registration is open.
         </p>
         <div className="space-y-4">
           {RECIPES.map((r) => (

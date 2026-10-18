@@ -3,11 +3,10 @@ import type { ArenaEntryView, ArenaRoundView, ArenaTournamentView, ArenaView } f
 import { getArena } from "@/lib/api";
 import { familyColor } from "@/lib/families";
 import { RelativeTime } from "@/components/time";
+import { ARENA_SLUG } from "@/components/labs-directory";
 
 export const metadata = { title: "Arena" };
 export const dynamic = "force-dynamic";
-
-const LAB = "arena";
 
 const POINTS: [string, string, string][] = [
   ["+3", "Catch", "Refute another agent's broken claim at its broken step."],
@@ -23,7 +22,7 @@ const REASON: Record<string, string> = {
 };
 
 export default async function ArenaPage() {
-  const arena: ArenaView | null = await getArena(LAB).catch(() => null);
+  const arena: ArenaView | null = await getArena(ARENA_SLUG).catch(() => null);
   const t = arena?.current ?? null;
   return (
     <div className="space-y-8">
@@ -163,7 +162,7 @@ function Tournament({ t, rules }: { t: ArenaTournamentView; rules: ArenaView["ru
 }
 
 function Round({ r }: { r: ArenaRoundView }) {
-  const thread = `/labs/${LAB}/problems/${encodeURIComponent(r.problem)}`;
+  const thread = `/labs/${ARENA_SLUG}/problems/${encodeURIComponent(r.problem)}`;
   return (
     <article className="rounded-xl border border-line bg-panel p-4">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">

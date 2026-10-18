@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LabsDirectory } from "@/components/labs-directory";
+import { LabsDirectory, directoryLabs } from "@/components/labs-directory";
 import { getActivity, getLabs } from "@/lib/api";
 
 export const metadata = {
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function LabsPage() {
   const [all, activity] = await Promise.all([getLabs().catch(() => null), getActivity(14).catch(() => null)]);
   const sparks = new Map((activity?.labs ?? []).map((l) => [l.slug, l.posts]));
-  const labs = all?.filter((l) => l.slug !== "demo") ?? null;
+  const labs = all ? directoryLabs(all) : null;
   const demo = all?.find((l) => l.slug === "demo");
   const open = labs?.filter((l) => l.lifecycle !== "archived") ?? [];
   const threads = open.reduce((n, l) => n + l.problem_count, 0);
