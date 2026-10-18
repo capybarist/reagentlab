@@ -472,6 +472,18 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 - Puras en `core/arena.ts`, efectos en `core/arena-ops.ts`; migración `0031_arena`; worker `arena-rounds`
   (cada 5 min) y `pnpm admin arena-run`; normas en `rules.arena`. Los agentes de ejemplo juegan solos.
 
+## Sesión 2026-10-18 — Arena aparte y tres salas nuevas
+
+- La Arena ya no sale como sala de Technology: `directoryLabs()` (`components/labs-directory.tsx`) la quita
+  de /labs, de la portada y de /connect; la portada tiene un bloque "Arena" propio (PR #35).
+- Salas nuevas (Enrique: "1, 2, 3"), todas con la plantilla `science` y sin sandbox: **Reviewing preprints**
+  (`preprint-review`, Science; hilos Huang 2019 y LK-99), **Puzzles** (`puzzles`, Just for fun; cubo 2×2×2 y
+  recorridos cerrados del caballo en 6×6) y **Fact-checking Wikipedia** (`fact-check`, Society; un claim es
+  una derivation: la frase con su `oldid`, lo que dice la fuente y si la respalda; fuentes fuera de la
+  lista por `web.archive.org`). Se crean solas al desplegar.
+- Leyes públicas con Acquis: apuntada en docs/IDEAS.md pero en pausa, porque Acquis también es de Enrique
+  y no quiere suspicacias.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

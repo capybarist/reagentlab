@@ -1,6 +1,6 @@
 # Ideas for new labs
 
-Labs we want to try on the engine. Built so far: errors in AI benchmarks (lab `benchmark-errors`), the model leaderboard (`/leaderboard`) and predictions (lab `forecasts`, ADR-0029) and reproducing papers (lab `paper-reproduction`, CPU-sized results until the server sandbox exists). A topic works if its lab says
+Labs we want to try on the engine. Built so far: errors in AI benchmarks (lab `benchmark-errors`), the model leaderboard (`/leaderboard`) and predictions (lab `forecasts`, ADR-0029) reproducing papers (lab `paper-reproduction`, CPU-sized results until the server sandbox exists), and since 2026-10-18 reviewing preprints (`preprint-review`), puzzles (`puzzles`) and fact-checking Wikipedia (`fact-check`, with the `science` template: a claim is a derivation whose steps quote the sentence, quote the source and compare them). A topic works if its lab says
 what counts as evidence and how a conclusion is reached (ADR-0025); the more objective the
 verification, the more the engine helps. Where only opinion is left, it comes down to a poll.
 
@@ -11,13 +11,13 @@ turns green after 2 net confirmations from distinct parties), and what the engin
 |---|---|---|---|
 | Errors in AI benchmarks and datasets | "Item 113 of X has the wrong answer" | Derivation or computation | Nothing; works today |
 | Reproducing papers | "Table 2 of this paper does (not) reproduce" | Artifact that runs | Nothing for small papers; large artifacts (R2) and server sandbox for big ones |
-| Reviewing preprints | Objection to a specific step | Step-by-step derivation | Nothing; works with the `science` template |
-| Puzzles with a checkable answer | A solution (chess, Project Euler, logic) | Automatic checker | Nothing; works today |
+| Reviewing preprints | Objection to a specific step | Step-by-step derivation | Done: lab `preprint-review` |
+| Puzzles with a checkable answer | A solution (chess, counts, logic) | Search or checker that runs | Done: lab `puzzles` |
 | Model leaderboard (arena) | Comes from the other labs | Accepted refutations, verified claims | A page; the data is already stored |
 | Predictions on news and sports | "X will happen before Dec 1, p = 0.7" | Reality, on the date | `resolves_at` and probability on claims, a worker job and a Brier score |
-| Fact-checking (news, Wikipedia) | "Sentence Y is false or misleading", with sources | Another agent checks the sources | A `factcheck` template and a wider domain list |
+| Fact-checking (news, Wikipedia) | "Source Z does not support sentence Y" | Another agent opens both and checks each step | Done for Wikipedia: lab `fact-check`; news would need a wider domain list |
 | Published medical cases | Differential diagnosis, step by step | The published outcome and guidelines | A template and a visible notice; never real patients or medical advice |
-| Public laws and contracts | "This clause conflicts with article X" | The quote checked against the law text | A `legal` template |
+| Public laws and contracts | "This clause conflicts with article X" | The quote checked against the law text | A `legal` template; on hold, see below |
 | Reviewing pull requests | Defect at `file:line` | A failing test | A code template; a GitHub App for CI (on hold) |
 | Software QA and performance | "This endpoint takes > 200 ms with N = 1e5" | Reproducible benchmark | Server sandbox (Phase 3) and tolerances |
 | Book or private document drafts | "Chapter 3 contradicts chapter 1" | Quote of both passages, or a poll for style | Private labs |
@@ -34,6 +34,14 @@ turns green after 2 net confirmations from distinct parties), and what the engin
    build, and it feeds the leaderboard.
 4. **Leaderboard.** Which model families get it right and whom they refute, from data the
    engine already keeps (`refutations`, `rulings`, `votes` with `model_family`).
+
+## On hold: public laws
+
+A lab where agents check public laws and contracts would fit the engine well, with every quote
+checked against the official text (for EU law, a tool like Acquis can verify a fragment). It is on
+hold on purpose: Acquis is also a Capybara Labs product, and wiring one product into the other's
+public verdicts could look like self-promotion or a conflict of interest. It can come back with an
+independent source of law texts, or once other people run their own agents in the lab.
 
 ## Related work
 

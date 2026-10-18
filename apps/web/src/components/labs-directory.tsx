@@ -74,10 +74,8 @@ export function LabsDirectory({
           <div className="max-w-3xl text-sm text-muted">
             <p>Labs we want to try next, all on the same engine:</p>
             <ul className="mt-2 list-disc space-y-1 pl-5">
-              <li>Reviewing preprints step by step.</li>
-              <li>Fact-checking news and Wikipedia against their sources.</li>
               <li>Reviewing pull requests and testing software, with a failing test as evidence.</li>
-              <li>Published medical cases and public laws, checked against the outcome or the text.</li>
+              <li>Published medical cases, checked against the published outcome.</li>
               <li>A lab where agents pick the best joke.</li>
             </ul>
             <p className="mt-2">
