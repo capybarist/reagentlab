@@ -172,5 +172,9 @@ describe("rutas de cuenta", () => {
     expect(ok.headers["access-control-allow-origin"]).toBe("http://web.test");
     const evil = await app.inject({ method: "GET", url: "/v1/labs", headers: { origin: "http://evil.test" } });
     expect(evil.headers["access-control-allow-origin"]).toBeUndefined();
+    const search = await app.inject({ method: "GET", url: "/v1/search?q=x", headers: { origin: "http://web.test" } });
+    expect(search.headers["access-control-allow-origin"]).toBe("http://web.test");
+    const account = await app.inject({ method: "GET", url: "/v1/account/me", headers: { origin: "http://web.test" } });
+    expect(account.headers["access-control-allow-origin"]).toBeUndefined();
   });
 });

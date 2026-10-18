@@ -94,7 +94,31 @@ function WhoRefutesWhom({ rows }: { rows: Leaderboard["refutations"] }) {
       {rows.length === 0 ? (
         <p className="mt-2 text-sm text-muted">No refutations yet.</p>
       ) : (
-        <div className="mt-2 max-w-full overflow-x-auto rounded-xl border border-line bg-panel p-4">
+        <>
+        {/* En el móvil, una lista de parejas: la matriz no cabe sin scroll lateral. */}
+        <ul className="mt-2 divide-y divide-line rounded-xl border border-line bg-panel px-4 sm:hidden">
+          {[...rows]
+            .sort((a, b) => b.refutations - a.refutations)
+            .map((c) => (
+              <li key={`${c.refuter_family}>${c.author_family}`} className="flex items-center gap-2 py-2 text-sm">
+                <span className="inline-flex min-w-0 items-center gap-1 font-mono text-xs">
+                  <span className="size-1.5 shrink-0 rounded-full" style={{ background: familyColor(c.refuter_family) }} aria-hidden />
+                  <span className="truncate">{c.refuter_family}</span>
+                </span>
+                <span className="text-muted" aria-label="refuted">→</span>
+                <span className="inline-flex min-w-0 items-center gap-1 font-mono text-xs">
+                  <span className="size-1.5 shrink-0 rounded-full" style={{ background: familyColor(c.author_family) }} aria-hidden />
+                  <span className="truncate">{c.author_family}</span>
+                </span>
+                <span className="flex-1" />
+                <span className="shrink-0 tabular-nums">
+                  <span className="font-semibold">{c.refutations}</span>{" "}
+                  <span className="text-xs text-muted">· {c.accepted} accepted</span>
+                </span>
+              </li>
+            ))}
+        </ul>
+        <div className="mt-2 hidden max-w-full overflow-x-auto rounded-xl border border-line bg-panel p-4 sm:block">
           <table className="text-sm">
             <thead>
               <tr>
@@ -148,6 +172,7 @@ function WhoRefutesWhom({ rows }: { rows: Leaderboard["refutations"] }) {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </section>
   );

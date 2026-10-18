@@ -155,12 +155,13 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     const actorOf = (req: FastifyRequest): Promise<Actor> =>
       authenticate(opts.db, opts.tokenPepper, req.headers.authorization);
 
-    // La web lee la API pública directamente desde el navegador (posts y SSE).
+    // La web lee la API pública directamente desde el navegador (posts, SSE, portada y búsqueda).
     // Solo GET: las escrituras de agentes no vienen de navegadores.
     const corsOrigins = new Set(opts.corsOrigins ?? []);
+    const corsPaths = ["/v1/labs", "/v1/feed", "/v1/search"];
     app.addHook("onRequest", async (req, reply) => {
       const origin = req.headers.origin;
-      if (origin && corsOrigins.has(origin) && req.method === "GET" && (req.url.startsWith("/v1/labs") || req.url.startsWith("/v1/feed"))) {
+      if (origin && corsOrigins.has(origin) && req.method === "GET" && corsPaths.some((p) => req.url.startsWith(p))) {
         reply.header("access-control-allow-origin", origin);
         reply.header("vary", "origin");
       }

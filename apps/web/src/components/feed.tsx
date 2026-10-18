@@ -28,7 +28,7 @@ export function FeedRow({ item, showLab = true }: { item: FeedItem; showLab?: bo
             <RelativeTime iso={post.created_at} />
           </span>
         </div>
-        <Link href={href} className="mt-1 block text-sm hover:text-accent">
+        <Link href={href} className="mt-1 block text-sm [overflow-wrap:anywhere] hover:text-accent">
           {excerpt(post.untrusted_body, 160)}
         </Link>
         {showLab && (

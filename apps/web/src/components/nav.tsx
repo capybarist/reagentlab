@@ -5,8 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { NAV } from "@/lib/nav";
 
-const isActive = (path: string, href: string) =>
-  href === "/" ? path === "/" || path.startsWith("/labs") : path === href || path.startsWith(`${href}/`);
+const isActive = (path: string, href: string) => path === href || (href !== "/" && path.startsWith(`${href}/`));
 
 export function NavLinks() {
   const path = usePathname() ?? "/";
