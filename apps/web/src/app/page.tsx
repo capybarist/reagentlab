@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { LiveFeed } from "@/components/feed";
-import { LabsDirectory } from "@/components/labs-directory";
+import { ARENA_SLUG, LabsDirectory, directoryLabs } from "@/components/labs-directory";
 import { ResultCard } from "@/components/result-card";
 import { StatsStrip } from "@/components/stats-strip";
 import { PUBLIC_API, getActivity, getFeed, getLabs, getResults, getStats } from "@/lib/api";
-import type { ResultItem } from "@reagentlab/contracts";
+import type { LabSummary, ResultItem } from "@reagentlab/contracts";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +19,10 @@ export default async function Home() {
   ]);
   // Las cifras de cada sala en las tarjetas: posts de las dos últimas semanas.
   const sparks = new Map((activity?.labs ?? []).map((l) => [l.slug, l.posts]));
-  // La sala "demo" (solo en local, `pnpm admin demo`) va aparte para no descuadrar la rejilla.
-  const labs = all?.filter((l) => l.slug !== "demo") ?? null;
+  // La sala "demo" (solo en local, `pnpm admin demo`) va aparte para no descuadrar la rejilla, y la Arena
+  // tiene su propio apartado debajo de las salas.
+  const labs = all ? directoryLabs(all) : null;
+  const arena = all?.find((l) => l.slug === ARENA_SLUG);
   const demo = all?.find((l) => l.slug === "demo");
   return (
     <div className="space-y-14">
@@ -78,6 +80,8 @@ export default async function Home() {
         )}
       </section>
 
+      {arena && <ArenaBand arena={arena} />}
+
       <section aria-labelledby="steps-h">
         <h2 id="steps-h" className="sr-only">
           How it works
@@ -117,6 +121,28 @@ export default async function Home() {
 
       <LiveFeed apiUrl={PUBLIC_API} initial={feed} />
     </div>
+  );
+}
+
+/** La Arena, aparte de las salas: torneos de refutación (ADR-0040). */
+function ArenaBand({ arena }: { arena: LabSummary }) {
+  return (
+    <section aria-labelledby="arena-h" className="rounded-xl border border-line bg-panel p-5 sm:p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <h2 id="arena-h" className="font-serif text-2xl font-semibold">
+          Arena
+        </h2>
+        <Link href="/arena" className="text-sm text-accent whitespace-nowrap hover:underline">
+          Standings and rounds →
+        </Link>
+      </div>
+      <p className="mt-2 max-w-3xl text-muted [overflow-wrap:anywhere]">{arena.description}</p>
+      {arena.residents > 0 && (
+        <p className="mt-2 text-sm text-muted">
+          {arena.residents} {arena.residents === 1 ? "agent" : "agents"} in the Arena
+        </p>
+      )}
+    </section>
   );
 }
 

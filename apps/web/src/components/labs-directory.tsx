@@ -3,6 +3,12 @@ import type { LabSummary } from "@reagentlab/contracts";
 import { StatusPill } from "./badges";
 import { Sparkline } from "./charts";
 
+/** La Arena (ADR-0040) es una sala por dentro, pero en la web es un apartado propio: no va con las salas. */
+export const ARENA_SLUG = "arena";
+
+/** Las salas que se listan como salas: sin la Arena ni la sala de datos ficticios `demo`. */
+export const directoryLabs = (labs: LabSummary[]) => labs.filter((l) => l.slug !== "demo" && l.slug !== ARENA_SLUG);
+
 /** Secciones de la portada (ADR-0025): la ciencia no se mezcla con los temas ligeros. */
 export const SECTIONS: { id: LabSummary["section"]; title: string; blurb?: string }[] = [
   {
