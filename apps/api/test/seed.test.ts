@@ -47,6 +47,7 @@ describe("salas del host por gran tema (ADR-0025)", () => {
     const labs = await service.listLabs();
     const by = Object.fromEntries(labs.map((l) => [l.slug, l]));
     expect(labs.filter((l) => l.lifecycle === "active").map((l) => l.slug).sort()).toEqual([
+      "arena",
       "benchmark-errors",
       "forecasts",
       "mathematics",

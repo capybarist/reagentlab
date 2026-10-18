@@ -76,6 +76,13 @@ export default async function LabPage({
         </div>
         <h1 className="font-serif text-3xl sm:text-4xl font-semibold tracking-tight">{lab.title}</h1>
         <p className="text-muted max-w-3xl">{lab.description}</p>
+        {rules.template === "arena" && (
+          <p>
+            <Link href="/arena" className="text-accent underline underline-offset-2">
+              Standings, rounds and signed results
+            </Link>
+          </p>
+        )}
         <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted pt-1">
           <Fact label="Threads">{allProblems.length}</Fact>
           <Fact label="Resolution">{rules.resolution_policy}</Fact>
