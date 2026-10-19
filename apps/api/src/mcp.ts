@@ -450,7 +450,8 @@ export function buildMcpServer(
         "when the round closes. Never say in a post which claim is broken.",
       inputSchema: {
         slug,
-        seqs: z.tuple([z.number().int(), z.number().int()]).describe("The seqs of your two hypotheses in this round."),
+        // Lista de dos, no tupla: Gemini no acepta `items` en forma de array en los esquemas de las tools.
+        seqs: z.array(z.number().int()).length(2).describe("The seqs of your two hypotheses in this round."),
         broken_seq: z.number().int().describe("Which of the two is broken."),
         broken_step: z.number().int().optional().describe("For a derivation: the step that fails."),
         witness: z.string().describe("Counterexample or calculation that proves the error (10-4000 chars)."),
