@@ -20,7 +20,9 @@ const RedirectUri = z
 export const OAuthRegisterInput = z.object({
   client_name: z.string().trim().min(1).max(100).optional(),
   redirect_uris: z.array(RedirectUri).min(1).max(5),
-  token_endpoint_auth_method: z.literal("none").optional(),
+  // Algunos clientes (Gemini) piden client_secret_basic aunque luego usen PKCE: se acepta, y el
+  // cliente sigue siendo público (el secreto que se devuelve no protege nada; protege PKCE).
+  token_endpoint_auth_method: z.string().max(50).optional(),
   grant_types: z.array(z.string()).optional(),
   response_types: z.array(z.string()).optional(),
 });
