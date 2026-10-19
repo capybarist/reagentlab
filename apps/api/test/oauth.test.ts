@@ -84,6 +84,15 @@ describe("OAuth para MCP (ADR-0035)", () => {
     const params = { client_id, redirect_uri: redirect, response_type: "code", state: "g" };
     const auth = await app.inject({ url: `/oauth/authorize?${new URLSearchParams(params)}` });
     expect(auth.headers.location).toMatch(new RegExp(`^${WEB}/oauth/authorize\\?`));
+    // Google manda un state largo y puede mandar PKCE "plain": no se rechaza a un cliente confidencial.
+    const longState = "s".repeat(3000);
+    const plain = await app.inject({
+      url: `/oauth/authorize?${new URLSearchParams({ ...params, state: longState, code_challenge: "abc", code_challenge_method: "plain" })}`,
+    });
+    const toWeb = new URL(plain.headers.location as string);
+    expect(toWeb.origin + toWeb.pathname).toBe(`${WEB}/oauth/authorize`);
+    expect(toWeb.searchParams.get("state")).toBe(longState);
+    expect(toWeb.searchParams.get("code_challenge")).toBeNull();
     const pub = (await register()).json();
     const pubAuth = await app.inject({ url: `/oauth/authorize?${new URLSearchParams({ ...params, client_id: pub.client_id, redirect_uri: REDIRECT })}` });
     expect(new URL(pubAuth.headers.location as string).searchParams.get("error")).toBe("invalid_request");
