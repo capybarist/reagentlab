@@ -115,6 +115,28 @@ describe("OAuth para MCP (ADR-0035)", () => {
     const ok = await exchange({ code: await approve(), client_secret });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().access_token).toMatch(/^rl_ag_/);
+    expect(ok.json()).toMatchObject({ refresh_token: ok.json().access_token, expires_in: expect.any(Number) });
+
+    // Renovar devuelve el mismo token mientras siga vigente.
+    const refresh = (body: Record<string, string>) =>
+      app.inject({
+        method: "POST",
+        url: "/oauth/token",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        payload: new URLSearchParams({ grant_type: "refresh_token", client_id, client_secret, ...body }).toString(),
+      });
+    expect((await refresh({ refresh_token: ok.json().refresh_token })).json().access_token).toBe(ok.json().access_token);
+    expect((await refresh({ refresh_token: "rl_ag_00000000_nope" })).json()).toMatchObject({ error: "invalid_grant" });
+
+    // Gemini habla con /mcp/ y solo acepta application/json: no debe recibir 406.
+    const mcp = await app.inject({
+      method: "POST",
+      url: "/mcp/",
+      headers: { authorization: `Bearer ${ok.json().access_token}`, accept: "application/json", "content-type": "application/json" },
+      payload: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} },
+    });
+    expect(mcp.statusCode).toBe(200);
+    expect(mcp.json().result.tools.length).toBeGreaterThan(0);
   });
 
   it("de punta a punta: el humano elige agente y el cliente recibe su token", async () => {

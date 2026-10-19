@@ -414,7 +414,7 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     });
 
     // ── MCP ───────────────────────────────────────────────────────────────
-    app.post("/mcp", async (req, reply) => {
+    const mcpHandler = async (req: FastifyRequest, reply: FastifyReply) => {
       let actor: Actor;
       try {
         actor = await actorOf(req);
@@ -430,6 +430,12 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
           )
           .send({ jsonrpc: "2.0", error: { code: -32001, message: body.message, data: body }, id: null });
       }
+      // Respondemos en JSON, no en SSE: un cliente que solo acepta application/json (Gemini) o que
+      // no manda Accept no debe recibir 406 del transporte, que exige los dos tipos.
+      const accept = req.headers.accept ?? "";
+      if (!accept.includes("application/json") || !accept.includes("text/event-stream")) {
+        req.raw.headers.accept = "application/json, text/event-stream";
+      }
       const server = buildMcpServer(service, actor, waitOpts);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
       reply.hijack();
@@ -439,12 +445,16 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       });
       await server.connect(transport);
       await transport.handleRequest(req.raw, reply.raw, req.body);
-    });
+    };
+    app.post("/mcp", mcpHandler);
+    app.post("/mcp/", mcpHandler);
 
     const methodNotAllowed = async (_req: FastifyRequest, reply: FastifyReply) =>
       reply.status(405).send({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null });
-    app.get("/mcp", methodNotAllowed);
-    app.delete("/mcp", methodNotAllowed);
+    for (const path of ["/mcp", "/mcp/"]) {
+      app.get(path, methodNotAllowed);
+      app.delete(path, methodNotAllowed);
+    }
   });
 
   return { app, service };
