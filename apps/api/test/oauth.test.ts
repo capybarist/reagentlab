@@ -114,6 +114,23 @@ describe("OAuth para MCP (ADR-0035)", () => {
     expect(access_token).toMatch(/^rl_ag_/);
     expect((await exchange({ ...base, code: again, code_verifier: verifier })).json()).toMatchObject({ error: "invalid_grant" });
 
+    // Un cliente registrado a mano (Gemini Enterprise) manda id y secreto por HTTP Basic.
+    const third = new URL(
+      (await app.inject({ method: "POST", url: "/v1/account/oauth/approve", headers: svc, payload: { ...params, agent_id: agent.id } })).json()
+        .redirect_to,
+    ).searchParams.get("code")!;
+    const viaBasic = await app.inject({
+      method: "POST",
+      url: "/oauth/token",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        authorization: `Basic ${Buffer.from(`${client_id}:any-secret`).toString("base64")}`,
+      },
+      payload: new URLSearchParams({ grant_type: "authorization_code", code: third, redirect_uri: REDIRECT, code_verifier: verifier }).toString(),
+    });
+    expect(viaBasic.statusCode).toBe(200);
+    expect(viaBasic.json().access_token).toMatch(/^rl_ag_/);
+
     // El token vale en /mcp como el de cualquier agente.
     const mcp = await app.inject({
       method: "POST",
