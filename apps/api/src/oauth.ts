@@ -1,7 +1,7 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { OAuthAuthorizeParams, OAuthRegisterInput } from "@reagentlab/contracts";
 import { type Clock, systemClock } from "@reagentlab/core";
-import { type Db, consumeOAuthCode, getOAuthClient, issueToken, registerOAuthClient } from "@reagentlab/db";
+import { type Db, clientSecretMatches, consumeOAuthCode, getOAuthClient, issueToken, registerOAuthClient } from "@reagentlab/db";
 import type { FastifyInstance, FastifyReply } from "fastify";
 
 /**
@@ -24,6 +24,16 @@ const oauthError = (reply: FastifyReply, status: number, error: string, descript
   reply.status(status).header("cache-control", "no-store").send({ error, error_description: description });
 
 export const resourceMetadataUrl = (issuer: string) => `${issuer.replace(/\/$/, "")}/.well-known/oauth-protected-resource`;
+
+/** PKCE es obligatorio para clientes públicos; si viene, solo S256. Devuelve el problema o null. */
+export function pkceProblem(
+  client: { secretHash: string | null },
+  p: { code_challenge?: string; code_challenge_method?: string },
+): string | null {
+  if (p.code_challenge && p.code_challenge_method !== "S256") return "code_challenge_method must be S256.";
+  if (!p.code_challenge && !client.secretHash) return "PKCE (code_challenge with S256) is required for public clients.";
+  return null;
+}
 
 export function registerOAuthRoutes(app: FastifyInstance, opts: OAuthOptions) {
   const clock = opts.clock ?? systemClock;
@@ -62,18 +72,19 @@ export function registerOAuthRoutes(app: FastifyInstance, opts: OAuthOptions) {
     if (!parsed.success) {
       return oauthError(reply, 400, "invalid_client_metadata", parsed.error.issues.map((i) => i.message).join("; "));
     }
+    // Un cliente que pide autenticarse con secreto (Gemini) es confidencial: recibe un secreto, que
+    // se comprueba en /oauth/token y le permite no usar PKCE. Los demás son públicos y usan PKCE.
+    const method = parsed.data.token_endpoint_auth_method;
+    const withSecret = method === "client_secret_basic" || method === "client_secret_post";
     const c = await registerOAuthClient(opts.db, {
       name: parsed.data.client_name ?? "MCP client",
       redirectUris: parsed.data.redirect_uris,
       now: clock.now(),
+      confidential: withSecret,
     });
-    // Si el cliente pidió autenticarse con secreto, se le da uno para que no se rinda (Gemini pasa
-    // entonces a pedir id y secreto a mano). No se guarda ni se comprueba: el token lo protege PKCE.
-    const method = parsed.data.token_endpoint_auth_method;
-    const withSecret = method === "client_secret_basic" || method === "client_secret_post";
     return reply.status(201).header("cache-control", "no-store").send({
       client_id: c.clientId,
-      ...(withSecret ? { client_secret: randomBytes(24).toString("base64url"), client_secret_expires_at: 0 } : {}),
+      ...(c.secret ? { client_secret: c.secret, client_secret_expires_at: 0 } : {}),
       client_name: c.name,
       redirect_uris: c.redirectUris,
       token_endpoint_auth_method: withSecret ? method : "none",
@@ -91,36 +102,52 @@ export function registerOAuthRoutes(app: FastifyInstance, opts: OAuthOptions) {
       return oauthError(reply, 400, "invalid_request", "Unknown client_id or redirect_uri not registered for it.");
     }
     const parsed = OAuthAuthorizeParams.safeParse(req.query);
-    if (!parsed.success) {
+    const problem = !parsed.success
+      ? parsed.error.issues.map((i) => i.message).join("; ")
+      : pkceProblem(client, parsed.data);
+    if (problem) {
+      req.log.info({ client_id: client.clientId, problem }, "oauth authorize rejected");
       const back = new URL(req.query.redirect_uri!);
       back.searchParams.set("error", "invalid_request");
-      back.searchParams.set("error_description", parsed.error.issues.map((i) => i.message).join("; "));
+      back.searchParams.set("error_description", problem);
       if (req.query.state) back.searchParams.set("state", req.query.state);
       return reply.redirect(back.toString(), 302);
     }
     const web = new URL(`${opts.webUrl.replace(/\/$/, "")}/oauth/authorize`);
-    for (const [k, v] of Object.entries(parsed.data)) if (v !== undefined) web.searchParams.set(k, v);
+    for (const [k, v] of Object.entries(parsed.data!)) if (v !== undefined) web.searchParams.set(k, v);
     return reply.redirect(web.toString(), 302);
   });
 
   app.post("/oauth/token", async (req, reply) => {
     const b = { ...((req.body ?? {}) as Record<string, string | undefined>) };
-    // Clientes que se registran a mano con id y secreto (Gemini Enterprise) pueden mandarlos por HTTP
-    // Basic (client_secret_basic). Los clientes son públicos: el secreto no se comprueba, manda PKCE.
+    // El id y el secreto pueden llegar por HTTP Basic (client_secret_basic) en vez de en el cuerpo.
     const basic = /^Basic\s+(.+)$/i.exec(req.headers.authorization ?? "");
-    if (basic && !b.client_id) {
-      const [id] = Buffer.from(basic[1]!, "base64").toString("utf8").split(":");
-      if (id) b.client_id = decodeURIComponent(id);
+    if (basic) {
+      const raw = Buffer.from(basic[1]!, "base64").toString("utf8");
+      const i = raw.indexOf(":");
+      const id = decodeURIComponent(i < 0 ? raw : raw.slice(0, i));
+      if (!b.client_id && id) b.client_id = id;
+      if (b.client_secret === undefined && i >= 0 && id === b.client_id) b.client_secret = decodeURIComponent(raw.slice(i + 1));
     }
     if (b.grant_type !== "authorization_code") {
       return oauthError(reply, 400, "unsupported_grant_type", "Only authorization_code is supported.");
     }
-    if (!b.code || !b.code_verifier || !b.redirect_uri || !b.client_id) {
-      return oauthError(reply, 400, "invalid_request", "code, code_verifier, redirect_uri and client_id are required.");
+    if (!b.code || !b.redirect_uri || !b.client_id) {
+      return oauthError(reply, 400, "invalid_request", "code, redirect_uri and client_id are required.");
+    }
+    const client = await getOAuthClient(opts.db, b.client_id);
+    if (!client) return oauthError(reply, 401, "invalid_client", "Unknown client_id.");
+    // Un cliente confidencial que manda secreto tiene que mandar el bueno.
+    if (client.secretHash && b.client_secret !== undefined && !clientSecretMatches(client, b.client_secret)) {
+      return oauthError(reply, 401, "invalid_client", "Wrong client secret.");
     }
     const row = await consumeOAuthCode(opts.db, b.code, clock.now());
-    const challenge = createHash("sha256").update(b.code_verifier).digest("base64url");
-    if (!row || row.clientId !== b.client_id || row.redirectUri !== b.redirect_uri || row.codeChallenge !== challenge) {
+    // Con PKCE manda el verificador; sin PKCE (solo clientes confidenciales) manda el secreto.
+    const proofOk = row?.codeChallenge
+      ? !!b.code_verifier && createHash("sha256").update(b.code_verifier).digest("base64url") === row.codeChallenge
+      : clientSecretMatches(client, b.client_secret);
+    if (!row || row.clientId !== b.client_id || row.redirectUri !== b.redirect_uri || !proofOk) {
+      req.log.info({ client_id: b.client_id }, "oauth token rejected");
       return oauthError(reply, 400, "invalid_grant", "The code is invalid, expired, already used, or does not match.");
     }
     const { token } = await issueToken(opts.db, row.agentId, opts.tokenPepper);

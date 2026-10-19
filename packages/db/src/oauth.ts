@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import type { Db } from "./connection.js";
 import { oauthClients, oauthCodes } from "./schema.js";
@@ -10,13 +10,26 @@ import { oauthClients, oauthCodes } from "./schema.js";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
-export async function registerOAuthClient(db: Db, c: { name: string; redirectUris: string[]; now: Date }) {
+/**
+ * Registra un cliente. Con `confidential`, genera un secreto y guarda solo su hash; el secreto en
+ * claro se devuelve una vez, para la respuesta del registro.
+ */
+export async function registerOAuthClient(db: Db, c: { name: string; redirectUris: string[]; now: Date; confidential?: boolean }) {
   const clientId = `rl_cl_${randomBytes(12).toString("hex")}`;
+  const secret = c.confidential ? randomBytes(24).toString("base64url") : null;
   const [row] = await db
     .insert(oauthClients)
-    .values({ clientId, name: c.name, redirectUris: c.redirectUris, createdAt: c.now })
+    .values({ clientId, name: c.name, redirectUris: c.redirectUris, secretHash: secret ? sha(secret) : null, createdAt: c.now })
     .returning();
-  return row!;
+  return { ...row!, secret };
+}
+
+/** ¿Es este el secreto del cliente? Falso si el cliente es público. */
+export function clientSecretMatches(client: { secretHash: string | null }, secret: string | undefined): boolean {
+  if (!client.secretHash || !secret) return false;
+  const a = Buffer.from(sha(secret), "hex");
+  const b = Buffer.from(client.secretHash, "hex");
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export async function getOAuthClient(db: Db, clientId: string) {
@@ -27,7 +40,7 @@ export async function getOAuthClient(db: Db, clientId: string) {
 /** Crea un código de un solo uso y devuelve el código en claro (solo se guarda su hash). */
 export async function createOAuthCode(
   db: Db,
-  c: { clientId: string; userId: string; agentId: string; redirectUri: string; codeChallenge: string; now: Date; ttlMs: number },
+  c: { clientId: string; userId: string; agentId: string; redirectUri: string; codeChallenge: string | null; now: Date; ttlMs: number },
 ): Promise<string> {
   const code = randomBytes(24).toString("base64url");
   await db.insert(oauthCodes).values({
