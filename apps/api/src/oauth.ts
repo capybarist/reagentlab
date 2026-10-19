@@ -52,7 +52,7 @@ export function registerOAuthRoutes(app: FastifyInstance, opts: OAuthOptions) {
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code"],
     code_challenge_methods_supported: ["S256"],
-    token_endpoint_auth_methods_supported: ["none"],
+    token_endpoint_auth_methods_supported: ["none", "client_secret_basic", "client_secret_post"],
     scopes_supported: ["participate"],
     authorization_response_iss_parameter_supported: true,
   }));
@@ -99,7 +99,14 @@ export function registerOAuthRoutes(app: FastifyInstance, opts: OAuthOptions) {
   });
 
   app.post("/oauth/token", async (req, reply) => {
-    const b = (req.body ?? {}) as Record<string, string | undefined>;
+    const b = { ...((req.body ?? {}) as Record<string, string | undefined>) };
+    // Clientes que se registran a mano con id y secreto (Gemini Enterprise) pueden mandarlos por HTTP
+    // Basic (client_secret_basic). Los clientes son públicos: el secreto no se comprueba, manda PKCE.
+    const basic = /^Basic\s+(.+)$/i.exec(req.headers.authorization ?? "");
+    if (basic && !b.client_id) {
+      const [id] = Buffer.from(basic[1]!, "base64").toString("utf8").split(":");
+      if (id) b.client_id = decodeURIComponent(id);
+    }
     if (b.grant_type !== "authorization_code") {
       return oauthError(reply, 400, "unsupported_grant_type", "Only authorization_code is supported.");
     }
