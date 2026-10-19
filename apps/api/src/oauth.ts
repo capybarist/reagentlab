@@ -1,8 +1,16 @@
 import { createHash } from "node:crypto";
 import { OAuthAuthorizeParams, OAuthRegisterInput } from "@reagentlab/contracts";
 import { type Clock, systemClock } from "@reagentlab/core";
-import { type Db, clientSecretMatches, consumeOAuthCode, getOAuthClient, issueToken, registerOAuthClient } from "@reagentlab/db";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import {
+  type Db,
+  clientSecretMatches,
+  consumeOAuthCode,
+  findAgentByToken,
+  getOAuthClient,
+  issueToken,
+  registerOAuthClient,
+} from "@reagentlab/db";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 /**
  * OAuth 2.1 para MCP (ADR-0035). Esta API es a la vez servidor de recursos (`/mcp`) y servidor de
@@ -62,7 +70,7 @@ export function registerOAuthRoutes(app: FastifyInstance, opts: OAuthOptions) {
     token_endpoint: `${issuer}/oauth/token`,
     registration_endpoint: `${issuer}/oauth/register`,
     response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none", "client_secret_basic", "client_secret_post"],
     scopes_supported: ["participate"],
@@ -90,7 +98,7 @@ export function registerOAuthRoutes(app: FastifyInstance, opts: OAuthOptions) {
       client_name: c.name,
       redirect_uris: c.redirectUris,
       token_endpoint_auth_method: withSecret ? method : "none",
-      grant_types: ["authorization_code"],
+      grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       client_id_issued_at: Math.floor(c.createdAt.getTime() / 1000),
     });
@@ -139,8 +147,9 @@ export function registerOAuthRoutes(app: FastifyInstance, opts: OAuthOptions) {
       if (!b.client_id && id) b.client_id = id;
       if (b.client_secret === undefined && i >= 0 && id === b.client_id) b.client_secret = decodeURIComponent(raw.slice(i + 1));
     }
+    if (b.grant_type === "refresh_token") return refresh(req, reply, b);
     if (b.grant_type !== "authorization_code") {
-      return oauthError(reply, 400, "unsupported_grant_type", "Only authorization_code is supported.");
+      return oauthError(reply, 400, "unsupported_grant_type", "Only authorization_code and refresh_token are supported.");
     }
     if (!b.code || !b.redirect_uri || !b.client_id) {
       return oauthError(reply, 400, "invalid_request", "code, redirect_uri and client_id are required.");
@@ -161,10 +170,35 @@ export function registerOAuthRoutes(app: FastifyInstance, opts: OAuthOptions) {
       return oauthError(reply, 400, "invalid_grant", "The code is invalid, expired, already used, or does not match.");
     }
     const { token } = await issueToken(opts.db, row.agentId, opts.tokenPepper);
-    return reply.header("cache-control", "no-store").header("pragma", "no-cache").send({
-      access_token: token,
-      token_type: "Bearer",
-      scope: "participate",
-    });
+    return sendToken(reply, token);
+  });
+
+  // Los tokens de agente no caducan: el refresh_token es el mismo token y renovarlo lo devuelve
+  // tal cual mientras siga vigente (sin revocar, agente activo, humano sin banear). Algunos
+  // clientes (Gemini) dan la vinculación por rota si no reciben refresh_token y expires_in.
+  async function refresh(req: FastifyRequest, reply: FastifyReply, b: Record<string, string | undefined>) {
+    const client = b.client_id ? await getOAuthClient(opts.db, b.client_id) : null;
+    if (b.client_id && !client) return oauthError(reply, 401, "invalid_client", "Unknown client_id.");
+    if (client?.secretHash && b.client_secret !== undefined && !clientSecretMatches(client, b.client_secret)) {
+      return oauthError(reply, 401, "invalid_client", "Wrong client secret.");
+    }
+    const found = b.refresh_token ? await findAgentByToken(opts.db, b.refresh_token, opts.tokenPepper) : null;
+    if (!found) {
+      req.log.info({ client_id: b.client_id }, "oauth refresh rejected");
+      return oauthError(reply, 400, "invalid_grant", "The refresh token is invalid or revoked.");
+    }
+    return sendToken(reply, b.refresh_token!);
+  }
+}
+
+const TOKEN_LIFETIME_S = 30 * 24 * 3600;
+
+function sendToken(reply: FastifyReply, token: string) {
+  return reply.header("cache-control", "no-store").header("pragma", "no-cache").send({
+    access_token: token,
+    token_type: "Bearer",
+    expires_in: TOKEN_LIFETIME_S,
+    refresh_token: token,
+    scope: "participate",
   });
 }
