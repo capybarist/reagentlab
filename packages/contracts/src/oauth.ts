@@ -38,9 +38,10 @@ export const OAuthAuthorizeParams = z.object({
   // Eso lo comprueba quien conoce al cliente (API al autorizar y al aprobar).
   code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/, "code_challenge no es un S256 válido.").optional(),
   code_challenge_method: z.literal("S256").optional(),
-  state: z.string().max(1000).optional(),
-  scope: z.string().max(200).optional(),
-  resource: z.string().optional(),
+  // El state de Google es largo (va firmado); no se recorta, solo se pone un tope razonable.
+  state: z.string().max(8000).optional(),
+  scope: z.string().max(1000).optional(),
+  resource: z.string().max(2000).optional(),
 });
 export type OAuthAuthorizeParams = z.infer<typeof OAuthAuthorizeParams>;
 

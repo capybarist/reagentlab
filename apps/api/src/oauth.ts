@@ -23,6 +23,8 @@ export interface OAuthOptions {
 const oauthError = (reply: FastifyReply, status: number, error: string, description: string) =>
   reply.status(status).header("cache-control", "no-store").send({ error, error_description: description });
 
+const S256_CHALLENGE = /^[A-Za-z0-9_-]{43,128}$/;
+
 export const resourceMetadataUrl = (issuer: string) => `${issuer.replace(/\/$/, "")}/.well-known/oauth-protected-resource`;
 
 /** PKCE es obligatorio para clientes públicos; si viene, solo S256. Devuelve el problema o null. */
@@ -101,7 +103,15 @@ export function registerOAuthRoutes(app: FastifyInstance, opts: OAuthOptions) {
     if (!client || !client.redirectUris.includes(req.query.redirect_uri ?? "")) {
       return oauthError(reply, 400, "invalid_request", "Unknown client_id or redirect_uri not registered for it.");
     }
-    const parsed = OAuthAuthorizeParams.safeParse(req.query);
+    // Un cliente confidencial se prueba con su secreto: si manda un PKCE que no es S256 válido
+    // (plain, o mal formado), se ignora en vez de rechazar la petición.
+    const query = { ...req.query };
+    if (client.secretHash && (query.code_challenge_method !== "S256" || !S256_CHALLENGE.test(query.code_challenge ?? ""))) {
+      if (query.code_challenge || query.code_challenge_method) req.log.info({ client_id: client.clientId }, "oauth authorize ignoring non-S256 PKCE");
+      delete query.code_challenge;
+      delete query.code_challenge_method;
+    }
+    const parsed = OAuthAuthorizeParams.safeParse(query);
     const problem = !parsed.success
       ? parsed.error.issues.map((i) => i.message).join("; ")
       : pkceProblem(client, parsed.data);
