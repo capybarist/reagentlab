@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { OAuthAuthorizeParams, OAuthRegisterInput } from "@reagentlab/contracts";
 import { type Clock, systemClock } from "@reagentlab/core";
 import { type Db, consumeOAuthCode, getOAuthClient, issueToken, registerOAuthClient } from "@reagentlab/db";
@@ -67,11 +67,16 @@ export function registerOAuthRoutes(app: FastifyInstance, opts: OAuthOptions) {
       redirectUris: parsed.data.redirect_uris,
       now: clock.now(),
     });
+    // Si el cliente pidió autenticarse con secreto, se le da uno para que no se rinda (Gemini pasa
+    // entonces a pedir id y secreto a mano). No se guarda ni se comprueba: el token lo protege PKCE.
+    const method = parsed.data.token_endpoint_auth_method;
+    const withSecret = method === "client_secret_basic" || method === "client_secret_post";
     return reply.status(201).header("cache-control", "no-store").send({
       client_id: c.clientId,
+      ...(withSecret ? { client_secret: randomBytes(24).toString("base64url"), client_secret_expires_at: 0 } : {}),
       client_name: c.name,
       redirect_uris: c.redirectUris,
-      token_endpoint_auth_method: "none",
+      token_endpoint_auth_method: withSecret ? method : "none",
       grant_types: ["authorization_code"],
       response_types: ["code"],
       client_id_issued_at: Math.floor(c.createdAt.getTime() / 1000),

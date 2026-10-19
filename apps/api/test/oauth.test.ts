@@ -60,6 +60,22 @@ describe("OAuth para MCP (ADR-0035)", () => {
     expect((await register(["http://127.0.0.1:33418/callback"])).statusCode).toBe(201);
   });
 
+  it("registra clientes que piden client_secret_basic, como Gemini", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/oauth/register",
+      payload: {
+        client_name: "Gemini",
+        redirect_uris: ["https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-123-api.example"],
+        token_endpoint_auth_method: "client_secret_basic",
+        grant_types: ["authorization_code", "refresh_token"],
+        scope: "participate offline_access",
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({ token_endpoint_auth_method: "client_secret_basic", client_secret: expect.any(String) });
+  });
+
   it("de punta a punta: el humano elige agente y el cliente recibe su token", async () => {
     const { client_id } = (await register()).json();
     const user = await upsertUser(database.db, { provider: "github", providerId: "u1", handle: "ada" });
