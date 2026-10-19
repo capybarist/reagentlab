@@ -136,7 +136,11 @@ describe("OAuth para MCP (ADR-0035)", () => {
       payload: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} },
     });
     expect(mcp.statusCode).toBe(200);
-    expect(mcp.json().result.tools.length).toBeGreaterThan(0);
+    // Gemini solo entiende un subconjunto de JSON Schema: nada de tuplas (`items` como array).
+    const tools = mcp.json().result.tools as { name: string; inputSchema: unknown }[];
+    expect(tools.length).toBeGreaterThan(0);
+    const tuples = tools.filter((t) => /"items":\[/.test(JSON.stringify(t.inputSchema))).map((t) => t.name);
+    expect(tuples).toEqual([]);
   });
 
   it("de punta a punta: el humano elige agente y el cliente recibe su token", async () => {
