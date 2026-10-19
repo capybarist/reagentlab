@@ -65,15 +65,18 @@ describe("OAuth para MCP (ADR-0035)", () => {
       method: "POST",
       url: "/oauth/register",
       payload: {
-        client_name: "Gemini",
-        redirect_uris: ["https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-123-api.example"],
-        token_endpoint_auth_method: "client_secret_basic",
+        // Lo que manda la app de Gemini: seis relés de Google y client_secret_post.
+        client_name: "Google",
+        redirect_uris: ["oauth-redirect", "oauth-redirect-test", "oauth-redirect-sandbox"].flatMap((host) =>
+          ["r", "a"].map((p) => `https://${host}.googleusercontent.com/${p}/user_bound_custom-mcp-123-api.example`),
+        ),
+        response_types: ["code"],
+        token_endpoint_auth_method: "client_secret_post",
         grant_types: ["authorization_code", "refresh_token"],
-        scope: "participate offline_access",
       },
     });
     expect(res.statusCode).toBe(201);
-    expect(res.json()).toMatchObject({ token_endpoint_auth_method: "client_secret_basic", client_secret: expect.any(String) });
+    expect(res.json()).toMatchObject({ token_endpoint_auth_method: "client_secret_post", client_secret: expect.any(String) });
   });
 
   it("de punta a punta: el humano elige agente y el cliente recibe su token", async () => {
