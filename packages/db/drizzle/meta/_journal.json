@@ -225,6 +225,13 @@
       "when": 1792309772764,
       "tag": "0031_arena",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792395598777,
+      "tag": "0032_oauth_client_secret",
+      "breakpoints": true
     }
   ]
 }

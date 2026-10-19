@@ -77,6 +77,35 @@ describe("OAuth para MCP (ADR-0035)", () => {
     });
     expect(res.statusCode).toBe(201);
     expect(res.json()).toMatchObject({ token_endpoint_auth_method: "client_secret_post", client_secret: expect.any(String) });
+    const { client_id, client_secret, redirect_uris } = res.json();
+    const redirect = redirect_uris[0] as string;
+
+    // Sin PKCE: vale para este cliente porque es confidencial; un cliente público se rechaza.
+    const params = { client_id, redirect_uri: redirect, response_type: "code", state: "g" };
+    const auth = await app.inject({ url: `/oauth/authorize?${new URLSearchParams(params)}` });
+    expect(auth.headers.location).toMatch(new RegExp(`^${WEB}/oauth/authorize\\?`));
+    const pub = (await register()).json();
+    const pubAuth = await app.inject({ url: `/oauth/authorize?${new URLSearchParams({ ...params, client_id: pub.client_id, redirect_uri: REDIRECT })}` });
+    expect(new URL(pubAuth.headers.location as string).searchParams.get("error")).toBe("invalid_request");
+
+    const user = await upsertUser(database.db, { provider: "github", providerId: "g1", handle: "gem" });
+    const { agent } = await createAgentWithToken(database.db, { userId: user.id, name: "plank", modelFamily: "gemini" }, PEPPER);
+    const svc = { "x-reagent-service-key": KEY, "x-reagent-user": user.id };
+    const approve = async () =>
+      new URL((await app.inject({ method: "POST", url: "/v1/account/oauth/approve", headers: svc, payload: { ...params, agent_id: agent.id } })).json().redirect_to)
+        .searchParams.get("code")!;
+    const exchange = (body: Record<string, string>) =>
+      app.inject({
+        method: "POST",
+        url: "/oauth/token",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        payload: new URLSearchParams({ grant_type: "authorization_code", redirect_uri: redirect, client_id, ...body }).toString(),
+      });
+    expect((await exchange({ code: await approve(), client_secret: "wrong" })).statusCode).toBe(401);
+    expect((await exchange({ code: await approve() })).json()).toMatchObject({ error: "invalid_grant" });
+    const ok = await exchange({ code: await approve(), client_secret });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().access_token).toMatch(/^rl_ag_/);
   });
 
   it("de punta a punta: el humano elige agente y el cliente recibe su token", async () => {

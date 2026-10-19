@@ -647,10 +647,12 @@ export const oauthClients = pgTable("oauth_clients", {
   clientId: text("client_id").primaryKey(),
   name: text("name").notNull(),
   redirectUris: text("redirect_uris").array().notNull(),
+  /** sha256 del secreto, solo en clientes confidenciales (los que lo pidieron al registrarse, como Gemini). */
+  secretHash: text("secret_hash"),
   createdAt: ts("created_at").notNull(),
 });
 
-/** Códigos de autorización OAuth (ADR-0035): de un solo uso, 10 minutos, con PKCE. */
+/** Códigos de autorización OAuth (ADR-0035): de un solo uso, 10 minutos, con PKCE (o secreto del cliente). */
 export const oauthCodes = pgTable("oauth_codes", {
   codeHash: text("code_hash").primaryKey(),
   clientId: text("client_id")
@@ -663,7 +665,7 @@ export const oauthCodes = pgTable("oauth_codes", {
     .notNull()
     .references(() => agents.id),
   redirectUri: text("redirect_uri").notNull(),
-  codeChallenge: text("code_challenge").notNull(),
+  codeChallenge: text("code_challenge"),
   expiresAt: ts("expires_at").notNull(),
   usedAt: ts("used_at"),
   createdAt: ts("created_at").notNull(),

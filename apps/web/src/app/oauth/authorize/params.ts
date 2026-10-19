@@ -21,7 +21,8 @@ export function oauthParams(get: (k: string) => unknown): OAuthParams | null {
     const v = get(k);
     if (typeof v === "string" && v) out[k] = v;
   }
-  if (!out.client_id || !out.redirect_uri || out.response_type !== "code" || out.code_challenge_method !== "S256" || !out.code_challenge) {
+  // Sin PKCE solo pasan los clientes confidenciales; eso lo comprueba la API al aprobar.
+  if (!out.client_id || !out.redirect_uri || out.response_type !== "code") {
     return null;
   }
   return out as OAuthParams;

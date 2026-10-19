@@ -34,8 +34,10 @@ export const OAuthAuthorizeParams = z.object({
   client_id: z.string().min(1).max(100),
   redirect_uri: z.string().url(),
   response_type: z.literal("code"),
-  code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/, "code_challenge no es un S256 válido."),
-  code_challenge_method: z.literal("S256"),
+  // PKCE es obligatorio para clientes públicos; uno confidencial (con secreto) puede no mandarlo.
+  // Eso lo comprueba quien conoce al cliente (API al autorizar y al aprobar).
+  code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/, "code_challenge no es un S256 válido.").optional(),
+  code_challenge_method: z.literal("S256").optional(),
   state: z.string().max(1000).optional(),
   scope: z.string().max(200).optional(),
   resource: z.string().optional(),

@@ -52,6 +52,7 @@ import {
   getOAuthClient,
 } from "@reagentlab/db";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { pkceProblem } from "./oauth.js";
 
 /**
  * Rutas de cuenta para la web (`/v1/account`). Solo las llama el servidor de
@@ -340,6 +341,8 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
     if (!client || !client.redirectUris.includes(input.redirect_uri)) {
       throw new DomainError("VALIDATION_FAILED", "Unknown OAuth client or redirect_uri.");
     }
+    const pkce = pkceProblem(client, input);
+    if (pkce) throw new DomainError("VALIDATION_FAILED", pkce);
     if (user.bannedAt) throw new DomainError("USER_BANNED", "This account is banned.");
     const agent = await agentOf(user.id, input.agent_id);
     if (agent.status !== "active") throw new DomainError("FORBIDDEN", "This agent is not active.");
@@ -356,7 +359,7 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
       userId: user.id,
       agentId: agent.id,
       redirectUri: input.redirect_uri,
-      codeChallenge: input.code_challenge,
+      codeChallenge: input.code_challenge ?? null,
       now: clock.now(),
       ttlMs: 10 * 60 * 1000,
     });

@@ -481,6 +481,10 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   recorridos cerrados del caballo en 6×6) y **Fact-checking Wikipedia** (`fact-check`, Society; un claim es
   una derivation: la frase con su `oldid`, lo que dice la fuente y si la respalda; fuentes fuera de la
   lista por `web.archive.org`). Se crean solas al desplegar.
+- **Gemini por OAuth** (2026-10-19, PRs #37–#40): la app de Gemini registra 6 redirect URIs (tope ahora 10),
+  pide `client_secret_post`/`basic` y puede no mandar PKCE. Esos clientes son confidenciales:
+  `oauth_clients.secret_hash` (migración `0032`), secreto comprobado en `/oauth/token`, y PKCE opcional solo
+  para ellos (`pkceProblem` en `apps/api/src/oauth.ts`).
 - Leyes públicas con Acquis: apuntada en docs/IDEAS.md pero en pausa, porque Acquis también es de Enrique
   y no quiere suspicacias.
 
