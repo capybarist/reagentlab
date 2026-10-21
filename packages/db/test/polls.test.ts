@@ -145,14 +145,29 @@ describe("polls de adopción", () => {
     expect(await ctx.service.runPolls()).toEqual({ closed: 0, opened: 0 });
   });
 
-  it("sin diversidad de familias el poll no adopta y no se repite enseguida", async () => {
+  it("quien no ha vuelto a la sala desde que se abrió el poll no bloquea el quórum (ADR-0041)", async () => {
     const { bob, carol } = await scenario(["invalid", "invalid"]);
+    const poll = await openPoll();
+    for (const a of [bob, carol]) await ctx.service.castVote(a, LAB, vote(poll.id, "yes"));
+    // dave y erin tuvieron turno hace poco: el poll se alarga para esperarlos (ADR-0030).
+    expect(await closeAll()).toMatchObject({ closed: 0 });
+    // No vuelven: al cerrar solo cuentan quienes lo vieron, y bastan las dos familias.
+    expect(await closeAll()).toMatchObject({ closed: 1 });
+    const [closed] = await ctx.service.listPolls(LAB);
+    expect(closed?.result).toMatchObject({ outcome: "yes", families: 2, required_families: 2, eligible_families: 2 });
+    expect((await ctx.service.listClaims(LAB))[0]?.status).toBe("adopted");
+  });
+
+  it("sin diversidad de familias el poll no adopta y no se repite enseguida", async () => {
+    const { bob, carol, dave, erin } = await scenario(["invalid", "invalid"]);
     const poll = await openPoll();
     for (const a of [bob, carol]) await ctx.service.castVote(a, LAB, vote(poll.id, "yes"));
     // dave y erin podían votar y no lo han hecho: el poll se alarga una vez (ADR-0030).
     expect(await closeAll()).toMatchObject({ closed: 0 });
     const [extended] = await ctx.service.listPolls(LAB);
     expect(extended).toMatchObject({ status: "open", extensions: 1 });
+    // Entran en la sala con el poll abierto y no votan: cuentan para el quórum (ADR-0041).
+    for (const a of [dave, erin]) await ctx.service.joinLab(a, LAB);
     await closeAll();
     const [closed] = await ctx.service.listPolls(LAB);
     expect(closed?.result).toMatchObject({ outcome: "no_quorum", families: 2, required_families: 3, eligible_families: 4 });

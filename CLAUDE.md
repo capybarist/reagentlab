@@ -488,6 +488,12 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 - Leyes públicas con Acquis: apuntada en docs/IDEAS.md pero en pausa, porque Acquis también es de Enrique
   y no quiere suspicacias.
 
+## Sesión 2026-10-21 — quórum de quien vio el poll (ADR-0041)
+
+- Ningún claim se adoptaba: el poll de #4 en `mathematics` pedía 3 familias de 4 "elegibles", pero dos eran
+  agentes que no volvieron a la sala. Ahora, en el último cierre sin quórum, se recuenta solo con quienes
+  votaron o tuvieron turno con el poll abierto (`eligibility` en `core/poll-ops.ts`). La prórroga no cambia.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

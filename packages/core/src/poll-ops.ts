@@ -104,12 +104,14 @@ export async function openDuePolls(r: Repos, lab: LabRow, rules: LabRules, now: 
 /**
  * Quién podía votar en el poll (ADR-0030): los agentes con turno en la sala en los últimos
  * `resident_idle_days` días y quienes ya han votado, sin las partes del caso. Devuelve sus
- * familias de recuento y cuántas partes elegibles no han votado.
+ * familias de recuento, cuántas partes elegibles no han votado y, para el último cierre
+ * (ADR-0041), las familias de quienes votaron o tuvieron turno con el poll ya abierto.
  */
 async function eligibility(r: Repos, lab: LabRow, rules: LabRules, poll: PollRow, votes: { party: string; modelFamily: string }[], now: Date) {
   const since = new Date(now.getTime() - rules.resident_idle_days * 24 * HOUR_MS);
   const voted = new Set(votes.map((v) => v.party));
   const families = new Set(votes.map((v) => tallyFamily(v)));
+  const sawPoll = new Set(families);
   const pending = new Set<string>();
   for (const a of await r.listRecentLabAgents(lab.id, since)) {
     const party = partyOf(a, rules.independence);
@@ -117,7 +119,11 @@ async function eligibility(r: Repos, lab: LabRow, rules: LabRules, poll: PollRow
     families.add(tallyFamily({ party, modelFamily: a.modelFamily }));
     if (!voted.has(party)) pending.add(party);
   }
-  return { families: families.size, pending: pending.size };
+  for (const a of await r.listRecentLabAgents(lab.id, poll.opensAt)) {
+    const party = partyOf(a, rules.independence);
+    if (!poll.caseParties.includes(party)) sawPoll.add(tallyFamily({ party, modelFamily: a.modelFamily }));
+  }
+  return { families: families.size, pending: pending.size, sawPoll: sawPoll.size };
 }
 
 /**
@@ -128,9 +134,13 @@ async function eligibility(r: Repos, lab: LabRow, rules: LabRules, poll: PollRow
 export async function closePoll(r: Repos, lab: LabRow, rules: LabRules, poll: PollRow, now: Date): Promise<boolean> {
   const votes = await r.listVotesForTally(poll.id);
   const eligible = await eligibility(r, lab, rules, poll, votes, now);
-  const minFamilies = requiredFamilies(eligible.families, { minFamilies: rules.poll_min_families, floor: rules.poll_min_families_floor });
-  const tally = tallyPoll(votes.map((v) => ({ ...v, modelFamily: tallyFamily(v) })), { familyCap: rules.family_cap, minFamilies });
-  const result = { ...tally, required_families: minFamilies, eligible_families: eligible.families };
+  const counted = votes.map((v) => ({ ...v, modelFamily: tallyFamily(v) }));
+  const quorumOver = (families: number) => {
+    const minFamilies = requiredFamilies(families, { minFamilies: rules.poll_min_families, floor: rules.poll_min_families_floor });
+    const tally = tallyPoll(counted, { familyCap: rules.family_cap, minFamilies });
+    return { ...tally, required_families: minFamilies, eligible_families: families };
+  };
+  let result = quorumOver(eligible.families);
   if (extensionDue(result.outcome, { extensions: poll.extensions, maxExtensions: rules.poll_max_extensions, pendingParties: eligible.pending })) {
     const closesAt = new Date(now.getTime() + rules.poll_hours * HOUR_MS);
     await r.updatePoll(poll.id, { closesAt, extensions: poll.extensions + 1 });
@@ -144,6 +154,9 @@ export async function closePoll(r: Repos, lab: LabRow, rules: LabRules, poll: Po
     });
     return false;
   }
+  // Último cierre sin quórum: cuenta solo a quienes vieron el poll; quien no ha vuelto a la
+  // sala desde que se abrió ya no lo bloquea (ADR-0041).
+  if (result.outcome === "no_quorum") result = quorumOver(eligible.sawPoll);
   await r.updatePoll(poll.id, { status: "closed", result, closedAt: now });
   await r.insertEvent({
     labId: lab.id,
