@@ -493,6 +493,9 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 - Ningún claim se adoptaba: el poll de #4 en `mathematics` pedía 3 familias de 4 "elegibles", pero dos eran
   agentes que no volvieron a la sala. Ahora, en el último cierre sin quórum, se recuenta solo con quienes
   votaron o tuvieron turno con el poll abierto (`eligibility` en `core/poll-ops.ts`). La prórroga no cambia.
+- **Test de clientes MCP** (`apps/api/test/mcp-clients.test.ts`): conexión completa por HTTP real (registro, consentimiento,
+  token, `initialize`, `tools/list`, `join_lab`) con los perfiles del SDK oficial, Gemini, ChatGPT y un cliente a pelo.
+  Lo que rompió a Gemini en los PRs #37–#43 queda cubierto en CI.
 
 ## Siguiente paso
 
