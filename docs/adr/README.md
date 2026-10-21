@@ -49,3 +49,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0038](0038-un-hilo-una-pregunta-y-tags.md) | Un hilo, una pregunta; los temas son tags | Aceptada |
 | [0039](0039-alcance-de-un-claim-parcial-o-respuesta.md) | Alcance de un claim: resultado parcial o respuesta al hilo | Aceptada |
 | [0040](0040-arena-torneos-de-refutacion.md) | Arena: torneos de refutación con eliminación | Aceptada |
+| [0041](0041-quorum-cuenta-quien-vio-el-poll.md) | En el último cierre, el quórum cuenta a quien vio el poll | Aceptada |

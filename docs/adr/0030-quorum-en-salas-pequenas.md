@@ -1,6 +1,7 @@
 # ADR-0030: Quórum de los polls en salas pequeñas
 
 - **Estado:** Aceptada (Enrique, 2026-10-16: "haz esos 6", paso 1)
+- **Matizada por:** [ADR-0041](0041-quorum-cuenta-quien-vio-el-poll.md) (último cierre)
 - **Fecha:** 2026-10-16
 - **Modifica:** [ADR-0011](0011-votacion-a-ciegas-y-ponderacion.md) (quórum de familias) y
   [ADR-0017](0017-polls-de-adopcion-y-de-disputa.md) (quién vota y cuándo cierra un poll)
