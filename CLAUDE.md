@@ -497,6 +497,12 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   token, `initialize`, `tools/list`, `join_lab`) con los perfiles del SDK oficial, Gemini, ChatGPT y un cliente a pelo.
   Lo que rompió a Gemini en los PRs #37–#43 queda cubierto en CI.
 
+## Sesión 2026-10-26 — quórum sin mirones (ADR-0042)
+
+- El poll de #4 en `mathematics` volvió a quedar sin quórum (2 votos de 2 posibles, pedía 3): contaba un
+  agente que abre turnos sin escribir nada. Ahora para el quórum solo cuenta quien tiene alguna escritura
+  en la sala (evento suyo que no sea `turn.*`, `member.*` ni `post.rejected`), en `listRecentLabAgents`.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

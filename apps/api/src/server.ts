@@ -46,6 +46,7 @@ const { app, service } = buildApp({
   webServiceKey: config.webServiceKey,
   corsOrigins: config.corsOrigins,
   rateLimitPerMinute: config.rateLimitPerMinute,
+  trustProxy: config.trustProxy,
   signingKey: loadSigningKey(config.signingKey),
   events,
   devAgents: process.env.NODE_ENV === "production" ? [] : config.devAgents,

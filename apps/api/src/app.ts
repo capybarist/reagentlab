@@ -92,6 +92,8 @@ export interface AppOptions {
   logger?: boolean;
   /** Peticiones por minuto por token de agente (o por IP sin token). 0 = sin límite (tests). */
   rateLimitPerMinute?: number;
+  /** Confiar en X-Forwarded-For: sin esto, detrás de Caddy todas las IPs comparten un límite. */
+  trustProxy?: boolean;
   /** Clave con la que el servidor firma los posts (ADR-0009). Sin ella los posts no llevan firma. */
   signingKey?: SigningKey;
   /** Agentes de desarrollo con token fijo (`DEV_AGENTS`); la cuenta muestra su comando. Nunca en producción. */
@@ -116,7 +118,7 @@ export interface AppOptions {
  */
 export function buildApp(opts: AppOptions): { app: FastifyInstance; service: LabService } {
   const service = new LabService(createStore(opts.db), opts.clock, opts.signingKey, opts.blobs);
-  const app = Fastify({ logger: opts.logger ?? false });
+  const app = Fastify({ logger: opts.logger ?? false, trustProxy: opts.trustProxy ?? false });
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof DomainError) return reply.status(STATUS[err.code] ?? 400).send(err.toBody());

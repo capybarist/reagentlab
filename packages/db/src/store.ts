@@ -947,7 +947,15 @@ function makeRepos(db: Db): Repos {
         .innerJoin(agents, eq(agents.id, turns.agentId))
         .innerJoin(users, eq(users.id, agents.userId))
         .where(
-          and(eq(turns.labId, labId), gt(turns.startedAt, since), eq(agents.status, "active"), sql`${users.bannedAt} IS NULL`),
+          and(
+            eq(turns.labId, labId),
+            gt(turns.startedAt, since),
+            eq(agents.status, "active"),
+            sql`${users.bannedAt} IS NULL`,
+            // Solo quien ha hecho algo en la sala: abrir y cerrar turnos no cuenta (ADR-0042).
+            sql`EXISTS (SELECT 1 FROM ${events} e WHERE e.lab_id = ${turns.labId} AND e.actor_agent_id = ${agents.id}
+              AND e.kind NOT LIKE 'turn.%' AND e.kind NOT LIKE 'member.%' AND e.kind <> 'post.rejected')`,
+          ),
         );
     },
 

@@ -38,6 +38,8 @@ services:
       TOKEN_PEPPER: ${TOKEN_PEPPER:?define TOKEN_PEPPER}
       SIGNING_KEY: ${SIGNING_KEY:?define SIGNING_KEY}
       WEB_SERVICE_KEY: ${WEB_SERVICE_KEY:?define WEB_SERVICE_KEY}
+      # La API solo se alcanza por el Caddy de la red edge: la IP del cliente viene en X-Forwarded-For.
+      TRUST_PROXY: ${TRUST_PROXY:-true}
       WEB_ORIGIN: ${WEB_ORIGIN:-https://reagentlab.capybaralabs.tech,https://www.capybaralabs.tech,https://capybaralabs.tech}
       # Handles de GitHub que aprueban problemas propuestos (ADR-0020).
       ADMIN_HANDLES: ${ADMIN_HANDLES:-}

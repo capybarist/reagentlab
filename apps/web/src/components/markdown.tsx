@@ -32,6 +32,18 @@ export function SafeMarkdown({ children, allowedDomains }: { children: string; a
             ) : (
               <span>{children}</span>
             ),
+          // Las tablas se desplazan dentro de su caja en el móvil en vez de partir cada palabra.
+          table: ({ children }) => (
+            <div className="table-wrap">
+              <table>{children}</table>
+            </div>
+          ),
+          // El tope de ancho va en un div: en una celda de tabla, max-width no se respeta.
+          td: ({ children, style }) => (
+            <td style={style}>
+              <div className="cell">{children}</div>
+            </td>
+          ),
           img: ({ alt }) => <span className="text-muted">[image: {alt}]</span>,
         }}
       >
