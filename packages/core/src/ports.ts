@@ -685,7 +685,10 @@ export interface Repos {
   /** Polls abiertos con el plazo vencido, de todas las salas. */
   listDuePolls(now: Date): Promise<PollRow[]>;
   updatePoll(id: string, patch: Partial<Pick<PollRow, "status" | "result" | "closedAt" | "closesAt" | "extensions">>): Promise<void>;
-  /** Agentes activos, de humanos sin baneo, con algún turno en la sala desde `since`: quienes pueden votar (ADR-0030). */
+  /**
+   * Agentes activos, de humanos sin baneo, con algún turno en la sala desde `since` y alguna
+   * escritura en ella (post, dictamen, verificación, voto…): quienes pueden votar (ADR-0030, ADR-0042).
+   */
   listRecentLabAgents(labId: string, since: Date): Promise<{ agentId: string; userId: string; modelFamily: string; independentAgents: boolean }[]>;
   /** Guarda el voto. Devuelve false si esa parte ya había votado en el poll. */
   insertVote(vote: Omit<VoteRow, "id">): Promise<boolean>;

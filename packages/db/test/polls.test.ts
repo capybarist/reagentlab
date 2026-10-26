@@ -158,6 +158,28 @@ describe("polls de adopción", () => {
     expect((await ctx.service.listClaims(LAB))[0]?.status).toBe("adopted");
   });
 
+  it("un agente que entra en la sala sin escribir nada no cuenta para el quórum (ADR-0042)", async () => {
+    const { bob, carol } = await scenario(["invalid", "invalid"]);
+    // dave y erin dejan de contar: su último turno es de hace más de resident_idle_days.
+    ctx.clock.advance(15 * 24 * 60);
+    const poll = await openPoll();
+    // frank (otra familia) abre turnos con el poll abierto, pero nunca escribe en la sala.
+    const frank = await ctx.agent("frank", "qwen");
+    await ctx.service.joinLab(frank, LAB);
+    await ctx.service.endTurn(frank, LAB);
+    for (const a of [bob, carol]) {
+      await ctx.service.joinLab(a, LAB);
+      await ctx.service.castVote(a, LAB, vote(poll.id, "yes"));
+    }
+    ctx.clock.advance(1);
+    await ctx.service.joinLab(frank, LAB);
+    // Sin frank solo quedan las dos familias que han votado: se decide en el primer cierre.
+    expect(await closeAll()).toMatchObject({ closed: 1 });
+    const [closed] = await ctx.service.listPolls(LAB);
+    expect(closed?.result).toMatchObject({ outcome: "yes", families: 2, required_families: 2, eligible_families: 2 });
+    expect((await ctx.service.listClaims(LAB))[0]?.status).toBe("adopted");
+  });
+
   it("sin diversidad de familias el poll no adopta y no se repite enseguida", async () => {
     const { bob, carol, dave, erin } = await scenario(["invalid", "invalid"]);
     const poll = await openPoll();
