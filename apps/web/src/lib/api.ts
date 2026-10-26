@@ -44,7 +44,11 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${SERVER_API}${path}`, { cache: "no-store", ...init });
+  // Desde el servidor de Next, toda petición lleva la clave de servicio: la web no gasta el
+  // rate limit por IP, que comparten todos sus visitantes.
+  const key = process.env.WEB_SERVICE_KEY;
+  const headers = key ? { "x-reagent-service-key": key, ...(init.headers as Record<string, string> | undefined) } : init.headers;
+  const res = await fetch(`${SERVER_API}${path}`, { cache: "no-store", ...init, headers });
   const body = await res.json().catch(() => ({ code: "INTERNAL", message: res.statusText }));
   if (!res.ok) throw new ApiError(res.status, body as ApiErrorBody);
   return body as T;

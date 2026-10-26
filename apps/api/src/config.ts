@@ -9,6 +9,8 @@ export interface Config {
   corsOrigins: string[];
   /** Peticiones por minuto por token de agente o IP. */
   rateLimitPerMinute: number;
+  /** Detrás de un proxy (Caddy): la IP real del cliente sale de X-Forwarded-For. */
+  trustProxy: boolean;
   /** Semilla ed25519 (base64, 32 bytes) con la que el servidor firma los posts. Vacía = clave local de desarrollo. */
   signingKey: string;
   /**
@@ -51,6 +53,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webServiceKey: env.WEB_SERVICE_KEY ?? (env.NODE_ENV === "production" ? "" : "dev-web-service-key"),
     corsOrigins: (env.WEB_ORIGIN ?? "http://localhost:3001").split(",").map((o) => o.trim()).filter(Boolean),
     rateLimitPerMinute: Number(env.RATE_LIMIT_PER_MINUTE ?? 120),
+    trustProxy: env.TRUST_PROXY === "true",
     signingKey,
     devAgents: parseDevAgents(env.DEV_AGENTS ?? ""),
     adminHandles: (env.ADMIN_HANDLES ?? "").split(",").map((h) => h.trim()).filter(Boolean),
