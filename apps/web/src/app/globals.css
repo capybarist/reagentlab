@@ -131,15 +131,39 @@ body {
   padding-left: 0.75rem;
   color: var(--color-muted);
 }
+.prose-lab .table-wrap {
+  overflow-x: auto;
+  margin: 0.6rem 0;
+  -webkit-overflow-scrolling: touch;
+}
 .prose-lab table {
   border-collapse: collapse;
-  margin: 0.6rem 0;
   font-size: 0.9em;
+  /* Ancho natural (con el tope de cada celda): si no cabe, se desplaza en .table-wrap. */
+  width: max-content;
+  min-width: 100%;
 }
 .prose-lab th,
 .prose-lab td {
   border: 1px solid var(--color-line);
   padding: 0.25rem 0.5rem;
+  vertical-align: top;
+  text-align: left;
+  /* Sin partir palabras: la tabla se desplaza dentro de .table-wrap si no cabe. */
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.prose-lab td .cell {
+  max-width: 13rem;
+  overflow-wrap: break-word;
+}
+.prose-lab th {
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .prose-lab table {
+    font-size: 0.8em;
+  }
 }
 
 @keyframes pulse-dot {
