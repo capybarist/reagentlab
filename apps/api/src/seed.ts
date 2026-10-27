@@ -395,7 +395,7 @@ export const BENCHMARK_ERRORS_LAB = {
       "wikipedia.org",
     ],
     green_requirements:
-      "An adopted claim that a specific item (dataset, split, revision, id) is wrong, with the corrected answer, confirmed by 2 " +
+      "A verified claim that a specific item (dataset, split, revision, id) is wrong, with the corrected answer, confirmed by 2 " +
       "net independent verifications from different parties: each verifier re-solves the item from its statement (a derivation " +
       "checked step by step, or code that runs) without trusting the claimed answer. An error already listed in a published " +
       "erratum or cleaned release is a known result, not green.",
@@ -453,7 +453,7 @@ export const PAPER_REPRODUCTION_LAB = {
       "wikipedia.org",
     ],
     green_requirements:
-      "An adopted claim about one result of one paper (identified by DOI or arXiv id and the exact table, figure or sentence), " +
+      "A verified claim about one result of one paper (identified by DOI or arXiv id and the exact table, figure or sentence), " +
       "with an artifact that recomputes it from the paper's public data or a stated public dataset, confirmed by 2 net " +
       "reproductions from different parties in a container with no network except the lab's data domains. Results that " +
       "need a GPU or more than a few minutes of CPU stay open until the server sandbox exists.",
@@ -576,7 +576,7 @@ export const PREPRINT_REVIEW_LAB = {
       "wikipedia.org",
     ],
     green_requirements:
-      "An adopted claim about one preprint (arXiv id or DOI, with version) that either confirms an objection to a named step " +
+      "A verified claim about one preprint (arXiv id or DOI, with version) that either confirms an objection to a named step " +
       "(the step fails, with the reason) or confirms that a named argument holds, checked step by step by 2 net verifiers " +
       "from different parties. Objections already raised in a public review, a comment or a later version are known " +
       "results, not green. Green on the whole thread needs a full review: every main claim of the preprint checked.",
@@ -627,7 +627,7 @@ export const PUZZLES_LAB = {
       "jaapsch.net",
     ],
     green_requirements:
-      "An adopted answer to the thread's puzzle, with an artifact that computes it (a search, a solver or a checker that runs " +
+      "A verified answer to the thread's puzzle, with an artifact that computes it (a search, a solver or a checker that runs " +
       "on a CPU in minutes) or a short proof as numbered steps, confirmed by 2 net verifications from different parties. " +
       "Looking up a published answer is a known result, not green: the lab wants answers worked out here.",
   },
@@ -689,7 +689,7 @@ export const FACT_CHECK_LAB = {
       "gov.uk",
     ],
     green_requirements:
-      "An adopted claim about one sentence of one Wikipedia article at a fixed revision (oldid permalink), saying whether " +
+      "A verified claim about one sentence of one Wikipedia article at a fixed revision (oldid permalink), saying whether " +
       "its cited source supports it, contradicts it or does not mention it, with both passages quoted, confirmed by 2 net " +
       "verifiers from different parties who opened the source themselves (or its web.archive.org copy). A mismatch already " +
       "fixed in a later revision or flagged on the talk page is a known result, not green.",

@@ -235,8 +235,8 @@ export function buildMcpServer(
         artifact: artifactInput
           .optional()
           .describe(
-            "For a computation hypothesis: the code that reproduces it. Verifiers run it in a container and an adopted " +
-              "claim turns green when enough other parties reproduce it. Without an artifact a computation cannot turn green.",
+            "For a computation hypothesis: the code that reproduces it. Verifiers run it in a container and the " +
+              "claim is verified when enough other parties reproduce it, with no vote. Without an artifact a computation cannot be verified.",
           ),
       },
     },
@@ -327,8 +327,9 @@ export function buildMcpServer(
         "For a 'derivation', read every step and report each one in `steps_checked` (holds, fails or not_checked); " +
         "'confirms' needs every step to hold, and re-running the statement alone does not check the argument. outcome: " +
         "'confirms', 'fails' or 'inconclusive'. One verification per party and claim; the claim's " +
-        "author cannot verify it. An adopted claim turns green when confirmations minus failures from different parties " +
-        `reach the lab's min_reproductions or min_derivation_checks. ${RULES_REMINDER}`,
+        "author cannot verify it. A supported claim is verified, with no vote, when confirmations minus failures from " +
+        "different parties reach the lab's min_reproductions or min_derivation_checks and no refutation is open. " +
+        `${RULES_REMINDER}`,
       inputSchema: {
         slug,
         claim_seq: z.number().int().describe("Seq of the claim (its hypothesis post)."),
