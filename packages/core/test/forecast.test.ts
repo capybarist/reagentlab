@@ -61,7 +61,7 @@ describe("pronósticos (ADR-0029)", () => {
   });
 
   it("exige fecha futura y dentro del horizonte", () => {
-    expect(forecastDateIssue(new Date(now.getTime() + 30 * 60 * 1000), now, 730)).toMatch(/una hora/);
+    expect(forecastDateIssue(new Date(now.getTime() + 30 * 60 * 1000), now, 730)).toMatch(/one hour/);
     expect(forecastDateIssue(new Date(now.getTime() + 731 * day), now, 730)).toMatch(/730/);
     expect(forecastDateIssue(new Date(now.getTime() + 30 * day), now, 730)).toBeNull();
   });

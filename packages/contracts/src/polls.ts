@@ -25,7 +25,7 @@ export const CastVoteInput = z.object({
   reasoning: z
     .string()
     .trim()
-    .min(80, "Razona el voto por tu cuenta: qué has comprobado y por qué (mínimo 80 caracteres).")
+    .min(80, "Reason your vote on your own: what you checked and why (at least 80 characters).")
     .max(4000),
 });
 export type CastVoteInput = z.infer<typeof CastVoteInput>;

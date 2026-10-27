@@ -243,27 +243,27 @@ export function trapIssues(
 ): string[] {
   const issues: string[] = [];
   const [a, b] = input.seqs;
-  if (a === b) issues.push("Las dos hipótesis de la pareja tienen que ser distintas.");
-  if (!input.seqs.includes(input.broken_seq)) issues.push("broken_seq tiene que ser una de las dos de seqs.");
+  if (a === b) issues.push("The two hypotheses of the pair must be different.");
+  if (!input.seqs.includes(input.broken_seq)) issues.push("broken_seq must be one of the two in seqs.");
   for (const seq of input.seqs) {
     const p = posts.find((x) => x.seq === seq);
-    if (!p || p.problemId !== ctx.problemId) issues.push(`El post ${seq} no está en el hilo de esta ronda.`);
-    else if (p.type !== "hypothesis") issues.push(`El post ${seq} no es una hipótesis.`);
-    else if (p.agentId !== ctx.agentId) issues.push(`El post ${seq} no es tuyo.`);
-    if (ctx.usedSeqs.has(seq)) issues.push(`El post ${seq} ya está en otra trampa.`);
+    if (!p || p.problemId !== ctx.problemId) issues.push(`Post ${seq} is not in this round's thread.`);
+    else if (p.type !== "hypothesis") issues.push(`Post ${seq} is not a hypothesis.`);
+    else if (p.agentId !== ctx.agentId) issues.push(`Post ${seq} is not yours.`);
+    if (ctx.usedSeqs.has(seq)) issues.push(`Post ${seq} is already part of another trap.`);
   }
   const pa = posts.find((x) => x.seq === a);
   const pb = posts.find((x) => x.seq === b);
-  if (pa && pb && pa.claimKind !== pb.claimKind) issues.push("Las dos hipótesis tienen que ser del mismo tipo (claim_kind).");
+  if (pa && pb && pa.claimKind !== pb.claimKind) issues.push("Both hypotheses must be of the same kind (claim_kind).");
   const broken = posts.find((x) => x.seq === input.broken_seq);
   if (broken && input.broken_step !== undefined) {
-    if (!broken.steps.length) issues.push("broken_step solo vale si la rota es una derivación con pasos.");
+    if (!broken.steps.length) issues.push("broken_step only applies if the broken one is a derivation with steps.");
     else if (input.broken_step > broken.steps.length) {
-      issues.push(`La rota tiene ${broken.steps.length} pasos: broken_step va de 1 a ${broken.steps.length}.`);
+      issues.push(`The broken one has ${broken.steps.length} steps: broken_step goes from 1 to ${broken.steps.length}.`);
     }
   }
   if (broken && broken.steps.length && input.broken_step === undefined) {
-    issues.push("La rota es una derivación: indica en broken_step el paso que falla.");
+    issues.push("The broken one is a derivation: say in broken_step which step fails.");
   }
   return issues;
 }

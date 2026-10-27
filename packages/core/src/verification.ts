@@ -97,7 +97,7 @@ export function checkSteps(
 ): { method: VerificationMethod; step: number | null; steps: StepCheck[] | null } | StepsProblem {
   if (kind === "artifact") {
     if (input.steps_checked?.length || input.step !== undefined) {
-      return { message: "steps_checked y step solo valen para derivaciones.", hint: "Quítalos al verificar un artefacto." };
+      return { message: "steps_checked and step only apply to derivations.", hint: "Remove them when verifying an artifact." };
     }
     return { method: input.method ?? "rerun", step: null, steps: null };
   }
@@ -106,18 +106,18 @@ export function checkSteps(
   const steps = new Map<number, StepCheck>();
   for (const c of input.steps_checked ?? []) {
     if (c.step > stepCount) {
-      return { message: `La derivación tiene ${stepCount} pasos: step va de 1 a ${stepCount}.`, hint: "Revisa los números de paso." };
+      return { message: `The derivation has ${stepCount} steps: step goes from 1 to ${stepCount}.`, hint: "Check the step numbers." };
     }
-    if (steps.has(c.step)) return { message: `El paso ${c.step} aparece dos veces en steps_checked.`, hint: "Uno por paso." };
+    if (steps.has(c.step)) return { message: `Step ${c.step} appears twice in steps_checked.`, hint: "One per step." };
     steps.set(c.step, c);
   }
   if (input.step !== undefined) {
     if (input.step > stepCount) {
-      return { message: `La derivación tiene ${stepCount} pasos: step va de 1 a ${stepCount}.`, hint: "Revisa el número de paso." };
+      return { message: `The derivation has ${stepCount} steps: step goes from 1 to ${stepCount}.`, hint: "Check the step number." };
     }
     const listed = steps.get(input.step);
     if (listed && listed.verdict !== "fails") {
-      return { message: `step dice que falla el paso ${input.step}, pero steps_checked dice "${listed.verdict}".`, hint: "Que coincidan." };
+      return { message: `step says step ${input.step} fails, but steps_checked says "${listed.verdict}".`, hint: "Make them agree." };
     }
     if (!listed) steps.set(input.step, { step: input.step, verdict: "fails" });
   }
@@ -127,26 +127,26 @@ export function checkSteps(
   if (input.outcome === "confirms") {
     if (method === "rerun") {
       return {
-        message: "Volver a ejecutar el enunciado no comprueba la derivación: puede valer en el rango probado con un paso roto.",
-        hint: "Lee los pasos (method 'read' o 'both') y di en steps_checked qué encontraste en cada uno, o publica el re-run como evidencia.",
+        message: "Re-running the statement does not check the derivation: it can hold in the tested range with a broken step.",
+        hint: "Read the steps (method 'read' or 'both') and say in steps_checked what you found in each, or post the re-run as evidence.",
       };
     }
     const missing = Array.from({ length: stepCount }, (_, i) => i + 1).filter((n) => steps.get(n)?.verdict !== "holds");
     if (missing.length) {
       return {
-        message: `Para confirmar una derivación, todos sus pasos tienen que estar revisados y sostenerse; faltan o no se sostienen: ${missing.join(", ")}.`,
-        hint: 'Manda steps_checked con {step, verdict: "holds"} para cada paso, o usa "fails" o "inconclusive".',
+        message: `To confirm a derivation, every step must be checked and hold; missing or not holding: ${missing.join(", ")}.`,
+        hint: 'Send steps_checked with {step, verdict: "holds"} for every step, or use "fails" or "inconclusive".',
       };
     }
   }
   if (input.outcome === "fails" && !failing) {
     return {
-      message: "Una verificación que falla tiene que decir qué paso no se sigue.",
-      hint: 'Marca ese paso con verdict "fails" en steps_checked (o pon su número en step).',
+      message: "A failing verification must say which step does not follow.",
+      hint: 'Mark that step with verdict "fails" in steps_checked (or put its number in step).',
     };
   }
   if (input.outcome !== "fails" && failing) {
-    return { message: `El paso ${failing.step} falla, así que el resultado es "fails".`, hint: 'Usa outcome "fails".' };
+    return { message: `Step ${failing.step} fails, so the outcome is "fails".`, hint: 'Use outcome "fails".' };
   }
   return { method, step: failing?.step ?? null, steps: sorted.length ? sorted : null };
 }

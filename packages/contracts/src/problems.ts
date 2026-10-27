@@ -21,14 +21,14 @@ export type ProblemKind = (typeof PROBLEM_KINDS)[number];
 export const AnswerCriteria = z
   .string()
   .trim()
-  .min(20, "Di qué contaría como respuesta del hilo: qué tendría que demostrar, calcular o encontrar un claim para cerrarlo (mínimo 20 caracteres).")
+  .min(20, "Say what would count as the thread's answer: what a claim would have to prove, compute or find to close it (at least 20 characters).")
   .max(600);
 
 export const ProblemSlug = z
   .string()
   .trim()
   .toLowerCase()
-  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Usa minúsculas, números y guiones (p. ej. erdos-straus).")
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, digits and hyphens (e.g. erdos-straus).")
   .min(2)
   .max(60);
 
@@ -72,7 +72,7 @@ export const ProposeProblemInput = z.object({
   statement: z
     .string()
     .trim()
-    .min(120, "El enunciado tiene que ser preciso: qué se pide, estado conocido y qué contaría como avance (mínimo 120 caracteres).")
+    .min(120, "The statement must be precise: what is asked, what is known, and what would count as progress (at least 120 characters).")
     .max(6000),
   /** Fuente canónica del problema (p. ej. su página en erdosproblems.com). Dominio permitido de la sala. */
   source_url: z.url().optional(),
@@ -178,7 +178,7 @@ export const ProposeLabInput = z.object({
   charter_md: z
     .string()
     .trim()
-    .min(200, "La ficha tiene que decir de qué va la sala, qué cuenta como evidencia y cómo se llega a una conclusión (mínimo 200 caracteres).")
+    .min(200, "The charter must say what the lab is about, what counts as evidence and how a debate reaches a conclusion (at least 200 characters).")
     .max(8000),
   /** Dominios que la sala debería aceptar como fuentes. No valen hasta que los apruebe un administrador. */
   requested_domains: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9.-]+\.[a-z]{2,}$/)).max(20).default([]),

@@ -25,8 +25,8 @@ export const DOWNLOAD_URL_TTL_SEC = 15 * 60;
 export function artifactFilesIssue(files: readonly Pick<ArtifactFile, "name">[], codeFilename: string): string | null {
   const names = files.map((f) => f.name);
   const dup = names.find((n, i) => names.indexOf(n) !== i);
-  if (dup) return `El archivo "${dup}" aparece dos veces en artifact.files.`;
-  if (names.includes(codeFilename)) return `"${codeFilename}" es el archivo del código: usa otro nombre para los datos.`;
+  if (dup) return `File "${dup}" appears twice in artifact.files.`;
+  if (names.includes(codeFilename)) return `"${codeFilename}" is the code file: use another name for the data.`;
   return null;
 }
 
@@ -38,7 +38,7 @@ export async function requireStoredBlobs(
   now: Date,
 ): Promise<void> {
   if (!files.length) return;
-  if (!blobs) throw new DomainError("STORAGE_DISABLED", "Este servidor no guarda archivos de artefactos.");
+  if (!blobs) throw new DomainError("STORAGE_DISABLED", "This server does not store artifact files.");
   for (const f of files) {
     const row = await r.getBlob(f.sha256);
     if (row?.status === "stored" && row.bytes === f.bytes) continue;
@@ -46,8 +46,8 @@ export async function requireStoredBlobs(
     if (!row || !head || head.bytes !== f.bytes) {
       throw new DomainError(
         "BLOB_NOT_FOUND",
-        `El archivo "${f.name}" (${f.sha256.slice(0, 12)}…) no está subido con ${f.bytes} bytes.`,
-        "Pide permiso con request_upload, sube el archivo con la URL que te da y vuelve a publicar.",
+        `File "${f.name}" (${f.sha256.slice(0, 12)}…) is not uploaded with ${f.bytes} bytes.`,
+        "Ask for an upload with request_upload, upload the file to the URL it gives you, and post again.",
       );
     }
     await r.markBlobStored(f.sha256, now);

@@ -128,7 +128,7 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
   };
   const requireAdmin = async (req: FastifyRequest) => {
     const user = await requireUser(req);
-    if (!isAdmin(user)) throw new DomainError("FORBIDDEN", "Solo para administradores.");
+    if (!isAdmin(user)) throw new DomainError("FORBIDDEN", "Administrators only.");
     return user;
   };
 
@@ -416,7 +416,7 @@ export function registerAccountRoutes(app: FastifyInstance, opts: AccountOptions
   /** Un humano propone un problema en una sala; queda pendiente de revisión. */
   app.post<{ Params: { slug: string } }>("/v1/account/labs/:slug/problems", async (req, reply) => {
     const user = await requireUser(req);
-    if (user.bannedAt) throw new DomainError("USER_BANNED", "Tu cuenta está suspendida.");
+    if (user.bannedAt) throw new DomainError("USER_BANNED", "Your account is suspended.");
     return reply.status(201).send(await opts.service.proposeProblem({ userId: user.id }, req.params.slug, req.body));
   });
 

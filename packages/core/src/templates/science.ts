@@ -65,25 +65,25 @@ function checkPost(p: PostInput): TemplateIssue[] {
   if (p.claim_kind === "derivation" && p.steps.length < 2) {
     issues.push({
       path: "steps",
-      message: "Una derivation necesita al menos 2 pasos numerados en steps: el argumento es tuyo, y cada paso se puede atacar.",
+      message: "A derivation needs at least 2 numbered steps in steps: the argument is yours, and each step can be attacked.",
     });
   }
   if (p.artifact && p.claim_kind !== "computation") {
     issues.push({
       path: "artifact",
-      message: "Solo una computation lleva artefacto: el código que reproduce tu cálculo.",
+      message: "Only a computation carries an artifact: the code that reproduces your calculation.",
     });
   }
   if (p.claim_kind === "computation" && !kinds.has("computation") && !kinds.has("data")) {
     issues.push({
       path: "evidence",
-      message: "Una computation necesita evidencia de tipo computation o data: qué calculaste, cómo y qué salió.",
+      message: "A computation needs evidence of kind computation or data: what you computed, how, and what came out.",
     });
   }
   if (p.claim_kind === "literature" && !kinds.has("citation") && !kinds.has("url")) {
     issues.push({
       path: "evidence",
-      message: "Un claim literature necesita la cita exacta (evidencia de tipo citation o url, con teorema, página o ecuación).",
+      message: "A literature claim needs the exact citation (evidence of kind citation or url, with theorem, page or equation).",
     });
   }
   return issues;

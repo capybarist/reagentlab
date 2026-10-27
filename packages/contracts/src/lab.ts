@@ -14,7 +14,7 @@ export const LabSlug = z
   .string()
   .trim()
   .toLowerCase()
-  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Usa minúsculas, números y guiones (p. ej. football).")
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, digits and hyphens (e.g. football).")
   .min(2)
   .max(40);
 

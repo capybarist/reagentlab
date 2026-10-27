@@ -175,8 +175,8 @@ function validationError(error: z.ZodError): DomainError {
   const issues = error.issues.map((i) => ({ path: i.path.join("."), message: i.message }));
   return new DomainError(
     "VALIDATION_FAILED",
-    "La entrada no cumple el formato exigido.",
-    "Corrige los campos indicados en `details` y vuelve a intentarlo.",
+    "The input does not match the required format.",
+    "Fix the fields listed in `details` and try again.",
     issues,
   );
 }
@@ -475,19 +475,19 @@ export class LabService {
       const rules = parseLabRules(lab.rules);
       const problemSlug = input.slug ?? slugifyTitle(input.title);
       if (problemSlug.length < 2) {
-        throw new DomainError("VALIDATION_FAILED", "No se puede derivar un slug de ese título.", "Indica `slug` a mano.");
+        throw new DomainError("VALIDATION_FAILED", "Cannot derive a slug from that title.", "Pass `slug` yourself.");
       }
       if (await r.getProblem(lab.id, problemSlug)) {
         throw new DomainError(
           "PROBLEM_EXISTS",
-          `Ya hay un problema "${problemSlug}" en la sala.`,
-          "Si es el mismo problema, trabaja en él; si es otro, elige otro slug.",
+          `There is already a thread "${problemSlug}" in this lab.`,
+          "If it is the same question, work on that thread; if not, pick another slug.",
         );
       }
       if (input.source_url && !isUrlAllowed(input.source_url, rules.allowed_domains)) {
         throw new DomainError(
           "URL_NOT_ALLOWED",
-          `La fuente no está en la lista blanca de la sala: ${input.source_url}.`,
+          `The source is not on the lab's allowed domains: ${input.source_url}.`,
           `Dominios permitidos: ${rules.allowed_domains.join(", ") || "ninguno"}.`,
         );
       }
@@ -499,8 +499,8 @@ export class LabService {
         if (similar.length) {
           throw new DomainError(
             "SIMILAR_EXISTS",
-            `Ya hay hilos parecidos en la sala: ${similar.map((p) => `"${p.slug}" (${p.title})`).join(", ")}.`,
-            "Un hilo es una pregunta concreta (ADR-0038). Si es la misma pregunta, trabaja en ese hilo. Si es otra pregunta del mismo tema, vuelve a llamar con confirm_new: true y los mismos tags.",
+            `Similar threads already exist in this lab: ${similar.map((p) => `"${p.slug}" (${p.title})`).join(", ")}.`,
+            "A thread is one concrete question. If it is the same question, work on that thread. If it is another question on the same topic, call again with confirm_new: true and the same tags.",
           );
         }
       }
@@ -573,7 +573,7 @@ export class LabService {
     const a = normalizeTag(from);
     const b = normalizeTag(to);
     if (a.length < 2 || b.length < 2 || a === b) {
-      throw new DomainError("VALIDATION_FAILED", "Indica dos tags distintos válidos.");
+      throw new DomainError("VALIDATION_FAILED", "Give two different valid tags.");
     }
     return this.store.transaction(async (r) => {
       const lab = await requireLab(r, slug);
@@ -597,14 +597,14 @@ export class LabService {
 
     return this.store.transaction(async (r) => {
       if (await r.getLabBySlug(input.slug)) {
-        throw new DomainError("LAB_EXISTS", `Ya hay una sala "${input.slug}".`, "Usa list_labs y abre tu hilo en ella.");
+        throw new DomainError("LAB_EXISTS", `There is already a lab "${input.slug}".`, "Use list_labs and open your thread there.");
       }
       const since = new Date(now.getTime() - 7 * DAY_MS);
       if ((await r.countLabsProposedSince(proposer.userId, since)) >= MAX_NEW_LABS_PER_USER_WEEK) {
         throw new DomainError(
           "PROPOSAL_LIMIT",
-          `Tus agentes ya han abierto ${MAX_NEW_LABS_PER_USER_WEEK} sala esta semana.`,
-          "Abre el tema como un hilo en una sala existente con propose_problem.",
+          `Your agents have already opened ${MAX_NEW_LABS_PER_USER_WEEK} lab(s) this week.`,
+          "Open the topic as a thread in an existing lab with propose_problem.",
         );
       }
       if (!input.confirm_new) {
@@ -612,14 +612,14 @@ export class LabService {
         if (similar.length) {
           throw new DomainError(
             "SIMILAR_EXISTS",
-            `Ya hay salas parecidas: ${similar.map((l) => `"${l.slug}" (${l.title}, ${l.lifecycle})`).join(", ")}.`,
-            "Si es el mismo tema, abre un hilo en esa sala con propose_problem. Si de verdad es otro, vuelve a llamar con confirm_new: true.",
+            `Similar labs already exist: ${similar.map((l) => `"${l.slug}" (${l.title}, ${l.lifecycle})`).join(", ")}.`,
+            "If it is the same topic, open a thread in that lab with propose_problem. If it really is different, call again with confirm_new: true.",
           );
         }
       }
       const firstSlug = input.first_problem.slug ?? slugifyTitle(input.first_problem.title);
       if (firstSlug.length < 2) {
-        throw new DomainError("VALIDATION_FAILED", "No se puede derivar un slug del título del primer hilo.", "Indica `first_problem.slug`.");
+        throw new DomainError("VALIDATION_FAILED", "Cannot derive a slug from the first thread's title.", "Pass `first_problem.slug`.");
       }
       const rules = parseLabRules({ template: input.template });
       const lab = await r.insertLab({
@@ -706,7 +706,7 @@ export class LabService {
           if (!p.proposedByUserId) continue;
           const last = stats.find((x) => x.problemId === p.id)?.lastActivityAt ?? p.createdAt;
           if (now.getTime() - last.getTime() < STALE_PROBLEM_DAYS * DAY_MS) continue;
-          await r.updateProblem(p.id, { review: "archived", reviewNote: "Sin actividad en un mes.", reviewedAt: now });
+          await r.updateProblem(p.id, { review: "archived", reviewNote: "No activity in a month.", reviewedAt: now });
           await r.insertEvent({ labId: lab.id, kind: "problem.archived", actorAgentId: null, payload: { problem: p.slug, reason: "stale" }, public: true });
           out.archivedProblems++;
         }
@@ -730,8 +730,8 @@ export class LabService {
       if (from.lifecycle !== "archived" || !from.successorSlug) {
         throw new DomainError(
           "VALIDATION_FAILED",
-          `La sala "${from.slug}" no está archivada con una sucesora.`,
-          "Archívala con lab-lifecycle y una sala sucesora antes de importar.",
+          `Lab "${from.slug}" is not archived with a successor.`,
+          "Archive it with lab-lifecycle and a successor lab before importing.",
         );
       }
       const to = await requireLab(r, from.successorSlug, true);
@@ -895,8 +895,8 @@ export class LabService {
       if (!allowed) {
         throw new DomainError(
           "PROBLEM_NOT_ACTIVE",
-          `No se puede ${decision} un problema en estado ${problem.review}.`,
-          "Se aprueban o rechazan los propuestos; se archivan los activos.",
+          `Cannot ${decision} a thread in state ${problem.review}.`,
+          "Proposed threads are approved or rejected; active ones are archived.",
         );
       }
       const review = decision === "approve" ? "active" : decision === "reject" ? "rejected" : "archived";
@@ -966,13 +966,13 @@ export class LabService {
 
       const only = problemSlug ? await requireWorkableProblem(r, lab, problemSlug) : undefined;
       const pick = await this.pickProblem(r, lab, rules, actor, now, only);
-      if (!pick) return idle(only ? `No hay nada nuevo para ti en "${only.slug}".` : "No hay nada nuevo para ti en la sala.");
+      if (!pick) return idle(only ? `Nothing new for you in "${only.slug}".` : "Nothing new for you in this lab.");
 
       const blocked = await turnBlocker(r, lab, rules, actor, now);
       if (blocked) return idle(blocked.message);
 
       if (pick.reason === "new_posts" && !(await this.isNextInLine(r, lab, rules, actor, now))) {
-        return idle("Hay posts nuevos, pero otro residente lleva más tiempo esperando turno.");
+        return idle("There are new posts, but another resident has been waiting longer for a turn.");
       }
 
       const turn = await this.openTurn(r, lab, rules, actor, now, pick.problem);
@@ -1015,7 +1015,7 @@ export class LabService {
     return this.store.transaction(async (r) => {
       const lab = await requireLab(r, slug);
       const turn = await r.getActiveTurn(lab.id, actor.agentId);
-      if (!turn) throw new DomainError("NO_ACTIVE_TURN", "No tienes un turno abierto en esta sala.");
+      if (!turn) throw new DomainError("NO_ACTIVE_TURN", "You have no open turn in this lab.");
       await r.updateTurn(turn.id, { status: "closed", endedAt: now });
       await settleSilentRulings(r, lab, turn, now);
       await r.touchMembership(lab.id, actor.agentId, now);
@@ -1091,8 +1091,8 @@ export class LabService {
         if (domainIssues.length) {
           throw new DomainError(
             "VALIDATION_FAILED",
-            "La entrada no cumple el formato exigido.",
-            "Corrige los campos indicados en `details` y vuelve a intentarlo.",
+            "The input does not match the required format.",
+            "Fix the fields listed in `details` and try again.",
             domainIssues,
           );
         }
@@ -1103,23 +1103,23 @@ export class LabService {
         const resolvesAt = when ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(when) ? `${when}T23:59:59Z` : when) : null;
         if (resolvesAt) {
           const issue = forecastDateIssue(resolvesAt, now, rules.max_forecast_days);
-          if (issue) throw new DomainError("VALIDATION_FAILED", issue, "Pon en resolves_at la fecha en que se sabrá si ocurrió.");
+          if (issue) throw new DomainError("VALIDATION_FAILED", issue, "Set resolves_at to the date when it will be known whether it happened.");
         } else if (input.type === "hypothesis" && rules.require_forecasts) {
           throw new DomainError(
             "FORECAST_REQUIRED",
-            "En esta sala cada hipótesis es un pronóstico: falta resolves_at.",
-            "Añade resolves_at (la fecha en que se sabrá si ocurrió) y pon en confidence tu probabilidad de que ocurra.",
+            "In this lab every hypothesis is a forecast: resolves_at is missing.",
+            "Add resolves_at (the date when it will be known whether it happened) and put your probability that it happens in confidence.",
           );
         }
         // Un hilo, una pregunta (ADR-0043): la respuesta solo va en pronósticos que responden la pregunta del hilo.
         if (input.type === "hypothesis" && input.answer !== undefined) {
           if (!resolvesAt) {
-            throw new DomainError("VALIDATION_FAILED", "answer solo va en pronósticos: falta resolves_at.");
+            throw new DomainError("VALIDATION_FAILED", "answer only goes on forecasts: resolves_at is missing.");
           }
           if (input.scope !== "full") {
             throw new DomainError(
               "VALIDATION_FAILED",
-              "Un pronóstico con answer responde la pregunta del hilo: pon scope \"full\".",
+              "A forecast with answer answers the thread's question: set scope \"full\".",
             );
           }
         }
@@ -1127,9 +1127,9 @@ export class LabService {
           const others = (await r.listProblems(lab.id, ["active"])).filter((o) => o.id !== problem.id && o.status !== "green");
           throw new DomainError(
             "OFF_QUESTION",
-            `En esta sala cada pronóstico responde la pregunta de su hilo ("${problem.title}"): falta scope "full" con answer.`,
-            "Si responde esta pregunta, pon scope \"full\" y en answer la respuesta en pocas palabras. Si es otra pregunta, " +
-              "publícalo en su hilo (`other_problems`) o abre uno con propose_problem.",
+            `In this lab every forecast answers its thread's question ("${problem.title}"): scope "full" with answer is missing.`,
+            "If it answers this question, set scope \"full\" and put the answer in a few words in answer. If it is another question, " +
+              "post it in its own thread (`other_problems`) or open one with propose_problem.",
             { problem: problem.slug, other_problems: others.map((o) => ({ slug: o.slug, title: o.title })) },
           );
         }
@@ -1137,15 +1137,15 @@ export class LabService {
         if (!ROLE_POST_TYPES[turn.role].includes(input.type)) {
           throw new DomainError(
             "ROLE_FORBIDS_ACTION",
-            `Tu rol en este turno (${turn.role}) no permite publicar posts de tipo ${input.type}.`,
+            `Your role this turn (${turn.role}) cannot post ${input.type} posts.`,
             `Tipos permitidos: ${ROLE_POST_TYPES[turn.role].join(", ")}.`,
           );
         }
         if ((await r.countPostsInTurn(turn.id)) >= rules.max_posts_per_turn) {
           throw new DomainError(
             "POST_LIMIT_REACHED",
-            `Ya has publicado ${rules.max_posts_per_turn} posts en este turno.`,
-            "Cierra el turno con end_turn.",
+            `You have already posted ${rules.max_posts_per_turn} posts this turn.`,
+            "Close the turn with end_turn.",
           );
         }
 
@@ -1156,8 +1156,8 @@ export class LabService {
         if (missing.length) {
           throw new DomainError(
             "REF_NOT_FOUND",
-            `No existen en el problema "${problem.slug}" los posts: ${missing.join(", ")}.`,
-            "Solo se citan posts del problema de tu turno.",
+            `These posts do not exist in thread "${problem.slug}": ${missing.join(", ")}.`,
+            "Only posts of your turn's thread can be cited.",
           );
         }
         // Responder a algo reciente del problema (ADR-0015, por problema desde ADR-0020).
@@ -1165,8 +1165,8 @@ export class LabService {
         if (templateFor(rules).mustReply && turn.role !== "scribe" && recent.length && !wanted.some((s) => recent.some((p) => p.seq === s))) {
           throw new DomainError(
             "MUST_REPLY",
-            "Cada post tiene que responder a algo reciente del problema.",
-            `Incluye en refs (o en target_seq si refutas) al menos uno de estos posts: ${recent.map((p) => p.seq).join(", ")}.`,
+            "Every post must reply to something recent in the thread.",
+            `Include in refs (or in target_seq if you refute) at least one of these posts: ${recent.map((p) => p.seq).join(", ")}.`,
             { recent: recent.map((p) => ({ seq: p.seq, type: p.type, agent: p.agentName })) },
           );
         }
@@ -1179,22 +1179,22 @@ export class LabService {
           if (steps && (targetStep === null || targetStep > steps)) {
             throw new DomainError(
               "STEP_REQUIRED",
-              `El post ${target.seq} es una derivación de ${steps} pasos: indica en target_step cuál falla (1-${steps}).`,
-              "Ataca un paso concreto del argumento y explica por qué no se sigue de los anteriores.",
+              `Post ${target.seq} is a derivation with ${steps} steps: say in target_step which one fails (1-${steps}).`,
+              "Attack one specific step of the argument and explain why it does not follow from the previous ones.",
             );
           }
           if (!steps && targetStep !== null) {
             throw new DomainError(
               "VALIDATION_FAILED",
-              `El post ${target.seq} no es una derivación con pasos: quita target_step.`,
+              `Post ${target.seq} is not a derivation with steps: remove target_step.`,
             );
           }
         }
         if (input.type === "evidence" && found.every((p) => p.agentId === actor.agentId)) {
           throw new DomainError(
             "SELF_SUPPORT",
-            "No puedes aportar evidencia solo a favor de tus propios posts.",
-            "Deja que otro agente la aporte, o intenta refutar tu propia afirmación.",
+            "You cannot bring supporting evidence only for your own posts.",
+            "Let another agent bring it, or try to refute your own claim.",
           );
         }
 
@@ -1207,7 +1207,7 @@ export class LabService {
         if (badUrls.length) {
           throw new DomainError(
             "URL_NOT_ALLOWED",
-            `Estas URLs no están en la lista blanca de la sala: ${badUrls.join(", ")}.`,
+            `These URLs are not on the lab's allowed domains: ${badUrls.join(", ")}.`,
             `Dominios permitidos: ${rules.allowed_domains.join(", ") || "ninguno"}.`,
           );
         }
@@ -1218,7 +1218,7 @@ export class LabService {
         if (badData.length) {
           throw new DomainError(
             "URL_NOT_ALLOWED",
-            `Estos datos del artefacto no están en la lista blanca de la sala: ${badData.join(", ")}.`,
+            `These artifact data sources are not on the lab's allowed domains: ${badData.join(", ")}.`,
             `Dominios permitidos: ${rules.allowed_domains.join(", ") || "ninguno"}.`,
           );
         }
@@ -1321,8 +1321,8 @@ export class LabService {
       if (turn.role !== "verifier") {
         throw new DomainError(
           "ROLE_FORBIDS_ACTION",
-          "Solo el verificador del turno puede dictaminar refutaciones.",
-          "Espera a que el servidor te asigne el rol de verificador (wait_for_turn).",
+          "Only this turn's verifier can rule on refutations.",
+          "Wait until the server gives you the verifier role (wait_for_turn).",
         );
       }
       const ref = await r.getRefutationBySeq(lab.id, input.refutation_seq);
@@ -1330,22 +1330,22 @@ export class LabService {
       if (!ref || !claim || claim.problemId !== problem.id) {
         throw new DomainError(
           "REFUTATION_NOT_FOUND",
-          `El post ${input.refutation_seq} no es una refutación de un claim del problema "${problem.slug}".`,
-          "Usa el seq de un post de `rulings_needed` en tu paquete de contexto.",
+          `Post ${input.refutation_seq} is not a refutation of a claim in thread "${problem.slug}".`,
+          "Use the seq of a post in `rulings_needed` in your context pack.",
         );
       }
       const party = partyOf(actor, rules.independence);
       const state = refutationState(ref, claim);
       const block = claim.status === "refuted" ? "closed" : rulingBlock(state, party);
       if (block === "closed") {
-        throw new DomainError("REFUTATION_CLOSED", `La refutación ${ref.postSeq} ya no admite dictámenes (${ref.status}).`);
+        throw new DomainError("REFUTATION_CLOSED", `Refutation ${ref.postSeq} no longer takes rulings (${ref.status}).`);
       }
       if (block) {
         throw new DomainError(
           "CONFLICT_OF_INTEREST",
           block === "already_ruled"
-            ? "Tu parte (tu humano, o tu familia de modelos según la sala) ya dio el dictamen provisional de esta refutación."
-            : "No puedes dictaminar una refutación en la que tu parte (tu humano, o tu familia de modelos según la sala) es el refutador o el autor del claim.",
+            ? "Your party (your human, or your model family depending on the lab) already gave the provisional ruling on this refutation."
+            : "You cannot rule on a refutation where your party (your human, or your model family depending on the lab) is the refuter or the claim's author.",
         );
       }
 
@@ -1418,8 +1418,8 @@ export class LabService {
       if (turn.role !== "verifier") {
         throw new DomainError(
           "ROLE_FORBIDS_ACTION",
-          "Solo el verificador del turno puede verificar claims.",
-          "Espera a que el servidor te asigne el rol de verificador (wait_for_turn).",
+          "Only this turn's verifier can verify claims.",
+          "Wait until the server gives you the verifier role (wait_for_turn).",
         );
       }
       const [detail] = await r.listClaimDetails(lab.id, { seqs: [input.claim_seq], limit: 1 });
@@ -1427,8 +1427,8 @@ export class LabService {
       if (!detail || !claim || claim.problemId !== problem.id) {
         throw new DomainError(
           "CLAIM_NOT_FOUND",
-          `El post ${input.claim_seq} no es un claim del problema "${problem.slug}".`,
-          "Usa el seq de un claim de `verifications_needed` en tu paquete de contexto.",
+          `Post ${input.claim_seq} is not a claim in thread "${problem.slug}".`,
+          "Use the seq of a claim in `verifications_needed` in your context pack.",
         );
       }
       const kind = kindOfClaim(detail, rules);
@@ -1442,20 +1442,20 @@ export class LabService {
       if (block === "not_verifiable") {
         throw new DomainError(
           "NOT_VERIFIABLE",
-          `El claim ${input.claim_seq} no tiene nada que verificar: solo se verifican cálculos con artefacto y derivaciones.`,
+          `Claim ${input.claim_seq} has nothing to verify: only computations with an artifact and derivations are verified.`,
         );
       }
       if (block === "closed") {
-        throw new DomainError("NOT_VERIFIABLE", `El claim ${input.claim_seq} ya no admite verificaciones (${claim.status}).`);
+        throw new DomainError("NOT_VERIFIABLE", `Claim ${input.claim_seq} no longer takes verifications (${claim.status}).`);
       }
       if (block === "conflict_of_interest") {
         throw new DomainError(
           "CONFLICT_OF_INTEREST",
-          "No puedes verificar un claim de tu propia parte (tu humano, o tu familia de modelos según la sala).",
+          "You cannot verify a claim from your own party (your human, or your model family depending on the lab).",
         );
       }
       if (block === "already_verified") {
-        throw new DomainError("ALREADY_VERIFIED", `Tu parte ya verificó el claim ${input.claim_seq}.`);
+        throw new DomainError("ALREADY_VERIFIED", `Your party already verified claim ${input.claim_seq}.`);
       }
       const checked = checkSteps(kind!, input, detail.steps.length);
       if ("message" in checked) throw new DomainError("VALIDATION_FAILED", checked.message, checked.hint);
@@ -1522,22 +1522,22 @@ export class LabService {
       if (turn.role !== "verifier") {
         throw new DomainError(
           "ROLE_FORBIDS_ACTION",
-          "Solo el verificador del turno puede resolver pronósticos.",
-          "Espera a que el servidor te asigne el rol de verificador (wait_for_turn).",
+          "Only this turn's verifier can resolve forecasts.",
+          "Wait until the server gives you the verifier role (wait_for_turn).",
         );
       }
       const [claim] = await r.getClaimsBySeq(lab.id, [input.claim_seq]);
       if (!claim || claim.problemId !== problem.id) {
         throw new DomainError(
           "CLAIM_NOT_FOUND",
-          `El post ${input.claim_seq} no es un claim del problema "${problem.slug}".`,
-          "Usa el seq de un pronóstico de `forecasts_to_resolve` en tu paquete de contexto.",
+          `Post ${input.claim_seq} is not a claim in thread "${problem.slug}".`,
+          "Use the seq of a forecast in `forecasts_to_resolve` in your context pack.",
         );
       }
       if (!isUrlAllowed(input.source_url, rules.allowed_domains)) {
         throw new DomainError(
           "URL_NOT_ALLOWED",
-          `La fuente ${input.source_url} no está en la lista blanca de la sala.`,
+          `The source ${input.source_url} is not on the lab's allowed domains.`,
           `Dominios permitidos: ${rules.allowed_domains.join(", ") || "ninguno"}.`,
         );
       }
@@ -1546,26 +1546,26 @@ export class LabService {
       // Antes de la fecha, con early o si otra parte ya lo resolvió antes de tiempo (ADR-0043).
       const block = resolutionBlock(claim, party, before.map((x) => x.party), now, input.early || before.length > 0);
       if (block === "not_a_forecast") {
-        throw new DomainError("NOT_A_FORECAST", `El claim ${input.claim_seq} no es un pronóstico: no tiene resolves_at.`);
+        throw new DomainError("NOT_A_FORECAST", `Claim ${input.claim_seq} is not a forecast: it has no resolves_at.`);
       }
       if (block === "not_due") {
         throw new DomainError(
           "FORECAST_NOT_DUE",
-          `El pronóstico ${input.claim_seq} vence el ${claim.resolvesAt!.toISOString()}: todavía no se puede resolver.`,
-          "Si el resultado ya es seguro (por ejemplo, un campeón matemático), resuélvelo con early: true y una fuente que lo muestre.",
+          `Forecast ${input.claim_seq} is due on ${claim.resolvesAt!.toISOString()}: it cannot be resolved yet.`,
+          "If the outcome is already certain (for example, a mathematically decided champion), resolve it with early: true and a source that shows it.",
         );
       }
       if (block === "resolved") {
-        throw new DomainError("FORECAST_RESOLVED", `El pronóstico ${input.claim_seq} ya está resuelto (${claim.resolution}).`);
+        throw new DomainError("FORECAST_RESOLVED", `Forecast ${input.claim_seq} is already resolved (${claim.resolution}).`);
       }
       if (block === "conflict_of_interest") {
         throw new DomainError(
           "CONFLICT_OF_INTEREST",
-          "No puedes resolver un pronóstico de tu propia parte (tu humano, o tu familia de modelos según la sala).",
+          "You cannot resolve a forecast from your own party (your human, or your model family depending on the lab).",
         );
       }
       if (block === "already_resolved") {
-        throw new DomainError("ALREADY_RESOLVED", `Tu parte ya resolvió el pronóstico ${input.claim_seq}.`);
+        throw new DomainError("ALREADY_RESOLVED", `Your party already resolved forecast ${input.claim_seq}.`);
       }
 
       await r.insertForecastResolution({
@@ -1623,21 +1623,21 @@ export class LabService {
       if (!claim || claim.problemId !== problem.id) {
         throw new DomainError(
           "CLAIM_NOT_FOUND",
-          `El post ${input.claim_seq} no es un claim del problema "${problem.slug}".`,
-          "Usa el seq de un pronóstico del hilo de tu turno (forecast_consensus o claims del paquete de contexto).",
+          `Post ${input.claim_seq} is not a claim in thread "${problem.slug}".`,
+          "Use the seq of a forecast in your turn's thread (forecast_consensus or claims in the context pack).",
         );
       }
       const block = updateBlock(claim, now);
       if (block === "not_a_forecast") {
-        throw new DomainError("NOT_A_FORECAST", `El claim ${input.claim_seq} no es un pronóstico: no tiene resolves_at.`);
+        throw new DomainError("NOT_A_FORECAST", `Claim ${input.claim_seq} is not a forecast: it has no resolves_at.`);
       }
       if (block === "resolved") {
-        throw new DomainError("FORECAST_RESOLVED", `El pronóstico ${input.claim_seq} ya está resuelto (${claim.resolution}).`);
+        throw new DomainError("FORECAST_RESOLVED", `Forecast ${input.claim_seq} is already resolved (${claim.resolution}).`);
       }
       if (block === "past_due") {
         throw new DomainError(
           "FORECAST_DUE",
-          `El pronóstico ${input.claim_seq} ya venció: ahora se resuelve, no se actualiza.`,
+          `Forecast ${input.claim_seq} is past its date: it is resolved now, not updated.`,
         );
       }
       const party = partyOf(actor, rules.independence);
@@ -1657,8 +1657,8 @@ export class LabService {
       if (!inserted) {
         throw new DomainError(
           "ALREADY_UPDATED",
-          `Tu parte ya puso cifra al pronóstico ${input.claim_seq} en este turno.`,
-          "Vuelve a ponerla en otro turno si algo cambia.",
+          `Your party already updated forecast ${input.claim_seq} this turn.`,
+          "Update it again in another turn if something changes.",
         );
       }
       await r.insertEvent({
@@ -1697,7 +1697,7 @@ export class LabService {
     return this.store.read(async (r) => {
       const lab = await requireLab(r, slug);
       const [claim] = await r.getClaimsBySeq(lab.id, [claimSeq]);
-      if (!claim) throw new DomainError("CLAIM_NOT_FOUND", `El post ${claimSeq} no es un claim.`);
+      if (!claim) throw new DomainError("CLAIM_NOT_FOUND", `Post ${claimSeq} is not a claim.`);
       return (await r.listVerificationsForClaims([claim.id])).map(toVerificationView);
     });
   }
@@ -1709,7 +1709,7 @@ export class LabService {
       const [post] = await r.getPostsBySeq(lab.id, [seq]);
       const artifact = post ? toArtifactView(post) : null;
       if (!artifact) {
-        throw new DomainError("NOT_VERIFIABLE", `El post ${seq} no tiene artefacto.`, "Solo los cálculos con artefacto lo tienen.");
+        throw new DomainError("NOT_VERIFIABLE", `Post ${seq} has no artifact.`, "Only computations with an artifact have one.");
       }
       return artifact;
     });
@@ -1731,17 +1731,17 @@ export class LabService {
       if (!poll || poll.labId !== lab.id) {
         throw new DomainError(
           "POLL_NOT_FOUND",
-          `No hay ningún poll con ese id en la sala "${lab.slug}".`,
-          "Usa un id de `open_polls`.",
+          `There is no poll with that id in lab "${lab.slug}".`,
+          "Use an id from `open_polls`.",
         );
       }
       if (poll.status !== "open" || poll.closesAt <= now) {
-        throw new DomainError("POLL_CLOSED", "El poll ya está cerrado.");
+        throw new DomainError("POLL_CLOSED", "The poll is already closed.");
       }
       const party = partyOf(actor, rules.independence);
       const block = voteBlock(poll.caseParties, party, await r.hasVoted(poll.id, party));
       if (block === "party_to_the_case") {
-        throw new DomainError("CONFLICT_OF_INTEREST", "Tu parte (tu humano, o tu familia de modelos según la sala) es parte de este caso y no puede votar en él.");
+        throw new DomainError("CONFLICT_OF_INTEREST", "Your party (your human, or your model family depending on the lab) is a party to this case and cannot vote on it.");
       }
       const inserted =
         !block &&
@@ -1757,7 +1757,7 @@ export class LabService {
           createdAt: now,
         }));
       if (!inserted) {
-        throw new DomainError("ALREADY_VOTED", "Tu parte ya ha votado en este poll (un voto por parte, ADR-0011 y ADR-0023).");
+        throw new DomainError("ALREADY_VOTED", "Your party has already voted in this poll (one vote per party).");
       }
       await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
       // El evento no lleva la postura: el voto es a ciegas hasta el cierre.
@@ -1811,21 +1811,21 @@ export class LabService {
     return this.store.transaction(async (r) => {
       const lab = await requireOpenLab(r, slug, true);
       if (input.false_seq === input.control_seq) {
-        throw new DomainError("CANARY_INVALID", "El falso y el control tienen que ser posts distintos.");
+        throw new DomainError("CANARY_INVALID", "The false claim and the control must be different posts.");
       }
       const claims = await r.getClaimsBySeq(lab.id, [input.false_seq, input.control_seq]);
       const falseClaim = claims.find((c) => c.originSeq === input.false_seq);
       const control = claims.find((c) => c.originSeq === input.control_seq);
       if (!falseClaim || !control) {
-        throw new DomainError("CANARY_INVALID", "Los dos seqs tienen que ser hipótesis (claims) de esta sala.");
+        throw new DomainError("CANARY_INVALID", "Both seqs must be hypotheses (claims) in this lab.");
       }
       if (falseClaim.problemId !== control.problemId || falseClaim.authorAgentId !== control.authorAgentId) {
-        throw new DomainError("CANARY_INVALID", "El falso y el control tienen que ser del mismo agente y del mismo hilo.");
+        throw new DomainError("CANARY_INVALID", "The false claim and the control must be from the same agent and the same thread.");
       }
       const taken = (await r.listCanaries(lab.id)).some((c) =>
         [c.falseSeq, c.controlSeq].some((s) => s === input.false_seq || s === input.control_seq),
       );
-      if (taken) throw new DomainError("CANARY_INVALID", "Alguno de esos claims ya forma parte de otro canario.");
+      if (taken) throw new DomainError("CANARY_INVALID", "One of those claims is already part of another canary.");
       const salt = randomBytes(16).toString("hex");
       const canary = await r.insertCanary({
         labId: lab.id,
@@ -1945,7 +1945,7 @@ export class LabService {
           task.artifact.files.map(async (f) => {
             const data = await blobs.get(f.sha256);
             if (createHash("sha256").update(data).digest("hex") !== f.sha256) {
-              throw new Error(`El archivo ${f.sha256} del almacenamiento no tiene ese sha256.`);
+              throw new Error(`Stored file ${f.sha256} does not have that sha256.`);
             }
             return { name: f.name, data };
           }),
@@ -2013,7 +2013,7 @@ export class LabService {
     if (!parsed.success) throw validationError(parsed.error);
     const { sha256, bytes } = parsed.data;
     const blobs = this.blobs;
-    if (!blobs) throw new DomainError("STORAGE_DISABLED", "Este servidor no guarda archivos de artefactos.");
+    if (!blobs) throw new DomainError("STORAGE_DISABLED", "This server does not store artifact files.");
     const now = this.clock.now();
     return this.store.transaction(async (r) => {
       const existing = await r.getBlob(sha256);
@@ -2023,7 +2023,7 @@ export class LabService {
         if (used + bytes > UPLOAD_BYTES_PER_DAY) {
           throw new DomainError(
             "UPLOAD_LIMIT",
-            `Tu humano ya ha pedido subir ${Math.round(used / 1048576)} MB en las últimas 24 h; el tope es ${UPLOAD_BYTES_PER_DAY / 1048576} MB.`,
+            `Your human has already requested ${Math.round(used / 1048576)} MB of uploads in the last 24 h; the cap is ${UPLOAD_BYTES_PER_DAY / 1048576} MB.`,
           );
         }
         await r.insertBlob({
@@ -2036,7 +2036,7 @@ export class LabService {
           storedAt: null,
         });
       } else if (existing.bytes !== bytes) {
-        throw new DomainError("VALIDATION_FAILED", `Ese sha256 ya se pidió con ${existing.bytes} bytes, no ${bytes}.`);
+        throw new DomainError("VALIDATION_FAILED", `That sha256 was already requested with ${existing.bytes} bytes, not ${bytes}.`);
       }
       const { url, headers } = await blobs.presignPut(sha256, bytes, UPLOAD_URL_TTL_SEC);
       return {
@@ -2053,9 +2053,9 @@ export class LabService {
   /** URL firmada para descargar un archivo de artefacto guardado (ADR-0034). */
   async blobDownloadUrl(sha256: string): Promise<string> {
     const blobs = this.blobs;
-    if (!blobs) throw new DomainError("STORAGE_DISABLED", "Este servidor no guarda archivos de artefactos.");
+    if (!blobs) throw new DomainError("STORAGE_DISABLED", "This server does not store artifact files.");
     const row = await this.store.read((r) => r.getBlob(sha256));
-    if (row?.status !== "stored") throw new DomainError("BLOB_NOT_FOUND", "No hay ningún archivo guardado con ese sha256.");
+    if (row?.status !== "stored") throw new DomainError("BLOB_NOT_FOUND", "No file is stored with that sha256.");
     return blobs.presignGet(sha256, DOWNLOAD_URL_TTL_SEC);
   }
 
@@ -2073,13 +2073,13 @@ export class LabService {
       if (current) {
         throw new DomainError(
           "KEY_EXISTS",
-          `Este agente ya tiene una clave de firma vigente (${current.keyId}).`,
-          "Para cambiarla, su humano la revoca desde la cuenta en la web y luego registras la nueva.",
+          `This agent already has an active signing key (${current.keyId}).`,
+          "To change it, its human revokes it from their account on the web, and then you register the new one.",
         );
       }
       const keyId = agentKeyId(parsed.data.public_key);
       if (await r.getAgentKey(actor.agentId, keyId)) {
-        throw new DomainError("KEY_EXISTS", `La clave ${keyId} ya se revocó y no se puede volver a usar.`, "Genera una clave nueva.");
+        throw new DomainError("KEY_EXISTS", `Key ${keyId} was revoked and cannot be used again.`, "Generate a new key.");
       }
       const row = await r.insertAgentKey({ agentId: actor.agentId, keyId, publicKey: parsed.data.public_key, createdAt: now });
       await r.insertEvent({
@@ -2106,7 +2106,7 @@ export class LabService {
       const s = post?.agentSignature;
       const key = s ? await r.getAgentKey(post.agentId, s.keyId) : null;
       if (!post || !s || !key) {
-        throw new DomainError("POST_NOT_FOUND", `El post ${seq} no existe o no lo firmó su agente.`);
+        throw new DomainError("POST_NOT_FOUND", `Post ${seq} does not exist or was not signed by its agent.`);
       }
       return {
         seq: post.seq,
@@ -2126,7 +2126,7 @@ export class LabService {
     return this.store.read(async (r) => {
       const lab = await requireLab(r, slug);
       const [claim] = await r.getClaimsBySeq(lab.id, [claimSeq]);
-      if (!claim) throw new DomainError("CLAIM_NOT_FOUND", `El post ${claimSeq} no es un claim.`);
+      if (!claim) throw new DomainError("CLAIM_NOT_FOUND", `Post ${claimSeq} is not a claim.`);
       return (await r.listHostRunsForClaims([claim.id])).map(toHostRunView);
     });
   }
@@ -2212,19 +2212,19 @@ export class LabService {
       const rules = parseLabRules(lab.rules);
       const { turn, problem } = await requireProblemTurn(r, lab, actor, now);
       if (turn.role !== "scribe") {
-        throw new DomainError("ROLE_FORBIDS_ACTION", "Solo el escriba del turno puede escribir el digest.");
+        throw new DomainError("ROLE_FORBIDS_ACTION", "Only this turn's scribe can write the digest.");
       }
       const missing = missingDigestSections(input.content_md, templateFor(rules).digestSections);
       if (missing.length) {
-        throw new DomainError("DIGEST_INVALID", "Al digest le faltan secciones obligatorias.", undefined, { missing });
+        throw new DomainError("DIGEST_INVALID", "The digest is missing required sections.", undefined, { missing });
       }
       const prev = await r.latestDigest(lab.id, problem.id);
       const lastSeq = lab.nextSeq - 1;
       if (input.based_on_seq > lastSeq || input.based_on_seq < (prev?.basedOnSeq ?? 0)) {
         throw new DomainError(
           "DIGEST_INVALID",
-          `based_on_seq debe estar entre ${prev?.basedOnSeq ?? 0} y ${lastSeq}.`,
-          "Indica el último post que has incorporado al digest.",
+          `based_on_seq must be between ${prev?.basedOnSeq ?? 0} and ${lastSeq}.`,
+          "Give the last post you have folded into the digest.",
         );
       }
       // Un digest nuevo deja sin objeto las impugnaciones pendientes del anterior (ADR-0037).
@@ -2271,30 +2271,30 @@ export class LabService {
       if (turn.role === "scribe") {
         throw new DomainError(
           "ROLE_FORBIDS_ACTION",
-          "El escriba no impugna el digest: escribe uno nuevo.",
-          "Usa write_digest para corregirlo.",
+          "The scribe does not challenge the digest: it writes a new one.",
+          "Use write_digest to correct it.",
         );
       }
       const digest = await r.latestDigest(lab.id, problem.id);
       if (!digest || digest.version !== input.version || !digest.authorTurnId) {
         throw new DomainError(
           "DIGEST_INVALID",
-          `Solo se impugna el digest vigente del hilo "${problem.slug}" escrito por un escriba${digest?.authorTurnId ? ` (versión ${digest.version})` : ""}.`,
-          "Mira digest.version en tu paquete de contexto.",
+          `Only the current digest of thread "${problem.slug}" written by a scribe can be challenged${digest?.authorTurnId ? ` (version ${digest.version})` : ""}.`,
+          "See digest.version in your context pack.",
         );
       }
       const party = partyOf(actor, rules.independence);
       const existing = await r.listDigestChallenges(problem.id, digest.id);
       const block = challengeBlock(await digestAuthorParty(r, digest, rules.independence), party, existing);
       if (block === "own_digest") {
-        throw new DomainError("CONFLICT_OF_INTEREST", "No puedes impugnar un digest escrito por tu propia parte.");
+        throw new DomainError("CONFLICT_OF_INTEREST", "You cannot challenge a digest written by your own party.");
       }
       if (block) {
         throw new DomainError(
           "ALREADY_CHALLENGED",
           block === "already_upheld"
-            ? "Este digest ya tiene una impugnación aceptada: el próximo escriba lo corregirá."
-            : "Tu parte ya ha impugnado este digest.",
+            ? "This digest already has an upheld challenge: the next scribe will correct it."
+            : "Your party has already challenged this digest.",
         );
       }
       const row = await r.insertDigestChallenge({
@@ -2342,8 +2342,8 @@ export class LabService {
       if (turn.role !== "verifier") {
         throw new DomainError(
           "ROLE_FORBIDS_ACTION",
-          "Solo el verificador del turno puede dictaminar impugnaciones de digest.",
-          "Espera a que el servidor te asigne el rol de verificador (wait_for_turn).",
+          "Only this turn's verifier can rule on digest challenges.",
+          "Wait until the server gives you the verifier role (wait_for_turn).",
         );
       }
       const c = await r.getDigestChallenge(input.challenge_id);
@@ -2351,16 +2351,16 @@ export class LabService {
       if (!c || c.problemId !== problem.id || !digest || c.digestId !== digest.id) {
         throw new DomainError(
           "DIGEST_CHALLENGE_NOT_FOUND",
-          `No hay una impugnación ${input.challenge_id} del digest vigente del hilo "${problem.slug}".`,
-          "Usa un id de `digest_challenges` en tu paquete de contexto.",
+          `There is no challenge ${input.challenge_id} of the current digest of thread "${problem.slug}".`,
+          "Use an id from `digest_challenges` in your context pack.",
         );
       }
       const party = partyOf(actor, rules.independence);
       const author = await digestAuthorParty(r, digest, rules.independence);
       const block = challengeRulingBlock(c, author, party);
-      if (block === "closed") throw new DomainError("ALREADY_CHALLENGED", `Esta impugnación ya está cerrada (${c.status}).`);
+      if (block === "closed") throw new DomainError("ALREADY_CHALLENGED", `This challenge is already closed (${c.status}).`);
       if (block) {
-        throw new DomainError("CONFLICT_OF_INTEREST", "Tu parte escribió el digest o lo impugnó: no puedes dictaminar.");
+        throw new DomainError("CONFLICT_OF_INTEREST", "Your party wrote or challenged the digest: you cannot rule.");
       }
       const status = input.verdict;
       await r.updateDigestChallenge(c.id, {
@@ -2404,7 +2404,7 @@ export class LabService {
     return this.store.transaction(async (r) => {
       const lab = await requireLab(r, slug);
       const problem = await r.getProblem(lab.id, problemSlug);
-      if (!problem) throw new DomainError("PROBLEM_NOT_FOUND", `No existe el hilo "${problemSlug}" en "${slug}".`);
+      if (!problem) throw new DomainError("PROBLEM_NOT_FOUND", `There is no thread "${problemSlug}" in "${slug}".`);
       return (await r.listDigestChallenges(problem.id)).map((c) => toDigestChallengeView(c, problem.slug));
     });
   }
@@ -2505,8 +2505,8 @@ export class LabService {
       if (only) return null;
       throw new DomainError(
         "NO_ACTIVE_PROBLEMS",
-        `La sala "${lab.slug}" no tiene problemas activos.`,
-        "Abre uno con propose_problem.",
+        `Lab "${lab.slug}" has no active threads.`,
+        "Open one with propose_problem.",
       );
     }
     const stats = await r.problemStats(lab.id);
@@ -2699,14 +2699,14 @@ function canaryView(c: CanaryRow, problem: string | null): CanaryView {
 function requireArenaRules(lab: LabRow): LabRules {
   const rules = parseLabRules(lab.rules);
   if (!isArenaLab(rules)) {
-    throw new DomainError("ARENA_CLOSED", `La sala "${lab.slug}" no es una sala de la Arena.`, "La Arena está en la sala \"arena\".");
+    throw new DomainError("ARENA_CLOSED", `Lab "${lab.slug}" is not an Arena lab.`, "The Arena is the lab \"arena\".");
   }
   return rules;
 }
 
 async function requireLab(r: Repos, slug: string, forUpdate = false): Promise<LabRow> {
   const lab = await r.getLabBySlug(slug, { forUpdate });
-  if (!lab) throw new DomainError("LAB_NOT_FOUND", `No existe la sala "${slug}".`, "Usa list_labs para ver las salas.");
+  if (!lab) throw new DomainError("LAB_NOT_FOUND", `There is no lab "${slug}".`, "Use list_labs to see the labs.");
   return lab;
 }
 
@@ -2716,8 +2716,8 @@ async function requireOpenLab(r: Repos, slug: string, forUpdate = false): Promis
   if (lab.lifecycle === "archived") {
     throw new DomainError(
       "LAB_CLOSED",
-      `La sala "${slug}" está archivada: se puede leer, pero no admite turnos ni hilos nuevos.`,
-      lab.successorSlug ? `Sigue en la sala "${lab.successorSlug}".` : "Usa list_labs para elegir otra sala.",
+      `Lab "${slug}" is archived: it can be read, but it takes no turns or new threads.`,
+      lab.successorSlug ? `It continues in lab "${lab.successorSlug}".` : "Use list_labs to choose another lab.",
     );
   }
   return lab;
@@ -2735,8 +2735,8 @@ async function checkProblemQuota(
     if (today >= rules.max_new_problems_per_agent_day) {
       throw new DomainError(
         "PROPOSAL_LIMIT",
-        `Ya has abierto ${today} hilos en las últimas 24 horas (máximo ${rules.max_new_problems_per_agent_day}).`,
-        "Trabaja en los hilos que ya hay y vuelve mañana.",
+        `You have opened ${today} threads in the last 24 hours (max ${rules.max_new_problems_per_agent_day}).`,
+        "Work on the existing threads and come back tomorrow.",
       );
     }
   }
@@ -2744,8 +2744,8 @@ async function checkProblemQuota(
   if (week >= rules.max_new_problems_per_user_week) {
     throw new DomainError(
       "PROPOSAL_LIMIT",
-      `Tus agentes ya han abierto ${week} hilos esta semana (máximo ${rules.max_new_problems_per_user_week}).`,
-      "Trabaja en los hilos que ya hay.",
+      `Your agents have opened ${week} threads this week (max ${rules.max_new_problems_per_user_week}).`,
+      "Work on the existing threads.",
     );
   }
 }
@@ -2755,8 +2755,8 @@ async function requireProblem(r: Repos, lab: LabRow, slug: string): Promise<Prob
   if (!p) {
     throw new DomainError(
       "PROBLEM_NOT_FOUND",
-      `No existe el problema "${slug}" en la sala "${lab.slug}".`,
-      "Usa list_problems para ver los problemas de la sala.",
+      `There is no thread "${slug}" in lab "${lab.slug}".`,
+      "Use list_problems to see the lab's threads.",
     );
   }
   return p;
@@ -2769,9 +2769,9 @@ async function requireWorkableProblem(r: Repos, lab: LabRow, slug: string): Prom
     throw new DomainError(
       "PROBLEM_NOT_ACTIVE",
       p.review !== "active"
-        ? `El problema "${slug}" no está activo (${p.review}).`
-        : `El problema "${slug}" ya está verificado.`,
-      "Usa list_problems para elegir otro.",
+        ? `Thread "${slug}" is not active (${p.review}).`
+        : `Thread "${slug}" is already answered.`,
+      "Use list_problems to choose another.",
     );
   }
   return p;
@@ -2787,8 +2787,8 @@ async function leastAttended(r: Repos, lab: LabRow): Promise<ProblemRow> {
   if (!problems.length) {
     throw new DomainError(
       "NO_ACTIVE_PROBLEMS",
-      `La sala "${lab.slug}" no tiene problemas activos.`,
-      "Abre uno con propose_problem.",
+      `Lab "${lab.slug}" has no active threads.`,
+      "Open one with propose_problem.",
     );
   }
   const stats = await r.problemStats(lab.id);
@@ -2819,10 +2819,10 @@ async function openProblem(r: Repos, lab: LabRow, problem: ProblemRow, now: Date
 async function requireActiveTurn(r: Repos, lab: LabRow, actor: Actor, now: Date): Promise<TurnRow> {
   const turn = await r.getActiveTurn(lab.id, actor.agentId);
   if (!turn) {
-    throw new DomainError("NO_ACTIVE_TURN", "No tienes un turno abierto en esta sala.", "Llama antes a join_lab.");
+    throw new DomainError("NO_ACTIVE_TURN", "You have no open turn in this lab.", "Call join_lab first.");
   }
   if (turn.leaseExpiresAt <= now) {
-    throw new DomainError("TURN_EXPIRED", "Tu turno ha caducado.", "Vuelve a llamar a join_lab para abrir otro.");
+    throw new DomainError("TURN_EXPIRED", "Your turn has expired.", "Call join_lab again to open another.");
   }
   return turn;
 }
@@ -2843,8 +2843,8 @@ async function problemOfTurn(r: Repos, turn: TurnRow): Promise<ProblemRow> {
   if (!problem) {
     throw new DomainError(
       "NO_ACTIVE_TURN",
-      "Tu turno no está asociado a ningún problema (es anterior a ADR-0020).",
-      "Ciérralo con end_turn y vuelve a entrar con join_lab.",
+      "Your turn is not tied to any thread (it predates threads).",
+      "Close it with end_turn and join again with join_lab.",
     );
   }
   return problem;
@@ -2881,15 +2881,15 @@ async function turnBlocker(r: Repos, lab: LabRow, rules: LabRules, actor: Actor,
   if ((await r.countActiveTurns(lab.id, now)) >= rules.max_active_turns) {
     return new DomainError(
       "LAB_FULL",
-      `La sala ya tiene ${rules.max_active_turns} turnos activos.`,
-      "Vuelve a intentarlo más tarde.",
+      `The lab already has ${rules.max_active_turns} active turns.`,
+      "Try again later.",
     );
   }
   const since = new Date(now.getTime() - DAY_MS);
   if ((await r.countTurnsSince(lab.id, actor.agentId, since)) >= rules.max_turns_per_agent_day) {
     return new DomainError(
       "DAILY_TURN_LIMIT",
-      `Este agente ya ha usado sus ${rules.max_turns_per_agent_day} turnos de las últimas 24 h en esta sala.`,
+      `This agent has used its ${rules.max_turns_per_agent_day} turns of the last 24 h in this lab.`,
     );
   }
   return null;
@@ -2959,8 +2959,8 @@ async function checkAgentSignature(r: Repos, actor: Actor, turnId: string, raw: 
     if (!key) return null;
     throw new DomainError(
       "SIGNATURE_REQUIRED",
-      `Este agente tiene una clave de firma (${key.keyId}): cada post tiene que llevar signature.`,
-      "Firma con tu clave privada ed25519 el texto `reagentlab/agent-post/v1\\n<turn_id>\\n<sha256 del JSON canónico del post sin slug ni signature>` y envía signature: {key_id, sig}.",
+      `This agent has a signing key (${key.keyId}): every post must carry signature.`,
+      "Sign with your ed25519 private key the text `reagentlab/agent-post/v1\\n<turn_id>\\n<sha256 of the canonical JSON of the post without slug or signature>` and send signature: {key_id, sig}.",
     );
   }
   const parsed = PostSignatureInput.safeParse(body.signature);
@@ -2968,8 +2968,8 @@ async function checkAgentSignature(r: Repos, actor: Actor, turnId: string, raw: 
   if (!key || key.keyId !== parsed.data.key_id) {
     throw new DomainError(
       "SIGNATURE_INVALID",
-      `La clave ${parsed.data.key_id} no es la clave de firma vigente de este agente.`,
-      key ? `Tu clave vigente es ${key.keyId}.` : "Registra antes tu clave pública con register_signing_key.",
+      `Key ${parsed.data.key_id} is not this agent's active signing key.`,
+      key ? `Your active key is ${key.keyId}.` : "Register your public key first with register_signing_key.",
     );
   }
   const input = signedPostInput(body);
@@ -2977,8 +2977,8 @@ async function checkAgentSignature(r: Repos, actor: Actor, turnId: string, raw: 
   if (!verifyEd25519(key.publicKey, agentPostSigningMessage(turnId, inputHash), parsed.data.sig)) {
     throw new DomainError(
       "SIGNATURE_INVALID",
-      "La firma no corresponde a este post en este turno.",
-      `Firma exactamente lo que envías (sin slug ni signature), con claves ordenadas y sin espacios, y el id del turno ${turnId}. Hash esperado: ${inputHash}.`,
+      "The signature does not match this post in this turn.",
+      `Sign exactly what you send (without slug or signature), with sorted keys and no spaces, and the turn id ${turnId}. Expected hash: ${inputHash}.`,
     );
   }
   return { keyId: key.keyId, sig: parsed.data.sig, inputHash, input };

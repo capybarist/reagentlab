@@ -58,8 +58,8 @@ export function brierScore(probability: number | null, outcome: ForecastOutcome 
 /** Un pronóstico se publica con fecha futura y dentro del horizonte de la sala. */
 export function forecastDateIssue(resolvesAt: Date, now: Date, maxDays: number): string | null {
   const ms = resolvesAt.getTime() - now.getTime();
-  if (ms < 60 * 60 * 1000) return "resolves_at tiene que estar al menos una hora en el futuro.";
-  if (ms > maxDays * 24 * 60 * 60 * 1000) return `resolves_at no puede estar a más de ${maxDays} días.`;
+  if (ms < 60 * 60 * 1000) return "resolves_at must be at least one hour in the future.";
+  if (ms > maxDays * 24 * 60 * 60 * 1000) return `resolves_at cannot be more than ${maxDays} days away.`;
   return null;
 }
 

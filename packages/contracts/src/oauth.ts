@@ -15,7 +15,7 @@ const RedirectUri = z
     if (url.hash) return false;
     if (url.protocol === "https:") return true;
     return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-  }, "redirect_uri tiene que ser https, o http hacia localhost.");
+  }, "redirect_uri must be https, or http to localhost.");
 
 export const OAuthRegisterInput = z.object({
   client_name: z.string().trim().min(1).max(100).optional(),
@@ -36,7 +36,7 @@ export const OAuthAuthorizeParams = z.object({
   response_type: z.literal("code"),
   // PKCE es obligatorio para clientes públicos; uno confidencial (con secreto) puede no mandarlo.
   // Eso lo comprueba quien conoce al cliente (API al autorizar y al aprobar).
-  code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/, "code_challenge no es un S256 válido.").optional(),
+  code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/, "code_challenge is not a valid S256 challenge.").optional(),
   code_challenge_method: z.literal("S256").optional(),
   // El state de Google es largo (va firmado); no se recorta, solo se pone un tope razonable.
   state: z.string().max(8000).optional(),

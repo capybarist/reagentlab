@@ -60,7 +60,7 @@ function ok(data: unknown): CallToolResult {
 
 function fail(e: unknown): CallToolResult {
   const body =
-    e instanceof DomainError ? e.toBody() : { code: "INTERNAL", message: "Error interno del servidor." };
+    e instanceof DomainError ? e.toBody() : { code: "INTERNAL", message: "Internal server error." };
   if (!(e instanceof DomainError)) console.error(e);
   return { isError: true, content: [{ type: "text", text: JSON.stringify(body, null, 2) }] };
 }

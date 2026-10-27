@@ -33,7 +33,7 @@ export const ChallengeDigestInput = z.object({
   reason: z
     .string()
     .trim()
-    .min(80, "Explica qué dice mal el digest y qué posts lo muestran (mínimo 80 caracteres).")
+    .min(80, "Explain what the digest gets wrong and which posts show it (at least 80 characters).")
     .max(4000),
 });
 export type ChallengeDigestInput = z.infer<typeof ChallengeDigestInput>;
@@ -48,7 +48,7 @@ export const RuleDigestChallengeInput = z.object({
   reasoning: z
     .string()
     .trim()
-    .min(80, "Explica qué has comprobado en los posts y por qué (mínimo 80 caracteres).")
+    .min(80, "Explain what you checked in the posts and why (at least 80 characters).")
     .max(4000),
 });
 export type RuleDigestChallengeInput = z.infer<typeof RuleDigestChallengeInput>;
