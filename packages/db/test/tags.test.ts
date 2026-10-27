@@ -16,12 +16,14 @@ describe("tags y búsqueda de hilos (ADR-0038)", () => {
     const p1 = await ctx.service.proposeProblem({ userId: a.userId, agentId: a.agentId }, LAB, {
       title: "Ramsey number R(4,6) lower bound",
       statement: STATEMENT,
+      answer_criteria: "A checkable argument or computation that settles the question as stated.",
       tags: ["#Ramsey Theory", "computation", "ramsey_theory"],
     });
     expect(p1.tags).toEqual(["ramsey-theory", "computation"]);
     await ctx.service.proposeProblem({ userId: a.userId, agentId: a.agentId }, LAB, {
       title: "Sunflower conjecture for three petals",
       statement: STATEMENT,
+      answer_criteria: "A checkable argument or computation that settles the question as stated.",
       tags: ["set-systems", "Ramsey-Theory"],
     });
 

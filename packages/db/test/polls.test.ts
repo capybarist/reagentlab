@@ -131,6 +131,7 @@ describe("polls de adopción", () => {
       statement:
         "A second open question in this lab, so that a turn can be on a different thread than the poll. " +
         "Progress here would be any checkable argument; nothing is known yet.",
+      answer_criteria: "A checkable argument or computation that settles the question as stated.",
       confirm_new: true,
     });
     await ctx.service.endTurn(bob, LAB);
@@ -140,13 +141,25 @@ describe("polls de adopción", () => {
     await ctx.service.castVote(bob, LAB, vote(poll.id, "yes"));
   });
 
-  it("un claim sin refutaciones fallidas suficientes no va a poll", async () => {
-    await scenario(["invalid", "invalid"], { min_failed_refutations: 2 });
+  it("un claim va a poll cuando lleva publicado el tiempo de exposición, no por refutaciones contadas (ADR-0046)", async () => {
+    await scenario(["invalid", "invalid"], { adoption_exposure_days: 7 });
     expect(await ctx.service.runPolls()).toEqual({ closed: 0, opened: 0 });
+    ctx.clock.advance(7 * 24 * 60);
+    expect((await ctx.service.runPolls()).opened).toBe(1);
+  });
+
+  it("un claim apoyado sin ninguna refutación también va a poll (ADR-0046)", async () => {
+    ctx = await setup();
+    const [alice, bob] = await Promise.all([ctx.agent("alice"), ctx.agent("bob", "gpt")]);
+    await ctx.service.joinLab(alice, LAB);
+    await ctx.service.joinLab(bob, LAB);
+    await ctx.service.post(alice, LAB, hypothesis());
+    await ctx.service.post(bob, LAB, evidence([1]));
+    expect((await ctx.service.runPolls()).opened).toBe(1);
   });
 
   it("quien no ha vuelto a la sala desde que se abrió el poll no bloquea el quórum (ADR-0041)", async () => {
-    const { bob, carol } = await scenario(["invalid", "invalid"]);
+    const { bob, carol } = await scenario(["invalid", "invalid"], { poll_max_age_days: 2 });
     const poll = await openPoll();
     for (const a of [bob, carol]) await ctx.service.castVote(a, LAB, vote(poll.id, "yes"));
     // dave y erin tuvieron turno hace poco: el poll se alarga para esperarlos (ADR-0030).
@@ -181,10 +194,10 @@ describe("polls de adopción", () => {
   });
 
   it("sin diversidad de familias el poll no adopta y no se repite enseguida", async () => {
-    const { bob, carol, dave, erin } = await scenario(["invalid", "invalid"]);
+    const { bob, carol, dave, erin } = await scenario(["invalid", "invalid"], { poll_max_age_days: 2 });
     const poll = await openPoll();
     for (const a of [bob, carol]) await ctx.service.castVote(a, LAB, vote(poll.id, "yes"));
-    // dave y erin podían votar y no lo han hecho: el poll se alarga una vez (ADR-0030).
+    // Sin quórum, el poll espera a los votantes mientras no pase de poll_max_age_days (ADR-0046).
     expect(await closeAll()).toMatchObject({ closed: 0 });
     const [extended] = await ctx.service.listPolls(LAB);
     expect(extended).toMatchObject({ status: "open", extensions: 1 });
@@ -200,7 +213,7 @@ describe("polls de adopción", () => {
   });
 
   it("no se vota sin turno, en polls de otra sala ni en polls cerrados", async () => {
-    const { bob, carol } = await scenario(["invalid", "invalid"], { poll_max_extensions: 0 });
+    const { bob, carol } = await scenario(["invalid", "invalid"], { poll_max_age_days: 1 });
     const poll = await openPoll();
     await ctx.service.endTurn(carol, LAB);
     await expectCode(ctx.service.castVote(carol, LAB, vote(poll.id, "yes")), "NO_ACTIVE_TURN");

@@ -68,12 +68,15 @@ export function tally(verifications: readonly { party: string; outcome: Verifica
 }
 
 /**
- * ¿Pasa a verde? Solo un claim adoptado (ya superó refutaciones y un poll) y con
- * confirmaciones netas suficientes: un fallo de otra parte resta una confirmación, así que
- * un solo verificador no bloquea para siempre, pero tampoco se ignora.
+ * ¿Pasa a verde? Un claim apoyado o adoptado (ADR-0044: la comprobación va antes que el poll),
+ * sin ninguna refutación abierta, y con confirmaciones netas suficientes: un fallo de otra
+ * parte resta una confirmación, así que un solo verificador no bloquea para siempre, pero
+ * tampoco se ignora. Mientras alguien lo ataca, espera al dictamen.
  */
-export function readyForGreen(status: ClaimStatus, t: Tally, required: number): boolean {
-  return status === "adopted" && required > 0 && t.confirms - t.fails >= required;
+export function readyForGreen(status: ClaimStatus, t: Tally, required: number, hasOpenRefutation = false): boolean {
+  if (status !== "supported" && status !== "adopted") return false;
+  if (hasOpenRefutation) return false;
+  return required > 0 && t.confirms - t.fails >= required;
 }
 
 export interface StepsProblem {

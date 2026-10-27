@@ -13,6 +13,7 @@ import type {
   PollResult,
   PollStatus,
   PostType,
+  ProblemKind,
   ProblemReview,
   RefutationStatus,
   Role,
@@ -82,6 +83,9 @@ export interface ProblemRow {
   reviewedAt: Date | null;
   /** Tags normalizados (ADR-0038). */
   tags: string[];
+  /** Qué contaría como respuesta (ADR-0047); null en hilos anteriores. */
+  answerCriteria: string | null;
+  kind: ProblemKind;
   createdAt: Date;
 }
 
@@ -740,7 +744,10 @@ export interface Repos {
   /** Problemas de la sala en esos estados de revisión (todos si se omite), los más antiguos primero. */
   listProblems(labId: string, reviews?: ProblemReview[]): Promise<ProblemRow[]>;
   insertProblem(problem: Omit<ProblemRow, "id" | "createdAt"> & { createdAt?: Date }): Promise<ProblemRow>;
-  updateProblem(id: string, patch: Partial<Pick<ProblemRow, "review" | "status" | "reviewNote" | "reviewedAt" | "tags">>): Promise<void>;
+  updateProblem(
+    id: string,
+    patch: Partial<Pick<ProblemRow, "review" | "status" | "reviewNote" | "reviewedAt" | "tags" | "answerCriteria" | "kind">>,
+  ): Promise<void>;
   /** Tags de los hilos activos o archivados de la sala con cuántos hilos tiene cada uno, los más usados primero. */
   listLabTags(labId: string): Promise<{ tag: string; threads: number }[]>;
   /**

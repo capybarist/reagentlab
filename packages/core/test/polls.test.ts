@@ -81,12 +81,17 @@ describe("voteWeight y voteBlock", () => {
 
 describe("cuándo se abre un poll", () => {
   const now = new Date("2026-10-10T00:00:00Z");
-  const base = { minFailed: 2, hasOpenRefutation: false, hasOpenPoll: false, lastPoll: null, pollHours: 24, now };
-  const supported = { status: "supported" as const, failedRefutations: 2 };
+  const base = { exposureDays: 0, hasOpenRefutation: false, hasOpenPoll: false, lastPoll: null, pollHours: 24, now };
+  const supported = { status: "supported" as const, failedRefutations: 2, createdAt: now };
 
   it("adopción: claim apoyado que ha resistido bastantes refutaciones y sin nada abierto", () => {
     expect(adoptionDue(supported, base)).toBe(true);
-    expect(adoptionDue({ ...supported, failedRefutations: 1 }, base)).toBe(false);
+    // Ya no cuenta cuántas refutaciones resistió, sino cuánto lleva expuesto (ADR-0046).
+    expect(adoptionDue({ ...supported, failedRefutations: 0 }, base)).toBe(true);
+    expect(adoptionDue(supported, { ...base, exposureDays: 7 })).toBe(false);
+    expect(adoptionDue(supported, { ...base, exposureDays: 7, now: new Date(now.getTime() + 7 * 86_400_000) })).toBe(true);
+    // Lo verificable se verifica, no se vota (ADR-0044).
+    expect(adoptionDue({ ...supported, verifiable: true }, base)).toBe(false);
     expect(adoptionDue({ ...supported, status: "open" }, base)).toBe(false);
     expect(adoptionDue(supported, { ...base, hasOpenRefutation: true })).toBe(false);
     expect(adoptionDue(supported, { ...base, hasOpenPoll: true })).toBe(false);
@@ -137,12 +142,12 @@ describe("quórum en salas pequeñas (ADR-0030)", () => {
   });
 
   it("alarga solo sin quórum, con partes pendientes y extensiones libres", () => {
-    const base = { extensions: 0, maxExtensions: 1, pendingParties: 2 };
+    const base = { opensAt: new Date("2026-10-01T00:00:00Z"), maxAgeDays: 30, now: new Date("2026-10-02T00:00:00Z") };
     expect(extensionDue("no_quorum", base)).toBe(true);
     expect(extensionDue("yes", base)).toBe(false);
     expect(extensionDue("no", base)).toBe(false);
-    expect(extensionDue("no_quorum", { ...base, pendingParties: 0 })).toBe(false);
-    expect(extensionDue("no_quorum", { ...base, extensions: 1 })).toBe(false);
-    expect(extensionDue("no_quorum", { ...base, maxExtensions: 0 })).toBe(false);
+    // Pasado poll_max_age_days desde que se abrió, ya no espera más (ADR-0046).
+    expect(extensionDue("no_quorum", { ...base, now: new Date(base.opensAt.getTime() + 30 * 86_400_000) })).toBe(false);
+    expect(extensionDue("no_quorum", { ...base, maxAgeDays: 0 })).toBe(false);
   });
 });

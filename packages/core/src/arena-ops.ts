@@ -365,6 +365,8 @@ async function openRound(r: Repos, lab: LabRow, rules: LabRules, t: ArenaTournam
     reviewNote: null,
     reviewedAt: null,
     tags: ["arena", `tournament-${t.number}`],
+    answerCriteria: "The round is answered when the server reveals every trap and signs the round's result.",
+    kind: "question",
     createdAt: now,
   });
   await r.insertDigest({

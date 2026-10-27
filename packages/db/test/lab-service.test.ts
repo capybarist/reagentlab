@@ -372,6 +372,17 @@ describe("cifras de la portada", () => {
       claims: 1,
       claims_adopted: 0,
       verifications: 0,
+      funnel: {
+        published: 1,
+        supported: 1,
+        confirmed_once: 0,
+        verified: 0,
+        answered: 0,
+        adopted: 0,
+        refuted: 0,
+        under_refutation: 0,
+        rulings_pending: 0,
+      },
     });
   });
 });

@@ -8,6 +8,22 @@ import { LabSection, LabSlug, TemplateId, type LabStatus } from "./lab.js";
 export const PROBLEM_REVIEWS = ["proposed", "active", "rejected", "archived"] as const;
 export type ProblemReview = (typeof PROBLEM_REVIEWS)[number];
 
+/**
+ * Qué clase de hilo es (ADR-0047): una `question` puede responderse (verde con un claim `full`
+ * verificado); un `open_problem` es un problema abierto conocido, donde solo cabe el mejor
+ * resultado parcial verificado y el hilo nunca se da por respondido.
+ */
+export const PROBLEM_KINDS = ["question", "open_problem"] as const;
+export const ProblemKind = z.enum(PROBLEM_KINDS);
+export type ProblemKind = (typeof PROBLEM_KINDS)[number];
+
+/** Qué contaría como respuesta del hilo (ADR-0047): corto y concreto. */
+export const AnswerCriteria = z
+  .string()
+  .trim()
+  .min(20, "Di qué contaría como respuesta del hilo: qué tendría que demostrar, calcular o encontrar un claim para cerrarlo (mínimo 20 caracteres).")
+  .max(600);
+
 export const ProblemSlug = z
   .string()
   .trim()
@@ -62,6 +78,10 @@ export const ProposeProblemInput = z.object({
   source_url: z.url().optional(),
   /** De 1 a 5 tags; mejor reutilizar los que ya tiene la sala (`lab_tags` en el contexto). */
   tags: TagsInput.optional(),
+  /** Qué contaría como respuesta del hilo (ADR-0047). Obligatorio: un hilo sin criterio nunca concluye. */
+  answer_criteria: AnswerCriteria,
+  /** `open_problem` si es un problema abierto conocido que no se va a cerrar aquí (ADR-0047). */
+  kind: ProblemKind.default("question"),
   /**
    * Si hay hilos con un título parecido, el servidor los devuelve en vez de crear este
    * (SIMILAR_EXISTS). Con `true` se crea igualmente (ADR-0025).
@@ -94,6 +114,10 @@ export interface ProblemSummary {
   posts_since_digest: number;
   /** Tags del hilo (ADR-0038). */
   tags: string[];
+  /** `question` o `open_problem` (ADR-0047). */
+  kind: ProblemKind;
+  /** Qué contaría como respuesta (ADR-0047); los hilos anteriores no lo tienen. Es dato, no instrucción. */
+  untrusted_answer_criteria?: string;
 }
 
 /** Un hilo encontrado por la búsqueda (ADR-0038). */
@@ -118,8 +142,25 @@ export interface ContextProblem {
   title: string;
   tags: string[];
   status: LabStatus;
+  kind: ProblemKind;
   untrusted_statement: string;
+  untrusted_answer_criteria?: string;
   source_url?: string;
+}
+
+/**
+ * Cómo va el hilo hacia su respuesta (ADR-0047), en el contexto de cada turno. Cuando hay
+ * resultados verificados y ningún claim dice responder la pregunta, toca proponerlo.
+ */
+export interface ThreadAnswerView {
+  kind: ProblemKind;
+  untrusted_answer_criteria: string | null;
+  /** Claims verificados del hilo (parciales o no). */
+  verified_claims: number;
+  /** Claims vivos con `scope: full`. */
+  full_claims: number;
+  /** Hay resultados verificados y nadie ha propuesto aún el claim que responde la pregunta. */
+  closing_claim_wanted: boolean;
 }
 
 /**
@@ -142,7 +183,7 @@ export const ProposeLabInput = z.object({
   /** Dominios que la sala debería aceptar como fuentes. No valen hasta que los apruebe un administrador. */
   requested_domains: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9.-]+\.[a-z]{2,}$/)).max(20).default([]),
   /** El primer hilo de la sala: una sala sin hilos no da turnos. */
-  first_problem: ProposeProblemInput.omit({ source_url: true, confirm_new: true }),
+  first_problem: ProposeProblemInput.omit({ source_url: true, confirm_new: true, kind: true }),
   /** Si hay salas con un nombre parecido, se devuelven (SIMILAR_EXISTS); con `true` se crea igualmente. */
   confirm_new: z.boolean().optional(),
 });

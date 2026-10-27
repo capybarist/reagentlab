@@ -1223,6 +1223,134 @@ export const RETIRED_HOST_PROBLEMS: Record<string, string[]> = {
   ],
 };
 
+
+/**
+ * Qué contaría como respuesta de cada hilo del host (ADR-0047), y cuáles son problemas abiertos
+ * conocidos que aquí solo reúnen resultados parciales verificados (`open_problem`). El seed los pone
+ * al día en cada arranque.
+ */
+export const HOST_ANSWER_CRITERIA: Record<string, { criteria: string; kind?: "open_problem" }> = {
+  // Mathematics
+  "erdos-straus": {
+    criteria:
+      "Open problem: it is not closed here. What counts is a verified partial result: a proof for a new residue class " +
+      "of primes, a density bound, or a checked computation that narrows the open classes.",
+    kind: "open_problem",
+  },
+  "erdos-turan-additive-bases": {
+    criteria: "Open problem. Verified partial results count: a proof for a restricted class of bases or a quantitative bound under extra hypotheses.",
+    kind: "open_problem",
+  },
+  "union-closed-sets": {
+    criteria: "Open problem. Verified partial results count: a better constant than the current record, or a proof for a new class of families.",
+    kind: "open_problem",
+  },
+  "hadwiger-nelson": {
+    criteria: "Open problem. Verified partial results count: a smaller 5-chromatic unit-distance graph with a checkable certificate, or a result for restricted colourings.",
+    kind: "open_problem",
+  },
+  "lonely-runner": {
+    criteria: "Open problem. Verified partial results count: a proof for a further number of runners or for a structured family of speeds.",
+    kind: "open_problem",
+  },
+  "ramsey-r55": {
+    criteria: "Open problem. Verified partial results count: a new bound on R(5,5) with a checkable certificate or computation.",
+    kind: "open_problem",
+  },
+  "matmul-3x3-rank": {
+    criteria: "Open problem. Verified partial results count: a new bound on the rank of 3×3 matrix multiplication with a checkable certificate.",
+    kind: "open_problem",
+  },
+  "busy-beaver-6": {
+    criteria: "Open problem. Verified partial results count: a proof that a named holdout machine halts or does not, with a checkable certificate.",
+    kind: "open_problem",
+  },
+  // Physics
+  "extended-states-anderson": {
+    criteria: "Open problem. Verified partial results count: a rigorous result for a restricted model or disorder regime.",
+    kind: "open_problem",
+  },
+  "heisenberg-ferromagnet-order": {
+    criteria: "Open problem. Verified partial results count: a rigorous result for a restricted lattice, spin or coupling.",
+    kind: "open_problem",
+  },
+  "bose-einstein-condensation": {
+    criteria: "Open problem. Verified partial results count: a rigorous result for a restricted interaction or scaling regime.",
+    kind: "open_problem",
+  },
+  "kpz-2plus1-exponents": {
+    criteria: "Answered when a verified computation gives the 2+1 KPZ growth exponents with error bars that the thread's other parties reproduce.",
+  },
+  "kpz-upper-critical-dimension": {
+    criteria: "Open problem. Verified partial results count: a reproduced numerical result in a given dimension, or a rigorous bound.",
+    kind: "open_problem",
+  },
+  "turbulence-intermittency": {
+    criteria: "Open problem. Verified partial results count: a reproduced structure-function exponent from public data or a checked derivation of a bound.",
+    kind: "open_problem",
+  },
+  "fqhe-five-halves": {
+    criteria: "Answered when a verified derivation or computation shows which candidate state the published experiments single out, and other parties check it.",
+  },
+  "early-dark-energy": {
+    criteria: "Answered when a verified computation shows whether an early-dark-energy model fits the public CMB, BAO and supernova data at the level needed to resolve the tension.",
+  },
+  "distance-ladder-systematics": {
+    criteria: "Answered when a verified computation quantifies, from public data, whether a named systematic can shift H0 enough to close the gap.",
+  },
+  "s8-tension": {
+    criteria: "Answered when a verified computation from public data shows whether the S8 discrepancy survives a stated choice of analysis.",
+  },
+  "cosmological-lithium": {
+    criteria: "Open problem. Verified partial results count: a reproduced BBN computation or a checked derivation that excludes a proposed solution.",
+    kind: "open_problem",
+  },
+  "evolving-dark-energy": {
+    criteria: "Answered when a verified computation from the public DESI BAO data shows whether evolving dark energy is preferred over ΛCDM at a stated significance.",
+  },
+  "neutron-lifetime": {
+    criteria: "Open problem. Verified partial results count: a checked derivation or reproduced analysis that rules a proposed explanation in or out.",
+    kind: "open_problem",
+  },
+  "w-boson-mass": {
+    criteria: "Answered when a verified analysis of the published measurements shows whether the CDF value is compatible with the others and the Standard Model.",
+  },
+  "gallium-anomaly": {
+    criteria: "Open problem. Verified partial results count: a reproduced cross-section or rate computation that excludes or supports a proposed explanation.",
+    kind: "open_problem",
+  },
+  // Benchmark errors, paper reproduction
+  gsm8k: {
+    criteria: "Answered when a verified claim states, for both items, the correct answer and whether the reference answer is wrong, with the arithmetic others reproduce.",
+  },
+  "breiman-2001-random-forests-uci": {
+    criteria: "Answered when a verified artifact reproduces (or fails to reproduce) one reported cell of the paper with the paper's settings on the public dataset.",
+  },
+  // Forecasts
+  sports: { criteria: "The 2026 F1 Drivers' Champion, from an official or allowed source, once decided." },
+  "f1-2026-constructors": { criteria: "The 2026 F1 Constructors' Champion, from an official or allowed source, once decided." },
+  "f1-2026-title-decided": { criteria: "The race at which the 2026 Drivers' title is mathematically decided, from an allowed source." },
+  // Preprint review, puzzles, fact-check
+  "huang-2019-sensitivity": {
+    criteria: "Answered when a verified derivation claim checks every step of the proof and states whether each holds (scope full).",
+  },
+  "lk-99-2023": {
+    criteria: "Answered when a verified analysis of the preprint's own data states whether it supports room-temperature superconductivity.",
+  },
+  "pocket-cube-gods-number": {
+    criteria: "Answered when a verified computation gives God's number for the 2×2×2 cube (in a stated metric) with an artifact others reproduce.",
+  },
+  "closed-knights-tours-6x6": {
+    criteria: "Answered when a verified computation gives the number of closed knight's tours on a 6×6 board with an artifact others reproduce.",
+  },
+  "great-wall-visibility-from-space": {
+    criteria: "Answered when a verified claim states, for the section at a given oldid, whether its cited sources support each sentence.",
+  },
+  "common-misconceptions-science": {
+    criteria: "Answered when a verified claim states, for the listed science entries at a given oldid, which citations hold and which do not.",
+  },
+};
+
 /** Tags de los hilos de ciencia del host (ADR-0038); solo se ponen si el hilo aún no tiene. */
 export const HOST_PROBLEM_TAGS: Record<string, string[]> = {
   "erdos-straus": ["number-theory", "erdos-problems", "egyptian-fractions"],
@@ -1265,7 +1393,13 @@ export async function seedHostLabs(db: Db, log: (msg: string) => void = () => {}
     log(`Sala ${lab.slug} (${lab.lifecycle}): ${{ created: "creada", renamed: `renombrada (antes ${previousSlug})`, updated: "al día" }[action]}`);
     if (lab.lifecycle !== "active") continue;
     for (const p of HOST_PROBLEMS[lab.slug] ?? []) {
-      const { created } = await ensureProblem(db, lab.slug, { ...p, tags: p.tags ?? HOST_PROBLEM_TAGS[p.slug] }, { refresh: true });
+      const answer = HOST_ANSWER_CRITERIA[p.slug];
+      const { created } = await ensureProblem(
+        db,
+        lab.slug,
+        { ...p, tags: p.tags ?? HOST_PROBLEM_TAGS[p.slug], answerCriteria: answer?.criteria, kind: answer?.kind },
+        { refresh: true },
+      );
       if (created) log(`  problema ${p.slug}: creado`);
     }
     for (const slug of RETIRED_HOST_PROBLEMS[lab.slug] ?? []) {

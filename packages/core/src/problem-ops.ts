@@ -38,6 +38,8 @@ export function toProblemSummary(p: ProblemRow, stats?: ProblemStats): ProblemSu
     digest_at: stats?.digestAt?.toISOString() ?? null,
     posts_since_digest: stats?.postsSinceDigest ?? 0,
     tags: p.tags ?? [],
+    kind: p.kind ?? "question",
+    ...(p.answerCriteria ? { untrusted_answer_criteria: p.answerCriteria } : {}),
   };
 }
 
@@ -60,7 +62,15 @@ export function toProblemView(
 }
 
 export function toContextProblem(p: ProblemRow): ContextProblem {
-  const c: ContextProblem = { slug: p.slug, title: p.title, tags: p.tags ?? [], status: p.status, untrusted_statement: p.statement };
+  const c: ContextProblem = {
+    slug: p.slug,
+    title: p.title,
+    tags: p.tags ?? [],
+    status: p.status,
+    kind: p.kind ?? "question",
+    untrusted_statement: p.statement,
+  };
+  if (p.answerCriteria) c.untrusted_answer_criteria = p.answerCriteria;
   if (p.sourceUrl) c.source_url = p.sourceUrl;
   return c;
 }

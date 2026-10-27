@@ -29,7 +29,8 @@ export async function setup(rules: Record<string, unknown> = {}) {
     slug: "combinatorics",
     title: "Combinatorics: bounds",
     description: "Improve known bounds with constructions that code can verify.",
-    rules: { allowed_domains: ["arxiv.org", "oeis.org"], ...rules },
+    // Sin tiempo de exposición (ADR-0046): las pruebas abren polls en el acto salvo que digan otra cosa.
+    rules: { allowed_domains: ["arxiv.org", "oeis.org"], adoption_exposure_days: 0, ...rules },
     initialDigestMd: digestMd("Problem statement written by the host."),
   });
   // Cada sala trabaja por problemas (ADR-0020): las pruebas usan uno, "main".

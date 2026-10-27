@@ -1,6 +1,6 @@
 import type { LabRules, OpenPollView, PollView } from "@reagentlab/contracts";
 import { claimViews, refreshStatus, settleRefutation } from "./claim-ops.js";
-import { maybeVerify } from "./verification-ops.js";
+import { kindOfClaim, maybeVerify } from "./verification-ops.js";
 import { claimTransition, isRefutationOpen } from "./claims.js";
 import { adoptionDue, disputeDue, extensionDue, requiredFamilies, tallyPoll, voteBlock, type LastPoll } from "./polls.js";
 import type { LabRow, PollRow, Repos } from "./ports.js";
@@ -63,8 +63,9 @@ export async function openDuePolls(r: Repos, lab: LabRow, rules: LabRules, now: 
     if (free <= 0) return opened;
     const previous = await r.listPolls(lab.id, { claimIds: [claim.id], limit: 20 });
     const lastAdoption = previous.find((p) => p.kind === "adopt_claim");
-    const due = adoptionDue({ ...claim, adoptable: templateFor(rules).isAdoptable(claim.kind) }, {
-      minFailed: rules.min_failed_refutations,
+    // Lo verificable se verifica, no se vota (ADR-0044); lo demás, tras su tiempo de exposición (ADR-0046).
+    const due = adoptionDue({ ...claim, adoptable: templateFor(rules).isAdoptable(claim.kind), verifiable: kindOfClaim(claim, rules) !== null }, {
+      exposureDays: rules.adoption_exposure_days,
       hasOpenRefutation: refs.some((ref) => ref.claimId === claim.id && isRefutationOpen(ref.status)),
       hasOpenPoll: previous.some((p) => p.status === "open"),
       lastPoll: lastPoll(lastAdoption),
@@ -128,8 +129,8 @@ async function eligibility(r: Repos, lab: LabRow, rules: LabRules, poll: PollRow
 
 /**
  * Cierra un poll vencido: recuenta, publica el resultado y aplica sus efectos. Si no hay
- * quórum y aún quedan partes elegibles sin votar, lo alarga en vez de cerrarlo (ADR-0030)
- * y devuelve false.
+ * quórum, lo alarga en vez de cerrarlo mientras no lleve `poll_max_age_days` abierto
+ * (ADR-0046) y devuelve false: espera a los votantes en vez de fracasar.
  */
 export async function closePoll(r: Repos, lab: LabRow, rules: LabRules, poll: PollRow, now: Date): Promise<boolean> {
   const votes = await r.listVotesForTally(poll.id);
@@ -141,7 +142,7 @@ export async function closePoll(r: Repos, lab: LabRow, rules: LabRules, poll: Po
     return { ...tally, required_families: minFamilies, eligible_families: families };
   };
   let result = quorumOver(eligible.families);
-  if (extensionDue(result.outcome, { extensions: poll.extensions, maxExtensions: rules.poll_max_extensions, pendingParties: eligible.pending })) {
+  if (extensionDue(result.outcome, { opensAt: poll.opensAt, maxAgeDays: rules.poll_max_age_days, now })) {
     const closesAt = new Date(now.getTime() + rules.poll_hours * HOUR_MS);
     await r.updatePoll(poll.id, { closesAt, extensions: poll.extensions + 1 });
     // Sin recuentos: el poll sigue a ciegas.

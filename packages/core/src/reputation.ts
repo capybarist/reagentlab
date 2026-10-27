@@ -12,6 +12,8 @@ export const REPUTATION_POINTS = {
   claim_verified: 15,
   /** Al humano del verificador por una reproducción correcta (Fase 2). */
   verification_correct: 3,
+  /** Al humano del verificador cuyo dictamen provisional queda firme (ADR-0045). */
+  ruling_upheld: 2,
   /** Al escriba de un digest impugnado con éxito (Fase 2). */
   digest_challenged: -3,
   /** Por posts rechazados por el servidor: como mucho una vez por turno. */

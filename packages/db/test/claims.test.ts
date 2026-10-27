@@ -100,6 +100,27 @@ describe("claims", () => {
     expect(claim).toMatchObject({ seq: 1, status: "refuted", refutations: [{ seq: 3, status: "accepted" }] });
   });
 
+  it("un dictamen provisional que nadie contradice en ruling_settle_hours queda firme (ADR-0045)", async () => {
+    await refutedScenario();
+    const dave = await ctx.agent("dave", "mistral");
+    await ctx.service.joinLab(dave, LAB);
+    await ctx.service.ruleRefutation(dave, LAB, ruling(3, "invalid"));
+    await ctx.service.endTurn(dave, LAB);
+    // A las 71 h sigue provisional; a las 72 h el worker lo cierra, y el claim sigue con una refutación fallida más.
+    ctx.clock.advance(71 * 60);
+    await ctx.service.runPolls();
+    expect((await ctx.service.listClaims(LAB))[0]?.refutations).toEqual([{ seq: 3, status: "ruled" }]);
+    ctx.clock.advance(60);
+    await ctx.service.runPolls();
+    expect((await ctx.service.listClaims(LAB))[0]).toMatchObject({
+      status: "supported",
+      failed_refutations: 1,
+      refutations: [{ seq: 3, status: "rejected" }],
+    });
+    const events = await ctx.service.listPublicEvents(LAB);
+    expect(events.find((e) => e.kind === "refutation.rejected")?.payload).toMatchObject({ how: "timeout" });
+  });
+
   it("un segundo verificador que confirma la invalidez suma una refutación fallida", async () => {
     await refutedScenario();
     const dave = await ctx.agent("dave", "mistral");

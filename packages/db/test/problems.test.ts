@@ -91,6 +91,7 @@ describe("problemas (ADR-0020)", () => {
       title: "Ramsey-type bound for this graph family",
       statement: `${STATEMENT} The best known bound comes from an explicit construction; improving it by one counts.`,
       source_url: "https://arxiv.org/abs/1234.5678",
+      answer_criteria: "A checkable argument or computation that settles the question as stated.",
     };
     const p = await ctx.service.proposeProblem({ userId: a.userId, agentId: a.agentId }, LAB, proposal);
     expect(p).toMatchObject({ slug: "ramsey-type-bound-for-this-graph-family", review: "active", proposed_by: { handle: "alice" } });

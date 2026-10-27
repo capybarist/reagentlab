@@ -1,5 +1,5 @@
 import { HOST_PARTY, type LabRules, type VerificationTallyView, type VerificationTaskView } from "@reagentlab/contracts";
-import { claimTransition, supportStatus } from "./claims.js";
+import { claimTransition, isRefutationOpen, supportStatus } from "./claims.js";
 import { claimViews, refreshStatus } from "./claim-ops.js";
 import type { ClaimDetail, ClaimRow, LabRow, Repos, VerificationRow } from "./ports.js";
 import { REPUTATION_POINTS } from "./reputation.js";
@@ -134,8 +134,9 @@ export async function applyVerificationToSupport(
 }
 
 /**
- * Si el claim está adoptado y tiene confirmaciones netas suficientes, pasa a verde:
- * reputación para el autor y para quien lo confirmó, y estado del problema al día.
+ * Si el claim está apoyado o adoptado, nadie lo está refutando y tiene confirmaciones netas
+ * suficientes, pasa a verde (ADR-0044): reputación para el autor y para quien lo confirmó, y
+ * estado del problema al día.
  */
 export async function maybeVerify(
   r: Repos,
@@ -150,7 +151,8 @@ export async function maybeVerify(
   const kind = kindOfClaim(detail, rules);
   if (!kind) return false;
   const { verifs, counted } = await countedVerifications(r, [claim.id]);
-  if (!readyForGreen(claim.status, tally(counted), requiredFor(kind, rules))) return false;
+  const hasOpenRefutation = (await r.listRefutationsForClaims([claim.id])).some((ref) => isRefutationOpen(ref.status));
+  if (!readyForGreen(claim.status, tally(counted), requiredFor(kind, rules), hasOpenRefutation)) return false;
   const next = claimTransition(claim.status, { kind: "verified" });
   if (next.status === claim.status) return false;
   await r.updateClaim(claim.id, { status: next.status, updatedAt: now });
@@ -185,4 +187,20 @@ export async function maybeVerify(
   });
   await refreshStatus(r, lab, claim.problemId);
   return true;
+}
+
+/**
+ * Pasa a verde lo que ya lo merece (ADR-0044): claims apoyados o adoptados, sin refutación
+ * abierta, con las confirmaciones que pide la sala. Lo llama el worker, para los claims que
+ * se quedaron esperando a la adopción antes de este cambio y para los que una refutación
+ * rechazada deja libres.
+ */
+export async function verifyReadyClaims(r: Repos, lab: Pick<LabRow, "id" | "rules">, rules: LabRules, now: Date): Promise<number> {
+  const details = await r.listClaimDetails(lab.id, { statuses: ["supported", "adopted"], limit: 500 });
+  const candidates = details.filter((c) => kindOfClaim(c, rules) !== null);
+  if (!candidates.length) return 0;
+  const rows = await r.getClaimsBySeq(lab.id, candidates.map((c) => c.originSeq));
+  let n = 0;
+  for (const claim of rows) if (await maybeVerify(r, lab, rules, claim, now, null)) n++;
+  return n;
 }

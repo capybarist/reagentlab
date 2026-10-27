@@ -1205,6 +1205,10 @@ function makeRepos(db: Db): Repos {
         ),
         original_posts AS (
           SELECT id FROM ${posts} WHERE hidden_at IS NULL AND imported_from IS NULL
+        ),
+        live_claims AS (
+          SELECT c.* FROM ${claims} c JOIN original_posts p ON p.id = c.origin_post_id
+          JOIN ${labs} lb ON lb.id = c.lab_id WHERE lb.lifecycle <> 'archived' AND lb.slug <> 'demo'
         )
         SELECT
           (SELECT count(*) FROM live l JOIN recent r ON r.agent_id = l.id)::int AS agents_active_24h,
@@ -1216,11 +1220,33 @@ function makeRepos(db: Db): Repos {
           (SELECT count(*) FROM ${claims} c JOIN original_posts p ON p.id = c.origin_post_id)::int AS claims,
           (SELECT count(*) FROM ${claims} c JOIN original_posts p ON p.id = c.origin_post_id
             WHERE c.status IN ('adopted', 'verified'))::int AS claims_adopted,
-          (SELECT count(*) FROM ${verifications})::int AS verifications`);
+          (SELECT count(*) FROM ${verifications})::int AS verifications,
+          (SELECT count(*) FROM live_claims)::int AS f_published,
+          (SELECT count(*) FROM live_claims c WHERE c.support_count > 0 OR c.status IN ('adopted', 'verified'))::int AS f_supported,
+          (SELECT count(*) FROM live_claims c WHERE EXISTS (
+            SELECT 1 FROM ${verifications} v WHERE v.claim_id = c.id AND v.outcome = 'confirms'))::int AS f_confirmed_once,
+          (SELECT count(*) FROM live_claims c WHERE c.status = 'verified')::int AS f_verified,
+          (SELECT count(*) FROM live_claims c WHERE c.status = 'verified' AND c.scope = 'full')::int AS f_answered,
+          (SELECT count(*) FROM live_claims c WHERE c.status = 'adopted')::int AS f_adopted,
+          (SELECT count(*) FROM live_claims c WHERE c.status = 'refuted')::int AS f_refuted,
+          (SELECT count(*) FROM live_claims c WHERE EXISTS (
+            SELECT 1 FROM ${refutations} rf WHERE rf.claim_id = c.id AND rf.status IN ('pending', 'ruled', 'disputed')))::int AS f_under_refutation,
+          (SELECT count(*) FROM ${refutations} rf JOIN live_claims c ON c.id = rf.claim_id WHERE rf.status = 'ruled')::int AS f_rulings_pending`);
       const list = Array.isArray(res) ? res : (res as { rows: Record<string, number>[] }).rows;
       const row = list[0] ?? {};
       const n = (k: string) => Number(row[k] ?? 0);
       return {
+        funnel: {
+          published: n("f_published"),
+          supported: n("f_supported"),
+          confirmed_once: n("f_confirmed_once"),
+          verified: n("f_verified"),
+          answered: n("f_answered"),
+          adopted: n("f_adopted"),
+          refuted: n("f_refuted"),
+          under_refutation: n("f_under_refutation"),
+          rulings_pending: n("f_rulings_pending"),
+        },
         agents_active_24h: n("agents_active_24h"),
         humans_active_24h: n("humans_active_24h"),
         agents_registered: n("agents_registered"),
