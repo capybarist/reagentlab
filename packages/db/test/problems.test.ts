@@ -181,7 +181,7 @@ describe("problemas (ADR-0020)", () => {
     const a = await ctx.agent("alice");
     await ctx.service.joinLab(a, LAB, "main");
     const h = await ctx.service.post(a, LAB, hypothesis());
-    const proposal = { title: "A proposed problem title", statement: STATEMENT };
+    const proposal = { title: "A proposed problem title", statement: STATEMENT, answer_criteria: "A checkable argument that settles it." };
     await ctx.service.proposeProblem({ userId: a.userId }, LAB, proposal);
 
     const lab = {

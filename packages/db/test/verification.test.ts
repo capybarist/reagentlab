@@ -155,25 +155,55 @@ describe("verificaciones (ADR-0027)", () => {
     expect(bob.agentId).toBeTruthy();
   });
 
-  it("el worker pasa a verde lo que ya tiene confirmaciones, y un hilo open_problem no pasa de amarillo (ADR-0044, ADR-0047)", async () => {
-    const { carol, dave } = await computationClaim({}, { scope: "full" });
-    await ctx.service.reviewProblem(LAB, "main", { decision: "archive" });
-    const p = await ctx.service.proposeProblem({ userId: carol.userId }, LAB, {
+  it("un hilo open_problem no pasa de amarillo aunque un claim full se verifique, y el contexto pide el claim que responde (ADR-0047)", async () => {
+    ctx = await setup();
+    const [alice, bob, carol, dave] = await Promise.all([
+      ctx.agent("alice"),
+      ctx.agent("bob", "gpt"),
+      ctx.agent("carol", "gemini"),
+      ctx.agent("dave", "mistral"),
+    ]);
+    const p = await ctx.service.proposeProblem({ userId: alice.userId }, LAB, {
       slug: "open",
       title: "A famous open problem",
-      statement: "A problem nobody expects to close here; the thread collects the best verified partial results and nothing more.",
-      answer_criteria: "It cannot be answered here: only verified partial results.",
+      statement:
+        "A problem nobody expects to close here: the thread collects the best verified partial results, each one checked " +
+        "by other parties, and nothing more. Progress is any verified partial result.",
+      answer_criteria: "It cannot be answered here: only verified partial results count.",
       kind: "open_problem",
     });
-    expect(p.kind).toBe("open_problem");
-    // Sin refutaciones ni polls: dos confirmaciones bastan. Aquí las dos llegan sin que nadie dictamine nada.
-    await ctx.service.reviewProblem(LAB, "main", { decision: "approve" });
-    await ctx.service.joinLab(carol, LAB, "main");
+    expect(p).toMatchObject({ kind: "open_problem", untrusted_answer_criteria: "It cannot be answered here: only verified partial results count." });
+    const pack = await ctx.service.joinLab(alice, LAB, "open");
+    expect(pack.problem.kind).toBe("open_problem");
+    expect(pack.thread_answer).toEqual({
+      kind: "open_problem",
+      untrusted_answer_criteria: "It cannot be answered here: only verified partial results count.",
+      verified_claims: 0,
+      full_claims: 0,
+      closing_claim_wanted: false,
+    });
+    await ctx.service.post(alice, LAB, computation({ scope: "full" }));
+    await ctx.service.joinLab(bob, LAB, "open");
+    await ctx.service.post(bob, LAB, evidence([1]));
+    await ctx.service.joinLab(carol, LAB, "open");
     await ctx.service.submitVerification(carol, LAB, verification(1));
-    await ctx.service.joinLab(dave, LAB, "main");
+    await ctx.service.joinLab(dave, LAB, "open");
     await ctx.service.submitVerification(dave, LAB, verification(1));
+    const [claim] = await ctx.service.listClaims(LAB, "open");
+    expect(claim).toMatchObject({ status: "verified", scope: "full", next: "verified; the thread stays open by design" });
+    expect((await ctx.service.getLab(LAB)).problems.find((x) => x.slug === "open")?.status).toBe("yellow");
+  });
+
+  it("el worker pasa a verde los claims apoyados que ya tienen confirmaciones (ADR-0044)", async () => {
+    const { carol, dave } = await computationClaim();
+    await ctx.service.joinLab(carol, LAB);
+    await ctx.service.submitVerification(carol, LAB, verification(1));
+    await ctx.service.joinLab(dave, LAB);
+    await ctx.service.submitVerification(dave, LAB, verification(1));
+    // Dos confirmaciones y nadie lo refuta: verde, y el contexto de un proponente pide el claim que responde.
     expect((await ctx.service.listClaims(LAB))[0]?.status).toBe("verified");
-    expect((await ctx.service.getLab(LAB)).problems.find((x) => x.slug === "main")?.status).toBe("green");
+    const pack = await ctx.service.joinLab(carol, LAB);
+    expect(pack.thread_answer).toMatchObject({ kind: "question", verified_claims: 1, full_claims: 0, closing_claim_wanted: true });
   });
 
   it("el autor no verifica lo suyo, el proponente no verifica y un fallo resta una confirmación", async () => {

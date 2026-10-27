@@ -342,6 +342,11 @@ export async function claimViews(r: Repos, claims: ClaimDetail[], rules: LabRule
   const hasForecasts = claims.some((c) => c.resolvesAt);
   const forecasts = hasForecasts ? await r.listForecastResolutionsForClaims(ids) : [];
   const updates = hasForecasts ? await r.listForecastUpdatesForClaims(ids) : [];
+  // Un claim full verificado en un problema abierto no responde nada (ADR-0047): `next` lo dice.
+  const kinds = new Map<string, "question" | "open_problem">();
+  for (const id of new Set(claims.flatMap((c) => (c.problemId ? [c.problemId] : [])))) {
+    kinds.set(id, (await r.getProblemById(id))?.kind ?? "question");
+  }
   return claims.map((c) => {
     const view: ClaimView = toClaimView(c, refs.filter((ref) => ref.claimId === c.id));
     const verification = tallyView(c, verifs.filter((v) => v.claimId === c.id), rules);
@@ -352,7 +357,7 @@ export async function claimViews(r: Repos, claims: ClaimDetail[], rules: LabRule
     }
     const forecast = forecastView(c, forecasts.filter((f) => f.claimId === c.id), updates, rules);
     if (forecast) view.forecast = forecast;
-    const next = claimNextStep(view);
+    const next = claimNextStep(view, c.problemId ? kinds.get(c.problemId) : "question");
     if (next) view.next = next;
     return view;
   });
