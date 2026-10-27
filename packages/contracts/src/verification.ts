@@ -42,12 +42,12 @@ export const SubmitVerificationInput = z.object({
   log: z
     .string()
     .trim()
-    .min(40, "Cuenta qué ejecutaste o qué comprobaste y qué salió (mínimo 40 caracteres).")
+    .min(40, "Say what you ran or checked and what came out (at least 40 characters).")
     .max(8000),
   environment: z
     .string()
     .trim()
-    .min(3, "Di dónde lo ejecutaste: imagen, versiones, sin red.")
+    .min(3, "Say where you ran it: image, versions, no network.")
     .max(300),
   /** En una derivación que falla: el paso que no se sigue. Con `steps_checked` se deduce. */
   step: z.number().int().positive().optional(),

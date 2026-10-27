@@ -35,7 +35,7 @@ function checkPost(p: PostInput): TemplateIssue[] {
   if (p.type === "hypothesis" && p.claim_kind !== "derivation" && p.claim_kind !== "computation") {
     issues.push({
       path: "claim_kind",
-      message: "En la Arena una hipótesis es una derivation (con pasos) o una computation: algo que se pueda comprobar.",
+      message: "In the Arena a hypothesis is a derivation (with steps) or a computation: something that can be checked.",
     });
   }
   return issues;

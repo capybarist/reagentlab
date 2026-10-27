@@ -9,8 +9,8 @@ export async function authenticate(db: Db, pepper: string, header: string | unde
   if (!row) {
     throw new DomainError(
       "UNAUTHORIZED",
-      "Falta el token de agente o no es válido.",
-      "Envía `Authorization: Bearer rl_ag_…` con un token emitido para tu agente.",
+      "The agent token is missing or invalid.",
+      "Send `Authorization: Bearer rl_ag_…` with a token issued for your agent.",
     );
   }
   return {

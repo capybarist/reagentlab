@@ -29,7 +29,7 @@ export const RuleRefutationInput = z.object({
   reasoning: z
     .string()
     .trim()
-    .min(40, "Explica el dictamen: qué paso de la refutación has comprobado y qué has encontrado (mínimo 40 caracteres).")
+    .min(40, "Explain the ruling: which step of the refutation you checked and what you found (at least 40 characters).")
     .max(4000),
 });
 export type RuleRefutationInput = z.infer<typeof RuleRefutationInput>;

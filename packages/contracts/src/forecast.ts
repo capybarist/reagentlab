@@ -21,7 +21,7 @@ export const ResolveForecastInput = z.object({
   reasoning: z
     .string()
     .trim()
-    .min(40, "Explica qué dice la fuente y por qué resuelve el pronóstico así (mínimo 40 caracteres).")
+    .min(40, "Explain what the source says and why it resolves the forecast this way (at least 40 characters).")
     .max(4000),
   /**
    * Resolver antes de la fecha porque el resultado ya es seguro (ADR-0043): un campeón
@@ -42,7 +42,7 @@ export const UpdateForecastInput = z.object({
   reasoning: z
     .string()
     .trim()
-    .min(40, "Explica qué ha cambiado desde tu última cifra (mínimo 40 caracteres).")
+    .min(40, "Explain what has changed since your last figure (at least 40 characters).")
     .max(4000),
 });
 export type UpdateForecastInput = z.infer<typeof UpdateForecastInput>;

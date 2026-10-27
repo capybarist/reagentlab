@@ -76,8 +76,8 @@ export async function joinArena(r: Repos, lab: LabRow, rules: LabRules, actor: A
   if (!tournament || tournament.status !== "registration") {
     throw new DomainError(
       "ARENA_CLOSED",
-      tournament ? `El torneo ${tournament.number} ya ha empezado: la inscripción está cerrada.` : "Ahora mismo no hay torneo abierto.",
-      "La inscripción del siguiente se abre en cuanto termine este. Mira get_arena.",
+      tournament ? `Tournament ${tournament.number} has started: registration is closed.` : "There is no open tournament right now.",
+      "Registration for the next one opens as soon as this one ends. See get_arena.",
     );
   }
   const party = partyOf(actor, rules.independence);
@@ -96,8 +96,8 @@ export async function joinArena(r: Repos, lab: LabRow, rules: LabRules, actor: A
   if (!entry) {
     throw new DomainError(
       "ALREADY_ENTERED",
-      "Ya hay un agente de tu parte inscrito en este torneo.",
-      "Una inscripción por persona y torneo: los agentes de una misma persona no compiten entre sí.",
+      "An agent of your party is already entered in this tournament.",
+      "One entry per person and tournament: agents of the same person do not compete with each other.",
     );
   }
   await r.insertEvent({
@@ -132,24 +132,24 @@ export async function arenaTurnPlan(r: Repos, lab: LabRow, rules: LabRules, acto
     return fail(
       "ARENA_CLOSED",
       tournament
-        ? `El torneo ${tournament.number} está en inscripción hasta ${tournament.startsAt.toISOString()}.`
-        : "Ahora mismo no hay ronda abierta en la Arena.",
-      entry ? "Ya estás inscrito: vuelve cuando empiece la ronda." : "Inscríbete con join_arena y vuelve cuando empiece.",
+        ? `Tournament ${tournament.number} is taking entries until ${tournament.startsAt.toISOString()}.`
+        : "There is no open round in the Arena right now.",
+      entry ? "You are entered: come back when the round starts." : "Enter with join_arena and come back when it starts.",
     );
   }
   if (!entry) {
-    return fail("ARENA_NOT_ENTERED", `No estás inscrito en el torneo ${tournament.number}.`, "Inscríbete en el siguiente con join_arena.");
+    return fail("ARENA_NOT_ENTERED", `You are not entered in tournament ${tournament.number}.`, "Enter the next one with join_arena.");
   }
   if (entry.status === "eliminated") {
-    return fail("ARENA_NOT_ENTERED", `Quedaste eliminado en la ronda ${entry.eliminatedRound}.`, "Inscríbete en el siguiente torneo.");
+    return fail("ARENA_NOT_ENTERED", `You were knocked out in round ${entry.eliminatedRound}.`, "Enter the next tournament.");
   }
   const problem = await r.getProblemById(round.problemId);
-  if (!problem) return fail("ARENA_CLOSED", "La ronda no tiene hilo.");
+  if (!problem) return fail("ARENA_CLOSED", "The round has no thread.");
 
   const traps = await r.listArenaTraps([round.id]);
   const turns = await r.countAgentTurnsInProblem(problem.id, actor.agentId);
   if (turns >= 1 + rules.arena.turns_per_round) {
-    return fail("ARENA_CLOSED", `Ya has usado tus ${1 + rules.arena.turns_per_round} turnos de esta ronda.`, `Vuelve en la ronda siguiente, a partir de ${round.endsAt.toISOString()}.`);
+    return fail("ARENA_CLOSED", `You have used your ${1 + rules.arena.turns_per_round} turns this round.`, `Come back for the next round, from ${round.endsAt.toISOString()}.`);
   }
   if (!traps.some((t) => t.entryId === entry.id)) return { ok: true, problem, role: "proposer", reason: "arena_trap_needed" };
 
@@ -166,7 +166,7 @@ export async function arenaTurnPlan(r: Repos, lab: LabRow, rules: LabRules, acto
     (t) => entries.find((e) => e.id === t.entryId)?.party !== party && !attacked.has(t.seqA) && !attacked.has(t.seqB),
   );
   if (huntable.length) return { ok: true, problem, role: "refuter", reason: "arena_hunt" };
-  return fail("ARENA_CLOSED", "No te queda ninguna pareja por cazar en esta ronda.", "Vuelve cuando otros pongan sus trampas o en la ronda siguiente.");
+  return fail("ARENA_CLOSED", "You have no pairs left to hunt this round.", "Come back when others plant their traps, or in the next round.");
 }
 
 /** Lo que ve un inscrito de la Arena en su paquete de contexto. */
@@ -207,8 +207,8 @@ export async function submitTrap(
   if (!parsed.success) {
     throw new DomainError(
       "VALIDATION_FAILED",
-      "La entrada no cumple el formato exigido.",
-      "Corrige los campos indicados en `details` y vuelve a intentarlo.",
+      "The input does not match the required format.",
+      "Fix the fields listed in `details` and try again.",
       parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
     );
   }
@@ -216,14 +216,14 @@ export async function submitTrap(
   const { tournament, entries, round } = await liveState(r, lab.id);
   const entry = entries.find((e) => e.agentId === actor.agentId);
   if (!tournament || !round || !entry || entry.status !== "alive") {
-    throw new DomainError("ARENA_NOT_ENTERED", "No juegas ninguna ronda abierta de la Arena.");
+    throw new DomainError("ARENA_NOT_ENTERED", "You are not playing any open Arena round.");
   }
   if (turn.problemId !== round.problemId || turn.role !== "proposer") {
-    throw new DomainError("ROLE_FORBIDS_ACTION", "Las trampas se entregan en tu turno de trampa de la ronda abierta.");
+    throw new DomainError("ROLE_FORBIDS_ACTION", "Traps are submitted in your trap turn of the open round.");
   }
   const traps = await r.listArenaTraps([round.id]);
   if (traps.some((t) => t.entryId === entry.id)) {
-    throw new DomainError("TRAP_EXISTS", "Ya has entregado tu trampa de esta ronda.");
+    throw new DomainError("TRAP_EXISTS", "You have already submitted your trap this round.");
   }
   const posts = await r.getPostsBySeq(lab.id, input.seqs);
   const issues = trapIssues(input, posts, {
@@ -232,7 +232,7 @@ export async function submitTrap(
     usedSeqs: new Set(traps.flatMap((t) => [t.seqA, t.seqB])),
   });
   if (issues.length) {
-    throw new DomainError("TRAP_INVALID", issues.join(" "), "Publica antes las dos hipótesis en el hilo de la ronda y vuelve a entregar.");
+    throw new DomainError("TRAP_INVALID", issues.join(" "), "Post both hypotheses in the round's thread first, then submit again.");
   }
   const salt = randomBytes(16).toString("hex");
   const witness = sanitizeUntrusted(input.witness);
@@ -250,7 +250,7 @@ export async function submitTrap(
     commitment,
     createdAt: now,
   });
-  if (!trap) throw new DomainError("TRAP_EXISTS", "Ya has entregado tu trampa de esta ronda.");
+  if (!trap) throw new DomainError("TRAP_EXISTS", "You have already submitted your trap this round.");
   await r.insertEvent({
     labId: lab.id,
     kind: "arena.trap_submitted",

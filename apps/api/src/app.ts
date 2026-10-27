@@ -127,7 +127,7 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       return reply.status(status).send({ code: "BAD_REQUEST", message: (err as Error).message });
     }
     app.log.error(err);
-    return reply.status(500).send({ code: "INTERNAL", message: "Error interno del servidor." });
+    return reply.status(500).send({ code: "INTERNAL", message: "Internal server error." });
   });
 
   // Rate limit (ARCHITECTURE §8): por token de agente si lo hay, si no por IP.
@@ -179,7 +179,7 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     // ── REST: lecturas públicas (el espectáculo) ──────────────────────────
     /** Clave pública para verificar `server_sig` de los posts fuera de Reagent Lab. */
     app.get("/v1/signing-key", async (_req, reply) => {
-      if (!opts.signingKey) return reply.status(404).send({ code: "NOT_FOUND", message: "Este servidor no firma posts." });
+      if (!opts.signingKey) return reply.status(404).send({ code: "NOT_FOUND", message: "This server does not sign posts." });
       const k = opts.signingKey;
       return {
         algorithm: k.algorithm,
@@ -253,20 +253,20 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       app.put<FsReq>("/v1/blobs/fs/:sha256", async (req, reply) => {
         const { exp = "", sig = "" } = req.query;
         if (req.query.op !== "put" || !fsBlobs.verify("put", req.params.sha256, exp, sig)) {
-          return reply.status(403).send({ code: "FORBIDDEN", message: "URL de subida no válida o caducada." });
+          return reply.status(403).send({ code: "FORBIDDEN", message: "Invalid or expired upload URL." });
         }
         if (!Buffer.isBuffer(req.body) || !(await fsBlobs.store(req.params.sha256, req.body))) {
-          return reply.status(400).send({ code: "BAD_REQUEST", message: "El cuerpo no tiene ese sha256." });
+          return reply.status(400).send({ code: "BAD_REQUEST", message: "The body does not have that sha256." });
         }
         return reply.status(200).send({ ok: true });
       });
       app.get<FsReq>("/v1/blobs/fs/:sha256", async (req, reply) => {
         const { exp = "", sig = "" } = req.query;
         if (req.query.op !== "get" || !fsBlobs.verify("get", req.params.sha256, exp, sig)) {
-          return reply.status(403).send({ code: "FORBIDDEN", message: "URL de descarga no válida o caducada." });
+          return reply.status(403).send({ code: "FORBIDDEN", message: "Invalid or expired download URL." });
         }
         const body = await fsBlobs.read(req.params.sha256);
-        if (!body) return reply.status(404).send({ code: "NOT_FOUND", message: "No existe ese archivo." });
+        if (!body) return reply.status(404).send({ code: "NOT_FOUND", message: "No such file." });
         return reply.type("application/octet-stream").send(body);
       });
     }
@@ -424,7 +424,7 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       try {
         actor = await actorOf(req);
       } catch (e) {
-        const body = e instanceof DomainError ? e.toBody() : { code: "UNAUTHORIZED", message: "No autorizado." };
+        const body = e instanceof DomainError ? e.toBody() : { code: "UNAUTHORIZED", message: "Unauthorized." };
         return reply
           .status(401)
           .header(

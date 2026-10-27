@@ -8,7 +8,7 @@ export type PostType = z.infer<typeof PostType>;
 export const Body = z
   .string()
   .trim()
-  .min(40, "El cuerpo es demasiado corto para aportar algo nuevo (mínimo 40 caracteres).")
+  .min(40, "The body is too short to add anything new (at least 40 characters).")
   .max(8000);
 export const Confidence = z.number().min(0).max(1);
 /** Referencias a posts anteriores de la misma sala, por su número de secuencia. */
@@ -30,8 +30,8 @@ const Statement = z.string().trim().min(10).max(1000);
 export const CLAIM_KINDS = ["derivation", "computation", "conjecture", "literature"] as const;
 export const ClaimKind = z.enum(CLAIM_KINDS, {
   message:
-    "claim_kind es obligatorio: derivation (tu argumento, en steps), computation (tu cálculo, con evidencia de tipo computation), " +
-    "conjecture (idea nueva sin argumento aún) o literature (resultado ya publicado, con su cita).",
+    "claim_kind is required: derivation (your argument, in steps), computation (your calculation, with evidence of kind computation), " +
+    "conjecture (a new idea with no argument yet) or literature (an already published result, with its citation).",
 });
 export type ClaimKind = z.infer<typeof ClaimKind>;
 
@@ -48,12 +48,12 @@ export type ClaimScope = z.infer<typeof ClaimScope>;
 export const MAX_ARTIFACT_FILES = 10;
 /** Tamaño máximo de un archivo de artefacto (ADR-0034). */
 export const MAX_BLOB_BYTES = 50 * 1024 * 1024;
-export const Sha256Hex = z.string().regex(/^[0-9a-f]{64}$/, "sha256 en hexadecimal, 64 caracteres en minúscula.");
+export const Sha256Hex = z.string().regex(/^[0-9a-f]{64}$/, "sha256 in hexadecimal, 64 lowercase characters.");
 
 export const ArtifactFile = z.object({
   name: z
     .string()
-    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/, "Nombre de archivo sin carpetas: letras, números, punto, guion y guion bajo.")
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/, "File name without folders: letters, digits, dot, hyphen and underscore.")
     .describe("File name next to the code, e.g. 'graph.csv'."),
   sha256: Sha256Hex.describe("sha256 of the uploaded file, the same one passed to request_upload."),
   bytes: z.number().int().positive().max(MAX_BLOB_BYTES),
@@ -74,7 +74,7 @@ export const Artifact = z.object({
     .max(300)
     .describe("Image and versions needed to reproduce it, e.g. 'python:3.12, sympy==1.13'."),
   command: z.string().trim().min(1).max(500).describe("How to run it, e.g. 'python main.py'."),
-  code: z.string().min(1).max(100_000, "El código del artefacto no puede pasar de 100 000 caracteres."),
+  code: z.string().min(1).max(100_000, "Artifact code cannot exceed 100,000 characters."),
   expected_output: z.string().min(1).max(20_000),
   data_refs: z.array(z.url()).max(10).default([]),
   /**
@@ -102,8 +102,8 @@ export const HypothesisInput = z.object({
   evidence: z.array(Evidence).max(10).default([]),
   /** Solo en `computation`: el código para reproducirlo (ADR-0027). Sin él, el claim no puede llegar a verde. */
   artifact: Artifact.optional(),
-  predictions: z.array(Statement).min(1, "Una hipótesis necesita al menos una predicción comprobable."),
-  falsifiers: z.array(Statement).min(1, "Una hipótesis necesita al menos un falsador: qué la invalidaría."),
+  predictions: z.array(Statement).min(1, "A hypothesis needs at least one testable prediction."),
+  falsifiers: z.array(Statement).min(1, "A hypothesis needs at least one falsifier: what would invalidate it."),
   /**
    * Fecha en la que la realidad resuelve la hipótesis (ADR-0029): la convierte en pronóstico y
    * `confidence` pasa a ser la probabilidad de que ocurra. ISO 8601, con hora o solo fecha (UTC).
@@ -129,9 +129,9 @@ export type EvidenceStance = z.infer<typeof EvidenceStance>;
 export const EvidenceInput = z.object({
   type: z.literal("evidence"),
   body: Body,
-  refs: z.array(z.number().int().positive()).min(1, "La evidencia tiene que referirse a algún post.").max(20),
+  refs: z.array(z.number().int().positive()).min(1, "Evidence must refer to some post.").max(20),
   confidence: Confidence,
-  evidence: z.array(Evidence).min(1, "No se apoya nada sin evidencia nueva."),
+  evidence: z.array(Evidence).min(1, "Nothing is supported without new evidence."),
   stance: EvidenceStance.default("supports"),
 });
 
@@ -143,7 +143,7 @@ export const RefutationInput = z.object({
   /** Paso de la derivación que falla. Obligatorio si el objetivo es una `derivation` (ADR-0019). */
   target_step: z.number().int().positive().optional(),
   confidence: Confidence,
-  evidence: z.array(Evidence).min(1, "Una refutación tiene que aportar evidencia."),
+  evidence: z.array(Evidence).min(1, "A refutation must bring evidence."),
 });
 
 export const QuestionInput = z.object({
