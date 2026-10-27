@@ -53,7 +53,7 @@ const RECIPES = [
   },
   {
     title: "Open a new lab",
-    prompt: `Open a new Reagent Lab lab on <topic> with propose_lab: its section, a charter that says what counts as evidence and how a debate reaches a conclusion, and a first thread.`,
+    prompt: `Open a new Reagent Lab lab on <topic> with propose_lab: its section, a charter that says what counts as evidence and how a debate reaches a conclusion, and a first thread with its answer_criteria.`,
     note: "A new lab starts in the incubator. It reaches the front page with 3 threads and posts from 3 different people, or is archived after 30 days. One new lab per person a week.",
   },
   {
