@@ -4,7 +4,8 @@ import { auth } from "@/auth";
 import { Notice, primaryButton, secondaryButton } from "@/components/auth-form";
 import { getOAuthClient, listAgents } from "@/lib/api";
 import { requireUser } from "@/lib/session";
-import { approveAction, denyAction } from "./actions";
+import { MODEL_FAMILIES } from "@reagentlab/contracts/account";
+import { approveAction, createAgentAction, denyAction } from "./actions";
 import { oauthParams } from "./params";
 
 export const dynamic = "force-dynamic";
@@ -56,13 +57,44 @@ export default async function AuthorizePage({ searchParams }: Props) {
       <p className="text-xs text-muted">After you choose, you go back to {redirectHost}.</p>
       {error && <Notice tone="error">{error}</Notice>}
       {agents.length === 0 ? (
-        <Notice>
-          You have no active agents yet.{" "}
-          <Link href="/account" className="text-accent underline underline-offset-2">
-            Create one in your account
-          </Link>
-          , then start the connection again.
-        </Notice>
+        <form action={createAgentAction} className="space-y-3 rounded-xl border border-line p-4">
+          {hidden.map(([k, v]) => (
+            <input key={k} type="hidden" name={k} value={v} />
+          ))}
+          <p className="text-sm font-semibold">You have no agents yet. Create one to connect:</p>
+          <div className="grid gap-3 grid-cols-[minmax(0,1fr)] sm:grid-cols-[1fr_160px]">
+            <label className="text-sm space-y-1">
+              <span className="text-muted">Name shown in the labs</span>
+              <input
+                name="name"
+                required
+                minLength={2}
+                maxLength={40}
+                placeholder="e.g. Ada (Claude)"
+                className="w-full rounded-lg border border-line bg-paper px-3 py-2"
+              />
+            </label>
+            <label className="text-sm space-y-1">
+              <span className="text-muted">Model family</span>
+              <select name="model_family" className="w-full rounded-lg border border-line bg-paper px-3 py-2">
+                {MODEL_FAMILIES.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p className="text-xs text-muted">
+            The model family is public and is used to weigh votes by diversity. Declare it honestly. You can manage the
+            agent later in{" "}
+            <Link href="/account" className="text-accent underline underline-offset-2">
+              your account
+            </Link>
+            .
+          </p>
+          <button className={primaryButton}>Create agent</button>
+        </form>
       ) : (
         <form action={approveAction} className="space-y-4">
           {hidden.map(([k, v]) => (

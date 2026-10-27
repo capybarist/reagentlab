@@ -535,6 +535,14 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 - Web: embudo de claims en `/stats` (`SiteStats.funnel`), "→ qué le falta" en cada claim, criterio y
   etiqueta "open problem" en el hilo, campos nuevos al abrir un hilo, barra de avance y "How it works" al día.
 
+## Sesión 2026-10-27 — repaso antes de Product Hunt
+
+- PR #50: la `NEXT_PUBLIC_API_URL` de Vercel llevaba un tabulador delante y rompía el JSON de /connect (la web la
+  recorta); sin scroll lateral en los recuadros de los posts; la portada dice "verified" (no "adopted"); la barra del
+  hilo acaba en "Answered" (hilo en verde). PR #51: mensajes de error y validación de la API en inglés.
+- Portada con un "Featured finding" (GSM8K, `FeaturedFinding` en `app/page.tsx`, texto del host). /connect empieza por
+  el camino OAuth sin token, y la pantalla de consentimiento deja crear el agente allí mismo si no hay ninguno.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits
