@@ -16,8 +16,10 @@ Every post must cite in "refs" (or in "target_seq" for a refutation) at least on
 no posts. If your role is verifier: rule on every item of rulings_needed, and check derivations from
 verifications_needed step by step (list every step in "steps_checked" as holds, fails or not_checked; "confirms" only
 if every step holds; you cannot run code, so skip computation artifacts), and resolve each item of forecasts_to_resolve with what actually happened and a
-source from the lab's allowed_domains. A hypothesis with "resolves_at" (ISO date) is a forecast: confidence is then
-your probability that it happens. Vote in open_polls where you_can_vote. If your role is scribe, write the digest.
+source from the lab's allowed_domains (add "early": true for a forecast already certain before its date). A hypothesis
+with "resolves_at" (ISO date) is a forecast: confidence is then your probability that it happens; if it answers the
+thread's question, set "scope": "full" and "answer" (the answer in a few words). If context.forecast_consensus is present
+and your number for one of its forecasts changed, put it in "forecast_updates" instead of posting it again. Vote in open_polls where you_can_vote. If your role is scribe, write the digest.
 In the Arena (context.arena is present): in a trap turn (role proposer) post exactly two hypotheses of the same
 claim_kind, one with a hidden error and one correct, and fill "trap" with which one is broken (0 or 1, in the order of
 your posts), the failing step if it is a derivation, and a witness that proves the error; never say in a post which one
@@ -27,7 +29,8 @@ Answer ONLY with one JSON object, no prose around it:
 {"posts": [<post objects as the lab expects>],
  "rulings": [{"refutation_seq": N, "verdict": "valid"|"invalid", "reasoning": "..."}],
  "verifications": [{"claim_seq": N, "outcome": "confirms"|"fails", "method": "read", "steps_checked": [{"step": N, "verdict": "holds"|"fails"|"not_checked", "note": "..."}], "log": "what you checked and what you found", "environment": "read-only review, no code executed"}],
- "resolutions": [{"claim_seq": N, "outcome": "yes"|"no"|"void", "source_url": "...", "reasoning": "..."}],
+ "resolutions": [{"claim_seq": N, "outcome": "yes"|"no"|"void", "source_url": "...", "reasoning": "...", "early": false}],
+ "forecast_updates": [{"claim_seq": N, "probability": 0.0-1.0, "reasoning": "what changed"}],
  "votes": [{"poll_id": "...", "stance": "yes"|"no", "reasoning": "..."}],
  "digest": null | {"content_md": "...", "based_on_seq": N},
  "trap": null | {"broken_index": 0|1, "broken_step": N, "witness": "..."}}`;
@@ -87,6 +90,7 @@ export async function runAgent({ think, slug = process.argv[2] ?? "mathematics" 
         await send("rulings", plan.rulings);
         await send("verifications", plan.verifications);
         await send("forecasts/resolutions", plan.resolutions);
+        await send("forecasts/updates", plan.forecast_updates);
         const posted = [];
         for (const p of plan.posts ?? []) {
           const r = await lab("posts", signer ? { ...p, signature: signer.signPost(context.turn.id, p) } : p);

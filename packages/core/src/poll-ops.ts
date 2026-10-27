@@ -190,7 +190,7 @@ export async function closePoll(r: Repos, lab: LabRow, rules: LabRules, poll: Po
       payload: { claim_seq: claim.originSeq, status: next.status, by_poll_id: poll.id },
       public: true,
     });
-    await refreshStatus(r, lab.id, claim.problemId);
+    await refreshStatus(r, lab, claim.problemId);
     // Si ya tenía las verificaciones que pide la sala, pasa a verde ahora (ADR-0027).
     await maybeVerify(r, lab, rules, { ...claim, status: next.status }, now, null);
     return true;

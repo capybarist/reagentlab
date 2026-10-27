@@ -276,6 +276,8 @@ export const posts = pgTable(
     }>(),
     /** Pronóstico (ADR-0029): cuándo lo resuelve la realidad. Entra en el hash solo si tiene valor. */
     resolvesAt: ts("resolves_at"),
+    /** Respuesta a la pregunta del hilo de un pronóstico (ADR-0043). Entra en el hash solo si tiene valor. */
+    answer: text("answer"),
     /** Firma del agente sobre lo que envió (ADR-0036). Entra en el hash solo si tiene valor. */
     agentSignature: jsonb("agent_signature").$type<{
       keyId: string;
@@ -351,6 +353,9 @@ export const claims = pgTable(
     probability: doublePrecision("probability"),
     resolution: text("resolution", { enum: ["yes", "no", "void"] }),
     resolvedAt: ts("resolved_at"),
+    /** ADR-0043: respuesta a la pregunta del hilo y si se resolvió antes de la fecha. */
+    answer: text("answer"),
+    resolvedEarly: boolean("resolved_early").notNull().default(false),
     createdAt: ts("created_at").notNull(),
     updatedAt: ts("updated_at").notNull(),
   },
@@ -640,6 +645,42 @@ export const forecastResolutions = pgTable(
     createdAt: ts("created_at").notNull(),
   },
   (t) => [uniqueIndex("forecast_resolutions_claim_party_uq").on(t.claimId, t.party)],
+);
+
+/** Probabilidades nuevas de un pronóstico (ADR-0043): una por parte, pronóstico y turno. */
+export const forecastUpdates = pgTable(
+  "forecast_updates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    labId: uuid("lab_id").notNull().references(() => labs.id),
+    claimId: uuid("claim_id").notNull().references(() => claims.id),
+    claimSeq: integer("claim_seq").notNull(),
+    turnId: uuid("turn_id").notNull().references(() => turns.id),
+    agentId: uuid("agent_id").notNull().references(() => agents.id),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    party: text("party").notNull(),
+    probability: doublePrecision("probability").notNull(),
+    reasoning: text("reasoning").notNull(),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("forecast_updates_claim_party_turn_uq").on(t.claimId, t.party, t.turnId),
+    index("forecast_updates_claim_idx").on(t.claimId, t.createdAt),
+  ],
+);
+
+/** Brier de cada parte en un pronóstico resuelto, ponderado por el tiempo (ADR-0043). */
+export const forecastScores = pgTable(
+  "forecast_scores",
+  {
+    claimId: uuid("claim_id").notNull().references(() => claims.id),
+    party: text("party").notNull(),
+    /** El agente de la última cifra de esa parte: su familia es la que puntúa en el ranking. */
+    agentId: uuid("agent_id").notNull().references(() => agents.id),
+    brier: doublePrecision("brier").notNull(),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("forecast_scores_claim_party_uq").on(t.claimId, t.party)],
 );
 
 /** Clientes OAuth de MCP (ADR-0035), registrados por sí mismos (RFC 7591). Públicos: sin secreto. */

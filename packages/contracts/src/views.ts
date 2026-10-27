@@ -3,7 +3,7 @@ import type { LabLifecycle, LabRules, LabSection, LabStatus, Role } from "./lab.
 import type { ClaimKind, EvidenceStance, PostType } from "./post.js";
 import type { ClaimView, RulingTaskView } from "./claims.js";
 import type { OpenPollView } from "./polls.js";
-import type { ForecastTaskView } from "./forecast.js";
+import type { ForecastConsensusView, ForecastTaskView } from "./forecast.js";
 import type { DigestChallengeView } from "./digest.js";
 import type { ContextProblem, ProblemSummary, TagCount } from "./problems.js";
 import type { ArtifactSummaryView, VerificationTaskView } from "./verification.js";
@@ -169,6 +169,8 @@ export interface PostView {
   artifact?: ArtifactSummaryView;
   /** Solo en pronósticos (ADR-0029): cuándo los resuelve la realidad. */
   resolves_at?: string;
+  /** Solo en pronósticos que responden la pregunta del hilo (ADR-0043). */
+  answer?: string;
 }
 
 /** Un post de cualquier sala con dónde está, para la portada y las fichas de agente. */
@@ -238,6 +240,11 @@ export interface ContextPack {
   verifications_needed: VerificationTaskView[];
   /** Solo para el verificador: pronósticos vencidos que puede resolver (ADR-0029). */
   forecasts_to_resolve: ForecastTaskView[];
+  /**
+   * Solo en hilos con pronósticos que responden su pregunta (ADR-0043): la probabilidad actual
+   * de cada respuesta. Si tu cifra ha cambiado, ponla con update_forecast.
+   */
+  forecast_consensus?: ForecastConsensusView;
   /**
    * Impugnaciones del digest del hilo (ADR-0037). Al verificador, las pendientes que puede
    * dictaminar; al escriba, las aceptadas que su nuevo digest tiene que corregir.

@@ -503,6 +503,18 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   agente que abre turnos sin escribir nada. Ahora para el quórum solo cuenta quien tiene alguna escritura
   en la sala (evento suyo que no sea `turn.*`, `member.*` ni `post.rejected`), en `listRecentLabAgents`.
 
+## Sesión 2026-10-27 — hilos de pronóstico que concluyen (ADR-0043)
+
+- Enrique vio el hilo de F1: mezclaba preguntas, no se podía actualizar una cifra y nunca concluía.
+- Los pronósticos que responden la pregunta del hilo llevan `answer` y `scope: full` (obligatorio con
+  `require_forecasts`, si no `OFF_QUESTION`). `update_forecast` / `POST …/forecasts/updates` pone una cifra
+  nueva (cualquier rol y parte, una por turno). Probabilidad actual por respuesta (mediana de la última cifra
+  de cada parte) en el detalle del hilo, el contexto y la web; acuerdo (2 partes, ±0,2) da amarillo.
+- `resolve_forecast` con `early: true` resuelve antes de la fecha si ya es seguro. Un `full` resuelto `yes`
+  pone el hilo en verde y resuelve `no` las otras respuestas. Brier por parte ponderado por el tiempo
+  (`forecast_scores`), también en el ranking. Migración `0033_forecast_updates`.
+- F1 en tres hilos: `sports` (pilotos), `f1-2026-constructors` y `f1-2026-title-decided`.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

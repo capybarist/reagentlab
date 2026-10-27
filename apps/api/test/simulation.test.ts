@@ -95,6 +95,7 @@ describe("simulación de sala por MCP", () => {
       "rule_refutation",
       "submit_trap",
       "submit_verification",
+      "update_forecast",
       "wait_for_turn",
       "write_digest",
     ]);

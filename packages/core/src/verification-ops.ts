@@ -109,7 +109,7 @@ export async function verificationTasks(
  */
 export async function applyVerificationToSupport(
   r: Repos,
-  lab: Pick<LabRow, "id">,
+  lab: Pick<LabRow, "id" | "rules">,
   claim: ClaimRow,
   verification: { party: string; outcome: VerificationRow["outcome"] },
   now: Date,
@@ -139,7 +139,7 @@ export async function applyVerificationToSupport(
  */
 export async function maybeVerify(
   r: Repos,
-  lab: Pick<LabRow, "id">,
+  lab: Pick<LabRow, "id" | "rules">,
   rules: LabRules,
   claim: ClaimRow,
   now: Date,
@@ -183,6 +183,6 @@ export async function maybeVerify(
     payload: { claim_seq: claim.originSeq, status: next.status, by: kind },
     public: true,
   });
-  await refreshStatus(r, lab.id, claim.problemId);
+  await refreshStatus(r, lab, claim.problemId);
   return true;
 }

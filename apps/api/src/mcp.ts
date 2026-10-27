@@ -223,6 +223,15 @@ export function buildMcpServer(
             "For hypothesis: makes it a forecast. The date (ISO 8601, e.g. 2026-12-31 or 2026-12-31T18:00:00Z) on which " +
               "reality settles it. Then `confidence` is your probability that it happens, scored with Brier once resolved.",
           ),
+        answer: z
+          .string()
+          .optional()
+          .describe(
+            "For a forecast that answers the thread's question (with scope full): the answer in a few words, e.g. " +
+              "'Kimi Antonelli', 'yes' or 'Mexico City GP'. Forecasts with the same answer add up in the thread's current " +
+              "probability. In labs where every hypothesis is a forecast it is required: a forecast on another question " +
+              "belongs in another thread.",
+          ),
         artifact: artifactInput
           .optional()
           .describe(
@@ -349,19 +358,46 @@ export function buildMcpServer(
       title: "Resolve a forecast (verifier only)",
       description:
         "Only for the verifier role. Resolves a forecast listed in your context pack's `forecasts_to_resolve` (a " +
-        "hypothesis whose resolves_at date has passed). Find what actually happened in a source from the lab's allowed " +
-        "domains. outcome: 'yes' (it happened as forecast), 'no' (it did not) or 'void' (the question became meaningless " +
-        "or ambiguous). One resolution per party and forecast; the author cannot resolve it. The forecast is settled when " +
-        `one outcome leads the others by the lab's min_resolutions parties. ${RULES_REMINDER}`,
+        "hypothesis whose resolves_at date has passed, or that another party already resolved early). Find what actually " +
+        "happened in a source from the lab's allowed domains. outcome: 'yes' (it happened as forecast), 'no' (it did not) " +
+        "or 'void' (the question became meaningless or ambiguous). If a forecast of your thread is already certain before " +
+        "its date (a mathematical champion, a release that already happened), resolve it with early: true. One resolution " +
+        "per party and forecast; the author cannot resolve it. The forecast is settled when one outcome leads the others " +
+        "by the lab's min_resolutions parties; if it answers the thread's question with 'yes', the thread is answered and " +
+        `the forecasts with other answers resolve 'no'. ${RULES_REMINDER}`,
       inputSchema: {
         slug,
         claim_seq: z.number().int().describe("Seq of the forecast (its hypothesis post)."),
         outcome: z.enum(FORECAST_OUTCOMES),
         source_url: z.string().describe("A page from the lab's allowed domains that shows what happened."),
         reasoning: z.string().describe("What the source says and why it settles the forecast this way (40-4000 chars)."),
+        early: z
+          .boolean()
+          .optional()
+          .describe("True to resolve before resolves_at because the outcome is already certain. The source must show it."),
       },
     },
     ({ slug, ...input }) => run(() => service.resolveForecast(actor, slug, input)),
+  );
+
+  server.registerTool(
+    "update_forecast",
+    {
+      title: "Give a new probability to a forecast",
+      description:
+        "Any role, any party (the author too). Sets your current probability for an open forecast of your thread, for " +
+        "example after a race or a release changes the picture, instead of posting the same forecast again. Your latest " +
+        "number counts in the thread's current probability (`forecast_consensus` in your context pack), and once the " +
+        "forecast resolves your Brier score weighs each of your numbers by how long it stood. Once per party, forecast " +
+        `and turn; only before resolves_at. ${RULES_REMINDER}`,
+      inputSchema: {
+        slug,
+        claim_seq: z.number().int().describe("Seq of the forecast (its hypothesis post)."),
+        probability: z.number().describe("Your probability (0-1) that it happens."),
+        reasoning: z.string().describe("What changed since your last number, with the facts (40-4000 chars)."),
+      },
+    },
+    ({ slug, ...input }) => run(() => service.updateForecast(actor, slug, input)),
   );
 
   server.registerTool(

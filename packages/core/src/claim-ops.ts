@@ -6,7 +6,7 @@ import { REPUTATION_POINTS } from "./reputation.js";
 import type { Actor, ClaimDetail, ClaimRow, LabRow, PostRow, RefutationRow, Repos, TurnRow } from "./ports.js";
 import { templateFor } from "./templates/index.js";
 import { tally } from "./verification.js";
-import { forecastView } from "./forecast-ops.js";
+import { forecastStatusInputs, forecastView } from "./forecast-ops.js";
 import { countedVerifications, tallyView } from "./verification-ops.js";
 import { toPostView } from "./views.js";
 
@@ -47,12 +47,16 @@ export async function applyPostToClaims(
       probability: post.resolvesAt ? post.confidence : null,
       resolution: null,
       resolvedAt: null,
+      answer: post.answer ?? null,
+      resolvedEarly: false,
       createdAt: now,
       updatedAt: now,
     });
     await r.insertEvent(
       claimEvent(lab, actor, "claim.created", { claim_seq: post.seq, status: "open", kind: post.claimKind ?? "conjecture" }),
     );
+    // Una cifra más sobre una respuesta del hilo puede dar acuerdo (ADR-0043).
+    if (post.answer) await refreshStatus(r, lab, post.problemId);
     return;
   }
 
@@ -125,7 +129,7 @@ export function refutationState(ref: RefutationRow, claim: Pick<ClaimRow, "autho
 /** Dictamen firme: cierra la refutación y mueve el claim. */
 export async function settleRefutation(
   r: Repos,
-  lab: Pick<LabRow, "id">,
+  lab: Pick<LabRow, "id" | "rules">,
   ref: RefutationRow,
   status: "accepted" | "rejected",
   verdict: Verdict,
@@ -170,7 +174,7 @@ export async function settleRefutation(
       payload: { claim_seq: claim.originSeq, status: next.status, by_refutation_seq: ref.postSeq },
       public: true,
     });
-    await refreshStatus(r, lab.id, claim.problemId);
+    await refreshStatus(r, lab, claim.problemId);
   }
 }
 
@@ -180,10 +184,15 @@ const STATUS_RANK = { red: 0, yellow: 1, green: 2 } as const;
  * Recalcula el estado 🔴🟡🟢 de un problema a partir de sus claims y, con él, el de la
  * sala: el mejor estado entre sus problemas activos (ADR-0020). Emite eventos si cambian.
  */
-export async function refreshStatus(r: Repos, labId: string, problemId: string | null): Promise<void> {
+export async function refreshStatus(r: Repos, lab: Pick<LabRow, "id" | "rules">, problemId: string | null): Promise<void> {
+  const labId = lab.id;
   if (problemId) {
     const problem = await r.getProblemById(problemId);
-    const next = labStatusFor(await r.claimStatusCounts(problemId), await r.countVerifiedFullClaims(problemId));
+    const next = labStatusFor(
+      await r.claimStatusCounts(problemId),
+      await r.countVerifiedFullClaims(problemId),
+      await forecastStatusInputs(r, labId, problemId, parseLabRules(lab.rules)),
+    );
     if (problem && problem.status !== next) {
       await r.updateProblem(problemId, { status: next });
       await r.insertEvent({
@@ -285,7 +294,9 @@ export async function claimViews(r: Repos, claims: ClaimDetail[], rules: LabRule
   const ids = claims.map((c) => c.id);
   const refs = await r.listRefutationsForClaims(ids);
   const { counted: verifs, host } = await countedVerifications(r, ids);
-  const forecasts = claims.some((c) => c.resolvesAt) ? await r.listForecastResolutionsForClaims(ids) : [];
+  const hasForecasts = claims.some((c) => c.resolvesAt);
+  const forecasts = hasForecasts ? await r.listForecastResolutionsForClaims(ids) : [];
+  const updates = hasForecasts ? await r.listForecastUpdatesForClaims(ids) : [];
   return claims.map((c) => {
     const view: ClaimView = toClaimView(c, refs.filter((ref) => ref.claimId === c.id));
     const verification = tallyView(c, verifs.filter((v) => v.claimId === c.id), rules);
@@ -294,7 +305,7 @@ export async function claimViews(r: Repos, claims: ClaimDetail[], rules: LabRule
       if (run) verification.host = run.outcome;
       view.verification = verification;
     }
-    const forecast = forecastView(c, forecasts.filter((f) => f.claimId === c.id), rules);
+    const forecast = forecastView(c, forecasts.filter((f) => f.claimId === c.id), updates, rules);
     if (forecast) view.forecast = forecast;
     return view;
   });

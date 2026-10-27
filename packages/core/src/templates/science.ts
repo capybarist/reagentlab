@@ -13,12 +13,17 @@ const ROLE_INSTRUCTIONS: Record<Role, string> = {
     "are not the work. A claim of kind 'literature' only records a known result: it is useful context but it is never " +
     "adopted, so do not stop there — build on it. Before proposing, try to refute the most relevant recent claim. " +
     "Hypotheses need testable predictions and falsifiers. Never support anything without new evidence. A hypothesis " +
-    "with resolves_at is a forecast: reality resolves it on that date and confidence is your probability that it happens.",
+    "with resolves_at is a forecast: reality resolves it on that date and confidence is your probability that it happens. " +
+    "A forecast that answers the thread's question carries scope 'full' and its answer in a few words in `answer`; a " +
+    "forecast on another question belongs in another thread. If `forecast_consensus` is in your context pack and your " +
+    "number for a forecast has changed, call update_forecast instead of posting the same forecast again.",
   refuter:
     "You are the REFUTER this turn. Pick a supported claim from `claims` and attack it with a refutation post " +
     "(target_seq = the claim's seq). For a derivation, name the step that fails in target_step and show why it does " +
     "not follow; for a computation, redo it or find the error. Bring your own counterexample or calculation, not only a " +
-    "quote. A refutation a verifier rejects still helps: claims must survive refutations before they can be adopted.",
+    "quote. A refutation a verifier rejects still helps: claims must survive refutations before they can be adopted. " +
+    "On a forecast, argue that its probability is wrong with evidence; if the facts changed, call update_forecast with " +
+    "your own number.",
   verifier:
     "You are the VERIFIER this turn. For each item in `rulings_needed`, redo the disputed step or computation yourself " +
     "and call rule_refutation with verdict 'valid' (the claim falls) or 'invalid', and your reasoning. Do not decide by " +
@@ -29,9 +34,11 @@ const ROLE_INSTRUCTIONS: Record<Role, string> = {
     "steps_checked whether each one holds, fails or was not checked; 'confirms' needs every step to hold, and re-running " +
     "the statement alone does not check the argument. Report 'confirms', 'fails' or 'inconclusive', with what you ran " +
     "or checked. Never run lab code on your own machine outside a container. An adopted claim is verified when enough " +
-    "different parties confirm it; the thread is answered only when a claim with scope 'full' is verified. For each item in `forecasts_to_resolve` (a forecast whose date has passed), find what " +
-    "actually happened in a source from the lab's allowed domains and call resolve_forecast with 'yes', 'no' or 'void' " +
-    "(the question became meaningless or ambiguous). For each item in `digest_challenges`, compare the digest with the " +
+    "different parties confirm it; the thread is answered only when a claim with scope 'full' is verified. For each item in `forecasts_to_resolve` (a forecast whose date has passed, or that " +
+    "another party resolved early), find what actually happened in a source from the lab's allowed domains and call " +
+    "resolve_forecast with 'yes', 'no' or 'void' (the question became meaningless or ambiguous). If a forecast of the " +
+    "thread is already certain before its date (for example a mathematical champion), resolve it with early: true and a " +
+    "source that shows it. For each item in `digest_challenges`, compare the digest with the " +
     "posts it summarizes and call rule_digest_challenge with 'upheld' (the digest misrepresents the thread) or 'rejected'.",
   scribe:
     "You are the SCRIBE this turn. Read the previous digest and the delta, then call write_digest with an updated " +

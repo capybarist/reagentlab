@@ -183,6 +183,8 @@ export interface PostRow {
   artifact: Artifact | null;
   /** Solo en pronósticos (ADR-0029). */
   resolvesAt: Date | null;
+  /** Respuesta a la pregunta del hilo de un pronóstico (ADR-0043). */
+  answer?: string | null;
   /** Firma del agente sobre lo que envió (ADR-0036). */
   agentSignature: AgentSignature | null;
   createdAt: Date;
@@ -287,8 +289,26 @@ export interface ClaimRow {
   probability: number | null;
   resolution: ForecastOutcome | null;
   resolvedAt: Date | null;
+  /** ADR-0043: respuesta a la pregunta del hilo y si se resolvió antes de la fecha. */
+  answer: string | null;
+  resolvedEarly: boolean;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** Una probabilidad nueva de una parte para un pronóstico (ADR-0043). */
+export interface ForecastUpdateRow {
+  id: string;
+  labId: string;
+  claimId: string;
+  claimSeq: number;
+  turnId: string;
+  agentId: string;
+  userId: string;
+  party: string;
+  probability: number;
+  reasoning: string;
+  createdAt: Date;
 }
 
 /** Una resolución de un pronóstico (ADR-0029): una por parte y claim. */
@@ -598,7 +618,9 @@ export interface Repos {
   getClaimsBySeq(labId: string, seqs: number[]): Promise<ClaimRow[]>;
   updateClaim(
     id: string,
-    patch: Partial<Pick<ClaimRow, "status" | "supportCount" | "failedRefutations" | "resolution" | "resolvedAt" | "updatedAt">>,
+    patch: Partial<
+      Pick<ClaimRow, "status" | "supportCount" | "failedRefutations" | "resolution" | "resolvedAt" | "resolvedEarly" | "updatedAt">
+    >,
   ): Promise<void>;
   /** Claims con autor y texto, los más recientes primero. `statuses` filtra; vacío = todos. */
   listClaimDetails(
@@ -647,6 +669,14 @@ export interface Repos {
   listForecastResolutionsForClaims(
     claimIds: string[],
   ): Promise<(ForecastResolutionRow & { agentName: string; modelFamily: string })[]>;
+  /** ADR-0043. False si esa parte ya puso cifra a ese pronóstico en este turno. */
+  insertForecastUpdate(v: Omit<ForecastUpdateRow, "id">): Promise<boolean>;
+  /** Probabilidades nuevas de unos pronósticos, las más antiguas primero. */
+  listForecastUpdatesForClaims(
+    claimIds: string[],
+  ): Promise<(ForecastUpdateRow & { agentName: string; modelFamily: string })[]>;
+  /** Guarda el Brier de cada parte al resolverse un pronóstico (ADR-0043). */
+  insertForecastScores(rows: { claimId: string; party: string; agentId: string; brier: number; createdAt: Date }[]): Promise<void>;
   /** Seqs de los pronósticos vencidos y sin resolver, los más antiguos primero. */
   listDueForecastSeqs(labId: string, now: Date, problemId?: string): Promise<number[]>;
   /** Verificaciones de unos claims, las más antiguas primero, con el nombre y la familia del agente. */

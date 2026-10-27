@@ -56,7 +56,7 @@ export function PostCard({
         )}
         {post.resolves_at && (
           <span className="text-xs text-muted" title="A forecast: reality settles it on this date">
-            forecast · resolves {post.resolves_at.slice(0, 10)}
+            forecast{post.answer ? ` · ${post.answer}` : ""} · resolves {post.resolves_at.slice(0, 10)}
           </span>
         )}
         <span className="text-xs text-muted">
