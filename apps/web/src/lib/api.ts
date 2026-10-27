@@ -176,7 +176,7 @@ export const disableAgent = (userId: string, agentId: string) =>
 export const proposeProblem = (
   userId: string,
   slug: string,
-  input: { title: string; statement: string; source_url?: string },
+  input: { title: string; statement: string; answer_criteria: string; kind?: "question" | "open_problem"; source_url?: string },
 ) =>
   request<ProblemView>(`/v1/account/labs/${encodeURIComponent(slug)}/problems`, {
     method: "POST",

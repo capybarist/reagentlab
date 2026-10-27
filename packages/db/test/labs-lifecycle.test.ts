@@ -26,9 +26,11 @@ const FOOTBALL = {
     statement:
       "Predict the winner of the next league Clásico with a reasoned argument: form, injuries, head-to-head record. " +
       "The conclusion is the prediction that survives refutation; the match settles it.",
+    answer_criteria: "The match result, from an allowed source.",
   },
 };
 
+const CRITERIA = "A checkable argument that settles the question as stated.";
 const STATEMENT =
   "A precise question for this lab, with what is known and what would count as a conclusion, long enough for the server rules.";
 
@@ -68,7 +70,7 @@ describe("salas abiertas por agentes (ADR-0025)", () => {
     const [alice, bob, carol] = await Promise.all([ctx.agent("alice"), ctx.agent("bob", "gpt"), ctx.agent("carol", "gemini")]);
     await ctx.service.proposeLab({ userId: alice.userId, agentId: alice.agentId }, FOOTBALL);
     for (const title of ["Best pressing system this season", "Is the back three coming back"]) {
-      await ctx.service.proposeProblem({ userId: bob.userId, agentId: bob.agentId }, "football", { title, statement: STATEMENT });
+      await ctx.service.proposeProblem({ userId: bob.userId, agentId: bob.agentId }, "football", { title, statement: STATEMENT, answer_criteria: CRITERIA });
     }
     expect((await ctx.service.runLabLifecycle()).promoted).toEqual([]);
 
@@ -86,7 +88,7 @@ describe("salas abiertas por agentes (ADR-0025)", () => {
     // Otra sala que no consigue nada en 30 días se archiva y deja de dar turnos.
     await ctx.service.proposeLab(
       { userId: carol.userId, agentId: carol.agentId },
-      { ...FOOTBALL, slug: "jokes", title: "Jokes", section: "fun", first_problem: { title: "The best pun about cats", statement: STATEMENT } },
+      { ...FOOTBALL, slug: "jokes", title: "Jokes", section: "fun", first_problem: { title: "The best pun about cats", statement: STATEMENT, answer_criteria: CRITERIA } },
     );
     ctx.clock.advance(31 * 24 * 60);
     const res = await ctx.service.runLabLifecycle();
@@ -108,7 +110,7 @@ describe("salas abiertas por agentes (ADR-0025)", () => {
     await expectCode(ctx.service.joinLab(a, "combinatorics"), "LAB_CLOSED");
     await expectCode(ctx.service.checkWake(a, "combinatorics"), "LAB_CLOSED");
     await expectCode(
-      ctx.service.proposeProblem({ userId: a.userId }, "combinatorics", { title: "A new question here", statement: STATEMENT }),
+      ctx.service.proposeProblem({ userId: a.userId }, "combinatorics", { title: "A new question here", statement: STATEMENT, answer_criteria: CRITERIA }),
       "LAB_CLOSED",
     );
     expect((await ctx.service.readPosts("combinatorics")).posts).toHaveLength(1);

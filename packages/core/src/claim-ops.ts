@@ -1,5 +1,14 @@
 import { type ClaimView, type LabRules, type RulingTaskView, type Verdict, parseLabRules } from "@reagentlab/contracts";
-import { claimTransition, isRefutationOpen, rulingBlock, settleBySilence, supportStatus, type RefutationState } from "./claims.js";
+import {
+  claimTransition,
+  finalStatus,
+  isRefutationOpen,
+  rulingBlock,
+  rulingTimedOut,
+  settleBySilence,
+  supportStatus,
+  type RefutationState,
+} from "./claims.js";
 import { partyOf } from "./party.js";
 import { labStatusFor } from "./polls.js";
 import { REPUTATION_POINTS } from "./reputation.js";
@@ -7,7 +16,8 @@ import type { Actor, ClaimDetail, ClaimRow, LabRow, PostRow, RefutationRow, Repo
 import { templateFor } from "./templates/index.js";
 import { tally } from "./verification.js";
 import { forecastStatusInputs, forecastView } from "./forecast-ops.js";
-import { countedVerifications, tallyView } from "./verification-ops.js";
+import { countedVerifications, maybeVerify, tallyView } from "./verification-ops.js";
+import { claimNextStep } from "./claim-next.js";
 import { toPostView } from "./views.js";
 
 /**
@@ -135,9 +145,22 @@ export async function settleRefutation(
   verdict: Verdict,
   now: Date,
   actorAgentId: string | null,
-  how: "confirmed" | "silence" | "poll",
+  how: "confirmed" | "silence" | "timeout" | "poll",
 ): Promise<void> {
   await r.updateRefutation(ref.id, { status, settledAt: now });
+  // El dictamen provisional que queda firme se paga (ADR-0045): dictaminar bien tiene que valer algo.
+  if (ref.provisionalUserId && ref.provisionalVerdict && finalStatus(ref.provisionalVerdict) === status) {
+    await r.addReputation({
+      userId: ref.provisionalUserId,
+      agentId: ref.provisionalAgentId,
+      labId: lab.id,
+      kind: "ruling_upheld",
+      delta: REPUTATION_POINTS.ruling_upheld,
+      refType: "refutation",
+      refId: ref.id,
+      createdAt: now,
+    });
+  }
   if (status === "accepted") {
     await r.addReputation({
       userId: ref.refuterUserId,
@@ -161,11 +184,8 @@ export async function settleRefutation(
   const [claim] = await r.getClaimsBySeq(lab.id, [ref.claimSeq]);
   if (!claim) return;
   const next = claimTransition(claim.status, { kind: status === "accepted" ? "refutation_accepted" : "refutation_rejected" });
-  await r.updateClaim(claim.id, {
-    status: next.status,
-    failedRefutations: claim.failedRefutations + next.failedDelta,
-    updatedAt: now,
-  });
+  const failedRefutations = claim.failedRefutations + next.failedDelta;
+  await r.updateClaim(claim.id, { status: next.status, failedRefutations, updatedAt: now });
   if (next.status !== claim.status) {
     await r.insertEvent({
       labId: lab.id,
@@ -176,6 +196,30 @@ export async function settleRefutation(
     });
     await refreshStatus(r, lab, claim.problemId);
   }
+  // Rechazada la refutación, el claim puede tener ya las confirmaciones que pide el verde (ADR-0044).
+  if (status === "rejected") {
+    await maybeVerify(r, lab, parseLabRules(lab.rules), { ...claim, status: next.status, failedRefutations }, now, actorAgentId);
+  }
+}
+
+/**
+ * Dictámenes provisionales que han vencido sin contradicción (ADR-0045): quedan firmes. Lo
+ * llama el worker; con tres partes en la sala no hay un cuarto verificador que los cierre.
+ */
+export async function settleTimedOutRulings(r: Repos, lab: Pick<LabRow, "id" | "rules">, rules: LabRules, now: Date): Promise<number> {
+  const due = (await r.listRefutations(lab.id, ["ruled"])).filter((ref) => rulingTimedOut(ref, rules.ruling_settle_hours, now));
+  if (!due.length) return 0;
+  const claims = await claimsById(r, lab.id, due);
+  let n = 0;
+  for (const ref of due) {
+    const claim = claims.get(ref.claimId);
+    if (!claim || claim.status === "refuted") continue;
+    const settled = settleBySilence(refutationState(ref, claim));
+    if (!settled) continue;
+    await settleRefutation(r, lab, ref, settled.status, settled.verdict, now, null, "timeout");
+    n++;
+  }
+  return n;
 }
 
 const STATUS_RANK = { red: 0, yellow: 1, green: 2 } as const;
@@ -192,6 +236,7 @@ export async function refreshStatus(r: Repos, lab: Pick<LabRow, "id" | "rules">,
       await r.claimStatusCounts(problemId),
       await r.countVerifiedFullClaims(problemId),
       await forecastStatusInputs(r, labId, problemId, parseLabRules(lab.rules)),
+      problem?.kind ?? "question",
     );
     if (problem && problem.status !== next) {
       await r.updateProblem(problemId, { status: next });
@@ -297,6 +342,11 @@ export async function claimViews(r: Repos, claims: ClaimDetail[], rules: LabRule
   const hasForecasts = claims.some((c) => c.resolvesAt);
   const forecasts = hasForecasts ? await r.listForecastResolutionsForClaims(ids) : [];
   const updates = hasForecasts ? await r.listForecastUpdatesForClaims(ids) : [];
+  // Un claim full verificado en un problema abierto no responde nada (ADR-0047): `next` lo dice.
+  const kinds = new Map<string, "question" | "open_problem">();
+  for (const id of new Set(claims.flatMap((c) => (c.problemId ? [c.problemId] : [])))) {
+    kinds.set(id, (await r.getProblemById(id))?.kind ?? "question");
+  }
   return claims.map((c) => {
     const view: ClaimView = toClaimView(c, refs.filter((ref) => ref.claimId === c.id));
     const verification = tallyView(c, verifs.filter((v) => v.claimId === c.id), rules);
@@ -307,6 +357,8 @@ export async function claimViews(r: Repos, claims: ClaimDetail[], rules: LabRule
     }
     const forecast = forecastView(c, forecasts.filter((f) => f.claimId === c.id), updates, rules);
     if (forecast) view.forecast = forecast;
+    const next = claimNextStep(view, c.problemId ? kinds.get(c.problemId) : "question");
+    if (next) view.next = next;
     return view;
   });
 }

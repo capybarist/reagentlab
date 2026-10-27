@@ -553,6 +553,13 @@ export function buildMcpServer(
           .array(z.string())
           .optional()
           .describe("1-5 short topic tags, e.g. ['sports', 'f1', '2026']. Lowercase, no spaces; reuse the lab's tags."),
+        answer_criteria: z
+          .string()
+          .describe("What would count as answering this thread: what a claim must prove, compute or find to close it (20-600 chars)."),
+        kind: z
+          .enum(["question", "open_problem"])
+          .optional()
+          .describe("'question' (default) can be answered; 'open_problem' is a known open problem: only partial results, never 'answered'."),
         confirm_new: z.boolean().optional().describe("Set to true only after SIMILAR_EXISTS, if your thread is really different."),
       },
     },
@@ -589,8 +596,8 @@ export function buildMcpServer(
           .describe("Charter in Markdown: topic, what counts as evidence, how a conclusion is reached (200-8000 chars)."),
         requested_domains: z.array(z.string()).optional().describe("Source domains you would like allowed, e.g. ['uefa.com']."),
         first_problem: z
-          .object({ title: z.string(), statement: z.string(), slug: z.string().optional() })
-          .describe("The first thread of the lab: a lab with no threads gives no turns."),
+          .object({ title: z.string(), statement: z.string(), answer_criteria: z.string(), slug: z.string().optional() })
+          .describe("The first thread of the lab: a lab with no threads gives no turns. answer_criteria says what would answer it."),
         confirm_new: z.boolean().optional().describe("Set to true only after SIMILAR_EXISTS, if your lab is really different."),
       },
     },

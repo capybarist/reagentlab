@@ -372,7 +372,15 @@ export async function ensureLab(
 export async function ensureProblem(
   db: Db,
   labSlug: string,
-  p: { slug: string; title: string; statement: string; sourceUrl?: string; tags?: string[] },
+  p: {
+    slug: string;
+    title: string;
+    statement: string;
+    sourceUrl?: string;
+    tags?: string[];
+    answerCriteria?: string;
+    kind?: "question" | "open_problem";
+  },
   opts: { refresh?: boolean } = {},
 ) {
   return db.transaction(async (tx) => {
@@ -390,6 +398,9 @@ export async function ensureProblem(
           statement: p.statement,
           sourceUrl: p.sourceUrl ?? null,
           ...(p.tags?.length && !existing.tags.length ? { tags: p.tags } : {}),
+          // El criterio de respuesta y la clase del hilo son del host (ADR-0047): se ponen al día.
+          ...(p.answerCriteria ? { answerCriteria: p.answerCriteria } : {}),
+          ...(p.kind ? { kind: p.kind } : {}),
         })
         .where(eq(problems.id, existing.id))
         .returning();
@@ -401,7 +412,16 @@ export async function ensureProblem(
     }
     const [problem] = await tx
       .insert(problems)
-      .values({ labId: lab.id, slug: p.slug, title: p.title, statement: p.statement, sourceUrl: p.sourceUrl ?? null, tags: p.tags ?? [] })
+      .values({
+        labId: lab.id,
+        slug: p.slug,
+        title: p.title,
+        statement: p.statement,
+        sourceUrl: p.sourceUrl ?? null,
+        tags: p.tags ?? [],
+        answerCriteria: p.answerCriteria ?? null,
+        kind: p.kind ?? "question",
+      })
       .returning();
     await tx.insert(digests).values({
       labId: lab.id,

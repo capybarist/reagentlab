@@ -11,7 +11,7 @@ export type ClaimEvent =
   | { kind: "refutation_accepted" }
   | { kind: "refutation_rejected" }
   | { kind: "poll_adopted" }
-  /** Confirmaciones suficientes de su artefacto o de sus pasos (ADR-0027). */
+  /** Confirmaciones suficientes de su artefacto o de sus pasos (ADR-0027, ADR-0044). */
   | { kind: "verified" };
 
 export interface ClaimTransition {
@@ -34,7 +34,8 @@ export function claimTransition(status: ClaimStatus, event: ClaimEvent): ClaimTr
     case "poll_adopted":
       return { status: status === "supported" ? "adopted" : status, failedDelta: 0 };
     case "verified":
-      return { status: status === "adopted" ? "verified" : status, failedDelta: 0 };
+      // Desde apoyado o adoptado (ADR-0044): la comprobación no espera al poll.
+      return { status: status === "adopted" || status === "supported" ? "verified" : status, failedDelta: 0 };
   }
 }
 
@@ -94,7 +95,16 @@ export function applyRuling(ref: RefutationState, party: string, verdict: Verdic
   return { kind: "disputed", status: "disputed" };
 }
 
-/** Un dictamen provisional que nadie contradice en un turno de verificador posterior queda firme. */
+/**
+ * ¿Ha vencido el plazo de un dictamen provisional (ADR-0045)? Pasadas `settleHours` desde el
+ * dictamen sin que nadie lo contradiga, queda firme aunque no haya habido otro verificador.
+ */
+export function rulingTimedOut(ref: { status: RefutationStatus; ruledAt: Date | null }, settleHours: number, now: Date): boolean {
+  if (ref.status !== "ruled" || !ref.ruledAt) return false;
+  return now.getTime() >= ref.ruledAt.getTime() + settleHours * 3_600_000;
+}
+
+/** Un dictamen provisional que nadie contradice (en un turno de verificador posterior, o en plazo) queda firme. */
 export function settleBySilence(ref: RefutationState): { status: "accepted" | "rejected"; verdict: Verdict } | null {
   if (ref.status !== "ruled" || !ref.provisionalVerdict) return null;
   return { status: finalStatus(ref.provisionalVerdict), verdict: ref.provisionalVerdict };

@@ -27,6 +27,8 @@ export default async function ProposePage({ params, searchParams }: Props) {
       await proposeProblem(me.id, slug, {
         title: String(fd.get("title") ?? ""),
         statement: String(fd.get("statement") ?? ""),
+        answer_criteria: String(fd.get("answer_criteria") ?? ""),
+        kind: fd.get("kind") === "open_problem" ? "open_problem" : "question",
         ...(sourceUrl ? { source_url: sourceUrl } : {}),
         ...(fd.get("confirm_new") ? { confirm_new: true } : {}),
       });
@@ -62,6 +64,19 @@ export default async function ProposePage({ params, searchParams }: Props) {
           <textarea name="statement" required minLength={120} maxLength={6000} rows={8}
             className="w-full rounded-lg border border-line bg-panel px-3 py-2 font-mono text-sm"
             placeholder="What is asked, what is known (with sources) and what would count as progress." />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">What would answer it</span>
+          <textarea name="answer_criteria" required minLength={20} maxLength={600} rows={3}
+            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm"
+            placeholder="What a claim must prove, compute or find for this thread to be answered. The thread turns green when such a claim is verified." />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">Kind of thread</span>
+          <select name="kind" className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm" defaultValue="question">
+            <option value="question">Question: it can be answered</option>
+            <option value="open_problem">Open problem: only partial results, never marked answered</option>
+          </select>
         </label>
         <label className="block space-y-1">
           <span className="text-sm font-medium">Source URL (optional)</span>

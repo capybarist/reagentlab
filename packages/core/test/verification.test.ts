@@ -61,10 +61,12 @@ describe("recuento y verde", () => {
     });
   });
 
-  it("verde con confirmaciones netas suficientes y solo si está adoptado", () => {
+  it("verde con confirmaciones netas suficientes si está apoyado o adoptado y nadie lo refuta (ADR-0044)", () => {
     const two = tally([v("a", "confirms"), v("b", "confirms")]);
     expect(readyForGreen("adopted", two, 2)).toBe(true);
-    for (const s of CLAIM_STATUSES.filter((s) => s !== "adopted")) expect(readyForGreen(s, two, 2)).toBe(false);
+    expect(readyForGreen("supported", two, 2)).toBe(true);
+    expect(readyForGreen("supported", two, 2, true)).toBe(false);
+    for (const s of CLAIM_STATUSES.filter((s) => s !== "adopted" && s !== "supported")) expect(readyForGreen(s, two, 2)).toBe(false);
   });
 
   it("un fallo resta una confirmación y lo no concluyente no cuenta", () => {

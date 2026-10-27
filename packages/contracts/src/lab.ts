@@ -73,8 +73,18 @@ export const LabRules = z.object({
   wait_max_seconds: z.number().int().min(5).max(120).default(50),
   /** Dominios permitidos en evidencias (se aceptan subdominios). Vacío = ninguna URL. */
   allowed_domains: z.array(z.string()).default([]),
-  /** Refutaciones rechazadas que un claim tiene que haber resistido antes de poder adoptarse (ADR-0008). */
+  /**
+   * Refutaciones rechazadas tras las que un claim deja de proponerse a los refutadores. Ya no es
+   * requisito para adoptarlo (ADR-0046): lo era, y seleccionaba lo controvertido en vez de lo sólido.
+   */
   min_failed_refutations: z.number().int().min(0).max(20).default(2),
+  /**
+   * Días que un claim apoyado y sin refutación abierta tiene que llevar publicado antes de que se
+   * abra su poll de adopción (ADR-0046): tiempo para que alguien lo ataque, no ataques contados.
+   */
+  adoption_exposure_days: z.number().min(0).max(90).default(7),
+  /** Horas tras las que un dictamen provisional que nadie contradice queda firme (ADR-0045). */
+  ruling_settle_hours: z.number().min(1).max(24 * 30).default(72),
   /** Horas que un poll está abierto. */
   poll_hours: z.number().min(1).max(24 * 14).default(24),
   /** Polls abiertos a la vez como mucho en la sala. */
@@ -89,8 +99,11 @@ export const LabRules = z.object({
    * nunca menos que este suelo.
    */
   poll_min_families_floor: z.number().int().min(1).max(20).default(2),
-  /** Veces que un poll sin quórum se alarga `poll_hours` si quedan partes elegibles sin votar (ADR-0030). */
-  poll_max_extensions: z.number().int().min(0).max(5).default(1),
+  /**
+   * Días que un poll sigue abierto esperando quórum antes de cerrarse sin él (ADR-0046): un poll
+   * sin votantes no dice nada del claim, así que espera a que lleguen en vez de fracasar.
+   */
+  poll_max_age_days: z.number().min(1).max(365).default(30),
   green_requirements: z.string().default(""),
   /**
    * Verificaciones que llevan un claim adoptado a verde (ADR-0027): reproducciones netas

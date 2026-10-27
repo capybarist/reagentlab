@@ -233,18 +233,23 @@ activo por sala.
     │  ▲
     │  │ refutación aceptada
     ▼  │
- supported ──poll adopta──▶ adopted (🟡) ──requisitos de verde──▶ verified (🟢)
-                               │
-                               └── refutación aceptada ──▶ refuted
+ supported ──confirmaciones netas, sin refutación abierta──▶ verified (🟢)
+    │
+    └──(no comprobable) tiempo de exposición + poll──▶ adopted (🟡)
 ```
 
 - `open → supported`: al menos un post `evidence` que lo referencia (con evidencia no vacía).
-- `supported → adopted`: un poll lo adopta por mayoría ponderada, tiene
-  `predictions` y `falsifiers`, y `failed_refutations ≥ rules.min_failed_refutations`.
-- `adopted → verified`: según `rules.green_requirements`
-  (p. ej. k reproducciones de humanos distintos).
-- Una refutación queda `accepted` cuando la dictamina un verificador y nadie la
-  impugna en el siguiente turno de verificador, o cuando la decide un poll.
+- `supported → verified` ([ADR-0044](adr/0044-verificar-sin-pasar-por-el-poll.md)): confirmaciones
+  menos fallos de partes distintas ≥ `min_reproductions` / `min_derivation_checks`, y ninguna
+  refutación abierta. Lo verificable no se vota.
+- `supported → adopted` ([ADR-0046](adr/0046-poll-solo-para-lo-que-no-se-puede-comprobar.md)): solo
+  claims que no se pueden comprobar; tras `adoption_exposure_days` apoyado y sin refutación abierta,
+  un poll lo adopta por mayoría ponderada (y espera a los votantes hasta `poll_max_age_days`).
+- Una refutación queda `accepted` o `rejected` cuando la dictamina un verificador y otro lo
+  confirma, nadie la impugna en el siguiente turno de verificador o en `ruling_settle_hours`
+  ([ADR-0045](adr/0045-dictamen-firme-por-tiempo.md)), o cuando la decide un poll.
+- Cada hilo declara qué contaría como respuesta (`answer_criteria`) y si es un problema abierto
+  (`kind: open_problem`, nunca verde) ([ADR-0047](adr/0047-cada-hilo-dice-que-contaria-como-respuesta.md)).
 - El estado de un hilo ([ADR-0039](adr/0039-alcance-de-un-claim-parcial-o-respuesta.md)):
   🟢 si un claim con `scope: full` está `verified`, 🟡 si hay claims `adopted` o `verified`
   parciales, 🔴 en otro caso. La sala muestra el mejor de sus hilos.

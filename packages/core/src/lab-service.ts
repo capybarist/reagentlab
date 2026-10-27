@@ -29,6 +29,7 @@ import {
   normalizeTag,
   normalizeTags,
   type TagCount,
+  type ThreadAnswerView,
   type ThreadSearchResult,
   ROLE_POST_TYPES,
   ReviewProblemInput,
@@ -81,6 +82,7 @@ import {
   rulingTasks,
   settleRefutation,
   settleSilentRulings,
+  settleTimedOutRulings,
 } from "./claim-ops.js";
 import { applyRuling, rulingBlock } from "./claims.js";
 import { closePoll, labPollsFirstHere, openDuePolls, openPollViews, pollViews } from "./poll-ops.js";
@@ -122,7 +124,15 @@ import { DOWNLOAD_URL_TTL_SEC, UPLOAD_URL_TTL_SEC, artifactFilesIssue, requireSt
 import { artifactFilename } from "./sandbox.js";
 import { forecastDateIssue, resolutionBlock, updateBlock } from "./forecast.js";
 import { countResolvable, forecastConsensus, forecastTasks, maybeSettleForecast } from "./forecast-ops.js";
-import { applyVerificationToSupport, countVerifiable, countedVerifications, kindOfClaim, maybeVerify, verificationTasks } from "./verification-ops.js";
+import {
+  applyVerificationToSupport,
+  countVerifiable,
+  countedVerifications,
+  kindOfClaim,
+  maybeVerify,
+  verificationTasks,
+  verifyReadyClaims,
+} from "./verification-ops.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Propuestas de problema pendientes por humano (ADR-0020). */
@@ -507,6 +517,8 @@ export class LabService {
         reviewNote: null,
         reviewedAt: null,
         tags: normalizeTags(input.tags ?? []),
+        answerCriteria: sanitizeUntrusted(input.answer_criteria),
+        kind: input.kind,
         createdAt: now,
       });
       await openProblem(r, lab, problem, now, proposer.agentId ?? null);
@@ -652,6 +664,8 @@ export class LabService {
         reviewNote: null,
         reviewedAt: null,
         tags: normalizeTags(first.tags ?? []),
+        answerCriteria: sanitizeUntrusted(first.answer_criteria),
+        kind: "question",
         createdAt: now,
       });
       await openProblem(r, lab, problem, now, proposer.agentId ?? null);
@@ -1771,6 +1785,10 @@ export class LabService {
       await this.store.transaction(async (r) => {
         const lab = (await r.getLabBySlug(l.slug, { forUpdate: true }))!;
         const rules = parseLabRules(lab.rules);
+        // Antes de los polls: dictámenes vencidos que quedan firmes (ADR-0045) y claims que ya
+        // tienen las confirmaciones del verde (ADR-0044).
+        await settleTimedOutRulings(r, lab, rules, now);
+        await verifyReadyClaims(r, lab, rules, now);
         for (const poll of (await r.listDuePolls(now)).filter((p) => p.labId === lab.id)) {
           if (await closePoll(r, lab, rules, poll, now)) closed++;
         }
@@ -2613,6 +2631,7 @@ export class LabService {
           ? await forecastTasks(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id)
           : [],
       ...(await contextConsensus(r, lab.id, problem.id, rules)),
+      thread_answer: await threadAnswer(r, problem),
       digest_challenges: await contextChallenges(r, turn.role, digest, rules, partyOf(actor, rules.independence), problem.slug),
       // Todos los polls abiertos de la sala, primero los del hilo del turno (ADR-0030).
       open_polls: await labPollsFirstHere(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id),
@@ -3008,4 +3027,22 @@ async function contextConsensus(
 ): Promise<{ forecast_consensus?: ForecastConsensusView }> {
   const view = await forecastConsensus(r, labId, problemId, rules);
   return view ? { forecast_consensus: view } : {};
+}
+
+/**
+ * Cómo va el hilo hacia su respuesta (ADR-0047): si ya hay resultados verificados y ningún
+ * claim vivo dice responder la pregunta, toca proponerlo.
+ */
+async function threadAnswer(r: Repos, problem: ProblemRow): Promise<ThreadAnswerView> {
+  const counts = await r.claimStatusCounts(problem.id);
+  const live = await r.listClaimDetails(problem.labId, { statuses: ["open", "supported", "adopted", "verified"], problemId: problem.id, limit: 200 });
+  const full = live.filter((c) => c.scope === "full").length;
+  const verified = counts.verified ?? 0;
+  return {
+    kind: problem.kind,
+    untrusted_answer_criteria: problem.answerCriteria,
+    verified_claims: verified,
+    full_claims: full,
+    closing_claim_wanted: problem.kind === "question" && verified > 0 && full === 0,
+  };
 }

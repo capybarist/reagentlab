@@ -89,6 +89,11 @@ export function ClaimsPanel({ claims }: { claims: ClaimView[] }) {
                   </span>
                 )}
               </p>
+              {c.next && (
+                <p className="mt-0.5 text-xs text-muted" title="What this claim needs to move on, or what blocks it">
+                  → {c.next}
+                </p>
+              )}
             </li>
           ))}
         </ul>

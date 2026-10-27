@@ -60,6 +60,8 @@ export interface ClaimView {
   verification?: VerificationTallyView;
   /** Solo si la hipótesis es un pronóstico (ADR-0029). */
   forecast?: ForecastView;
+  /** Qué le falta al claim para avanzar, o qué lo bloquea, en una frase (ADR-0044). Nada si ya concluyó. */
+  next?: string;
 }
 
 /** Una refutación que el verificador del turno puede dictaminar. */

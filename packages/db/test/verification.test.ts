@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { DomainError } from "@reagentlab/core";
+import { schema } from "@reagentlab/db";
 import { BODY, evidence, hypothesis, setup } from "./helpers.js";
 
 let ctx: Awaited<ReturnType<typeof setup>>;
@@ -96,12 +97,13 @@ describe("artefactos (ADR-0027)", () => {
 });
 
 describe("verificaciones (ADR-0027)", () => {
-  it("el verificador recibe el artefacto; dos reproducciones y la adopción llevan el claim a verde", async () => {
-    const { bob, carol, dave, erin } = await computationClaim();
+  it("el verificador recibe el artefacto; dos reproducciones sin refutación abierta llevan el claim a verde (ADR-0044)", async () => {
+    const { carol, dave, erin } = await computationClaim();
     const pack = await ctx.service.joinLab(carol, LAB);
     expect(pack.role).toBe("verifier");
     expect(pack.verifications_needed).toHaveLength(1);
     expect(pack.verifications_needed[0]).toMatchObject({ kind: "artifact", claim: { seq: 1 }, artifact: { untrusted_code: ARTIFACT.code } });
+    expect(pack.claims[0]?.next).toBe("needs 2 more reproductions from other parties");
     await ctx.service.post(carol, LAB, refutation(1));
     const after = await ctx.service.submitVerification(carol, LAB, verification(1));
     expect(after.claim.verification).toEqual({ kind: "artifact", confirms: 1, fails: 0, inconclusive: 0, required: 2 });
@@ -111,23 +113,23 @@ describe("verificaciones (ADR-0027)", () => {
     expect(davePack.role).toBe("verifier");
     await ctx.service.ruleRefutation(dave, LAB, ruling(3));
     await ctx.service.submitVerification(dave, LAB, verification(1));
+    // Dos confirmaciones, pero la refutación #3 sigue abierta: espera al dictamen.
+    const [pending] = await ctx.service.listClaims(LAB);
+    expect(pending?.status).toBe("supported");
+    expect(pending?.next).toMatch(/^blocked: refutation #3/);
     ctx.clock.advance(1);
     await ctx.service.joinLab(erin, LAB);
     await ctx.service.ruleRefutation(erin, LAB, ruling(3));
 
-    // Dos confirmaciones, pero aún no está adoptado: sigue sin verde.
-    expect((await ctx.service.listClaims(LAB))[0]?.status).toBe("supported");
-
-    expect((await ctx.service.runPolls()).opened).toBe(1);
-    const [poll] = await ctx.service.listPolls(LAB);
-    for (const a of [bob, carol, dave]) await ctx.service.castVote(a, LAB, vote(poll!.id));
-    ctx.clock.advance(25 * 60);
-    await ctx.service.runPolls();
-
+    // Refutación rechazada: pasa a verde sin poll de adopción (ADR-0044), y no se abre ninguno.
     const [claim] = await ctx.service.listClaims(LAB);
     expect(claim?.status).toBe("verified");
     expect(claim?.scope).toBe("partial");
     expect(claim?.verification).toMatchObject({ confirms: 2, required: 2 });
+    expect(claim?.next).toMatch(/^verified partial result/);
+    expect((await ctx.service.runPolls()).opened).toBe(0);
+    const rep = await ctx.db.select().from(schema.reputationEvents);
+    expect(rep.map((e) => e.kind).sort()).toEqual(["claim_verified", "ruling_upheld", "verification_correct", "verification_correct"]);
     // ADR-0039: un resultado parcial verificado es avance, no la respuesta del hilo.
     const lab = await ctx.service.getLab(LAB);
     expect(lab.lab.status).toBe("yellow");
@@ -146,15 +148,62 @@ describe("verificaciones (ADR-0027)", () => {
     ctx.clock.advance(1);
     await ctx.service.joinLab(erin, LAB);
     await ctx.service.ruleRefutation(erin, LAB, ruling(3));
-    expect((await ctx.service.runPolls()).opened).toBe(1);
-    const [poll] = await ctx.service.listPolls(LAB);
-    for (const a of [bob, carol, dave]) await ctx.service.castVote(a, LAB, vote(poll!.id));
-    ctx.clock.advance(25 * 60);
-    await ctx.service.runPolls();
     expect((await ctx.service.listClaims(LAB))[0]?.status).toBe("verified");
     const lab = await ctx.service.getLab(LAB);
     expect(lab.lab.status).toBe("green");
     expect(lab.problems[0]).toMatchObject({ status: "green", verified_claims: 1 });
+    expect(bob.agentId).toBeTruthy();
+  });
+
+  it("un hilo open_problem no pasa de amarillo aunque un claim full se verifique, y el contexto pide el claim que responde (ADR-0047)", async () => {
+    ctx = await setup();
+    const [alice, bob, carol, dave] = await Promise.all([
+      ctx.agent("alice"),
+      ctx.agent("bob", "gpt"),
+      ctx.agent("carol", "gemini"),
+      ctx.agent("dave", "mistral"),
+    ]);
+    const p = await ctx.service.proposeProblem({ userId: alice.userId }, LAB, {
+      slug: "open",
+      title: "A famous open problem",
+      statement:
+        "A problem nobody expects to close here: the thread collects the best verified partial results, each one checked " +
+        "by other parties, and nothing more. Progress is any verified partial result.",
+      answer_criteria: "It cannot be answered here: only verified partial results count.",
+      kind: "open_problem",
+    });
+    expect(p).toMatchObject({ kind: "open_problem", untrusted_answer_criteria: "It cannot be answered here: only verified partial results count." });
+    const pack = await ctx.service.joinLab(alice, LAB, "open");
+    expect(pack.problem.kind).toBe("open_problem");
+    expect(pack.thread_answer).toEqual({
+      kind: "open_problem",
+      untrusted_answer_criteria: "It cannot be answered here: only verified partial results count.",
+      verified_claims: 0,
+      full_claims: 0,
+      closing_claim_wanted: false,
+    });
+    await ctx.service.post(alice, LAB, computation({ scope: "full" }));
+    await ctx.service.joinLab(bob, LAB, "open");
+    await ctx.service.post(bob, LAB, evidence([1]));
+    await ctx.service.joinLab(carol, LAB, "open");
+    await ctx.service.submitVerification(carol, LAB, verification(1));
+    await ctx.service.joinLab(dave, LAB, "open");
+    await ctx.service.submitVerification(dave, LAB, verification(1));
+    const [claim] = await ctx.service.listClaims(LAB, "open");
+    expect(claim).toMatchObject({ status: "verified", scope: "full", next: "verified; the thread stays open by design" });
+    expect((await ctx.service.getLab(LAB)).problems.find((x) => x.slug === "open")?.status).toBe("yellow");
+  });
+
+  it("el worker pasa a verde los claims apoyados que ya tienen confirmaciones (ADR-0044)", async () => {
+    const { carol, dave } = await computationClaim();
+    await ctx.service.joinLab(carol, LAB);
+    await ctx.service.submitVerification(carol, LAB, verification(1));
+    await ctx.service.joinLab(dave, LAB);
+    await ctx.service.submitVerification(dave, LAB, verification(1));
+    // Dos confirmaciones y nadie lo refuta: verde, y el contexto de un proponente pide el claim que responde.
+    expect((await ctx.service.listClaims(LAB))[0]?.status).toBe("verified");
+    const pack = await ctx.service.joinLab(carol, LAB);
+    expect(pack.thread_answer).toMatchObject({ kind: "question", verified_claims: 1, full_claims: 0, closing_claim_wanted: true });
   });
 
   it("el autor no verifica lo suyo, el proponente no verifica y un fallo resta una confirmación", async () => {

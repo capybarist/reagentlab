@@ -1,4 +1,4 @@
-import type { ClaimStatus, LabStatus, PollOutcome, PollResult, Stance } from "@reagentlab/contracts";
+import type { ClaimStatus, LabStatus, PollOutcome, PollResult, ProblemKind, Stance } from "@reagentlab/contracts";
 
 /** Políticas puras de los polls (ADR-0011, ADR-0017). */
 
@@ -50,12 +50,12 @@ export function requiredFamilies(eligibleFamilies: number, opts: { minFamilies: 
   return Math.max(floor, Math.min(opts.minFamilies, eligibleFamilies));
 }
 
-/** ¿Se alarga un poll que cierra sin quórum? Solo si quedan partes que podían votar y no lo han hecho (ADR-0030). */
-export function extensionDue(
-  outcome: PollOutcome,
-  opts: { extensions: number; maxExtensions: number; pendingParties: number },
-): boolean {
-  return outcome === "no_quorum" && opts.extensions < opts.maxExtensions && opts.pendingParties > 0;
+/**
+ * ¿Se alarga un poll que vence sin quórum? Mientras no lleve `maxAgeDays` abierto (ADR-0046): un
+ * poll sin votantes no dice nada del claim, así que espera a que lleguen en vez de fracasar.
+ */
+export function extensionDue(outcome: PollOutcome, opts: { opensAt: Date; maxAgeDays: number; now: Date }): boolean {
+  return outcome === "no_quorum" && opts.now.getTime() < opts.opensAt.getTime() + opts.maxAgeDays * 86_400_000;
 }
 
 /** Peso de un voto (ADR-0011: entre 0,5 y 1,5). Sin reputación todavía, todos pesan 1. */
@@ -79,18 +79,19 @@ export interface LastPoll {
 }
 
 /**
- * ¿Toca abrir un poll de adopción para este claim? Tiene que estar apoyado, haber
- * resistido `minFailed` refutaciones y no tener ninguna abierta. Tras un `no` solo
- * se repite si ha resistido más refutaciones; tras `no_quorum`, pasado otro periodo.
+ * ¿Toca abrir un poll de adopción para este claim? Tiene que estar apoyado, llevar publicado
+ * `exposureDays` sin refutación abierta (ADR-0046: tiempo para atacarlo, no ataques contados) y
+ * no poder comprobarse de otra forma: lo verificable se verifica, no se vota (ADR-0044). Tras
+ * un `no` solo se repite si ha resistido más refutaciones; tras `no_quorum`, pasado otro periodo.
  */
 export function adoptionDue(
-  claim: { status: ClaimStatus; failedRefutations: number; adoptable?: boolean },
-  opts: { minFailed: number; hasOpenRefutation: boolean; hasOpenPoll: boolean; lastPoll: LastPoll | null; pollHours: number; now: Date },
+  claim: { status: ClaimStatus; failedRefutations: number; createdAt: Date; adoptable?: boolean; verifiable?: boolean },
+  opts: { exposureDays: number; hasOpenRefutation: boolean; hasOpenPoll: boolean; lastPoll: LastPoll | null; pollHours: number; now: Date },
 ): boolean {
   // Hay tipos de claim que la plantilla nunca adopta, como `literature` en ciencia (ADR-0019).
-  if (claim.adoptable === false) return false;
+  if (claim.adoptable === false || claim.verifiable === true) return false;
   if (claim.status !== "supported" || opts.hasOpenRefutation || opts.hasOpenPoll) return false;
-  if (claim.failedRefutations < opts.minFailed) return false;
+  if (opts.now.getTime() < claim.createdAt.getTime() + opts.exposureDays * 86_400_000) return false;
   return retryAllowed(opts.lastPoll, claim.failedRefutations, opts.pollHours, opts.now);
 }
 
@@ -123,8 +124,10 @@ export function labStatusFor(
   counts: Partial<Record<ClaimStatus, number>>,
   verifiedFull = 0,
   forecasts: { answered: boolean; consensus: boolean } = { answered: false, consensus: false },
+  kind: ProblemKind = "question",
 ): LabStatus {
-  if (verifiedFull > 0 || forecasts.answered) return "green";
+  // Un problema abierto conocido no se da por respondido aquí (ADR-0047): como mucho, amarillo.
+  if ((verifiedFull > 0 || forecasts.answered) && kind !== "open_problem") return "green";
   if ((counts.verified ?? 0) > 0 || (counts.adopted ?? 0) > 0 || forecasts.consensus) return "yellow";
   return "red";
 }

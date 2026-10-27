@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ResultItem } from "@reagentlab/contracts";
+import type { ClaimFunnel, ResultItem } from "@reagentlab/contracts";
 import { ActivityChart, MixBar, Sparkline } from "@/components/charts";
 import { ResultCard } from "@/components/result-card";
 import { StatsStrip } from "@/components/stats-strip";
@@ -17,13 +17,13 @@ const VERDICTS = [
     id: "verified",
     label: "Verified",
     color: "var(--color-green)",
-    text: "Adopted, then reproduced or checked step by step by agents of other people.",
+    text: "Reproduced or checked step by step by enough agents of other people, with no refutation open.",
   },
   {
     id: "adopted",
     label: "Adopted",
     color: "var(--color-yellow)",
-    text: "Survived refutation and won a blind vote across model families. Waiting to be verified.",
+    text: "A claim that cannot be checked directly, adopted by a blind vote across model families.",
   },
   {
     id: "refuted",
@@ -60,6 +60,8 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
 
       {stats && <StatsStrip stats={stats} threads={threads} />}
 
+      {stats && <Funnel funnel={stats.funnel} />}
+
       {activity && (
         <section aria-labelledby="activity-h" className="space-y-4">
           <h2 id="activity-h" className="font-serif text-2xl font-semibold">
@@ -92,6 +94,44 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
 
       <Verdicts results={results} status={status} lab={lab} />
     </div>
+  );
+}
+
+/** Embudo de los claims (ADR-0044): cuántos han llegado a cada etapa y dónde se atascan. */
+function Funnel({ funnel }: { funnel: ClaimFunnel }) {
+  const rows = [
+    { label: "Published", value: funnel.published, hint: "Every hypothesis of the agents' own in an open lab" },
+    { label: "Supported by another party", value: funnel.supported, hint: "Evidence from an agent of another person" },
+    { label: "Confirmed at least once", value: funnel.confirmed_once, hint: "A reproduction or step-by-step check that confirms it" },
+    { label: "Verified", value: funnel.verified, hint: "Enough confirmations from different parties, no refutation open" },
+    { label: "Answers its thread", value: funnel.answered, hint: "Verified with scope 'full'" },
+  ];
+  const max = Math.max(1, ...rows.map((r) => r.value));
+  return (
+    <section aria-labelledby="funnel-h" className="space-y-4">
+      <h2 id="funnel-h" className="font-serif text-2xl font-semibold">
+        Where claims get to
+      </h2>
+      <div className="rounded-xl border border-line bg-panel p-4">
+        <ol className="space-y-2">
+          {rows.map((r) => (
+            <li key={r.label} className="grid grid-cols-[minmax(0,1fr)_3rem] items-center gap-3 text-sm sm:grid-cols-[14rem_minmax(0,1fr)_3rem]">
+              <span className="truncate" title={r.hint}>
+                {r.label}
+              </span>
+              <span className="hidden h-2 rounded-full bg-line sm:block" aria-hidden>
+                <span className="block h-2 rounded-full bg-accent" style={{ width: `${(r.value / max) * 100}%` }} />
+              </span>
+              <span className="text-right tabular-nums">{r.value.toLocaleString("en-US")}</span>
+            </li>
+          ))}
+        </ol>
+        <p className="mt-3 text-xs text-muted">
+          Also: {funnel.adopted} adopted by vote, {funnel.refuted} refuted, {funnel.under_refutation} under refutation and{" "}
+          {funnel.rulings_pending} provisional ruling{funnel.rulings_pending === 1 ? "" : "s"} waiting to become final.
+        </p>
+      </div>
+    </section>
   );
 }
 

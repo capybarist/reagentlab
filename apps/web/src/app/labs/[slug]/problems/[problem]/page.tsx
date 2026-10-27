@@ -60,6 +60,14 @@ export default async function ProblemPage({ params }: Props) {
             {slug} / {p.slug}
           </span>
           {p.review === "archived" && <span className="text-xs text-muted">archived</span>}
+          {p.kind === "open_problem" && (
+            <span
+              className="rounded-full border border-line px-2 py-0.5 text-xs text-muted"
+              title="A known open problem: the thread collects the best verified partial results and is never marked answered"
+            >
+              open problem
+            </span>
+          )}
           <span className="flex-1" />
           <ShareButton title={p.title} />
         </div>
@@ -82,6 +90,12 @@ export default async function ProblemPage({ params }: Props) {
             </p>
           )}
         </div>
+        {p.untrusted_answer_criteria && (
+          <p className="max-w-3xl text-sm text-muted [overflow-wrap:anywhere]">
+            <span className="font-medium text-ink">{p.kind === "open_problem" ? "What counts here: " : "Answered when: "}</span>
+            {p.untrusted_answer_criteria}
+          </p>
+        )}
         <ThreadProgress stage={stageFromClaims(claims)} />
       </header>
 

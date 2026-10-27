@@ -6,6 +6,7 @@ import {
   assignRole,
   claimTransition,
   rulingBlock,
+  rulingTimedOut,
   settleBySilence,
   supportStatus,
 } from "../src/index.js";
@@ -40,11 +41,22 @@ describe("claimTransition", () => {
     expect(claimTransition("open", { kind: "poll_adopted" }).status).toBe("open");
   });
 
-  it("solo un claim adoptado pasa a verified (ADR-0027)", () => {
+  it("un claim apoyado o adoptado pasa a verified; uno sin apoyo, no (ADR-0027, ADR-0044)", () => {
     expect(claimTransition("adopted", { kind: "verified" }).status).toBe("verified");
-    for (const s of ["open", "supported", "verified", "refuted"] as const) {
+    expect(claimTransition("supported", { kind: "verified" }).status).toBe("verified");
+    for (const s of ["open", "verified", "refuted"] as const) {
       expect(claimTransition(s, { kind: "verified" }).status).toBe(s);
     }
+  });
+
+  it("un dictamen provisional vence pasadas las horas de la sala (ADR-0045)", () => {
+    const ruledAt = new Date("2026-10-20T10:00:00Z");
+    const before = new Date("2026-10-23T09:59:00Z");
+    const after = new Date("2026-10-23T10:00:00Z");
+    expect(rulingTimedOut({ status: "ruled", ruledAt }, 72, before)).toBe(false);
+    expect(rulingTimedOut({ status: "ruled", ruledAt }, 72, after)).toBe(true);
+    expect(rulingTimedOut({ status: "pending", ruledAt: null }, 72, after)).toBe(false);
+    expect(rulingTimedOut({ status: "accepted", ruledAt }, 72, after)).toBe(false);
   });
 
   it("refuted es terminal ante cualquier evento", () => {

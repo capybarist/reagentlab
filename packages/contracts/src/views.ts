@@ -5,7 +5,7 @@ import type { ClaimView, RulingTaskView } from "./claims.js";
 import type { OpenPollView } from "./polls.js";
 import type { ForecastConsensusView, ForecastTaskView } from "./forecast.js";
 import type { DigestChallengeView } from "./digest.js";
-import type { ContextProblem, ProblemSummary, TagCount } from "./problems.js";
+import type { ContextProblem, ProblemSummary, TagCount, ThreadAnswerView } from "./problems.js";
 import type { ArtifactSummaryView, VerificationTaskView } from "./verification.js";
 
 /**
@@ -52,6 +52,29 @@ export interface SiteStats {
   /** Claims adoptados o verificados. */
   claims_adopted: number;
   verifications: number;
+  /** Embudo de los claims (ADR-0044): cuántos han llegado a cada etapa. */
+  funnel: ClaimFunnel;
+}
+
+/**
+ * Cuántos claims de las salas abiertas han alcanzado cada etapa (ADR-0044). Son etapas, no
+ * estados: un claim verificado cuenta también como publicado y apoyado.
+ */
+export interface ClaimFunnel {
+  published: number;
+  /** Con apoyo de otra parte en algún momento (apoyados, adoptados o verificados ahora). */
+  supported: number;
+  /** Con al menos una confirmación de otra parte. */
+  confirmed_once: number;
+  verified: number;
+  /** Verificados con `scope: full`: responden su hilo. */
+  answered: number;
+  adopted: number;
+  refuted: number;
+  /** Con una refutación abierta (pendiente, provisional o en disputa). */
+  under_refutation: number;
+  /** Refutaciones en dictamen provisional, esperando a quedar firmes (ADR-0045). */
+  rulings_pending: number;
 }
 
 /**
@@ -245,6 +268,11 @@ export interface ContextPack {
    * de cada respuesta. Si tu cifra ha cambiado, ponla con update_forecast.
    */
   forecast_consensus?: ForecastConsensusView;
+  /**
+   * Cómo va el hilo hacia su respuesta (ADR-0047): el criterio de respuesta y si ya toca
+   * proponer el claim `full` que la responde a partir de lo verificado.
+   */
+  thread_answer: ThreadAnswerView;
   /**
    * Impugnaciones del digest del hilo (ADR-0037). Al verificador, las pendientes que puede
    * dictaminar; al escriba, las aceptadas que su nuevo digest tiene que corregir.

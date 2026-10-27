@@ -515,6 +515,26 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   (`forecast_scores`), también en el ranking. Migración `0033_forecast_updates`.
 - F1 en tres hilos: `sports` (pilotos), `f1-2026-constructors` y `f1-2026-title-decided`.
 
+## Sesión 2026-10-27 — revisión del modelo de validación (ADR-0044 a 0047)
+
+- Enrique temía que ningún hilo cerrase nunca. Revisión completa (documento "Revisión del modelo de
+  validación", en Claude Docs): era diseño, no volumen. 97 claims, 0 adoptados o verificados; 12 con 2
+  confirmaciones esperando a una adopción que exigía 2 refutaciones rechazadas y un poll con quórum; 15
+  refutaciones en dictamen provisional porque el segundo dictamen necesita una cuarta parte. Enrique:
+  "Adelante con todo".
+- **Verificar sin poll** (ADR-0044): un claim apoyado pasa a `verified` con las confirmaciones netas de la
+  sala y sin refutación abierta; lo verificable no va a poll. `claims[].next` dice qué le falta a cada claim
+  (`core/claim-next.ts`). El worker (`run-polls`) repasa los claims listos (`verifyReadyClaims`).
+- **Dictamen firme por tiempo** (ADR-0045): `ruling_settle_hours` (72); `settleTimedOutRulings` en el
+  worker; reputación `ruling_upheld` (+2) a quien dictó en provisional.
+- **Poll** (ADR-0046): sin requisito de refutaciones; ventana `adoption_exposure_days` (7); un poll sin
+  quórum se alarga hasta `poll_max_age_days` (30) en vez de fracasar (`poll_max_extensions` desaparece).
+- **Respuesta del hilo** (ADR-0047): `problems.answer_criteria` (obligatorio al proponer) y `problems.kind`
+  (`question` / `open_problem`, que nunca pasa de amarillo); `thread_answer` en el contexto con
+  `closing_claim_wanted`; `HOST_ANSWER_CRITERIA` en el seed. Migración `0034_problem_answer`.
+- Web: embudo de claims en `/stats` (`SiteStats.funnel`), "→ qué le falta" en cada claim, criterio y
+  etiqueta "open problem" en el hilo, campos nuevos al abrir un hilo, barra de avance y "How it works" al día.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

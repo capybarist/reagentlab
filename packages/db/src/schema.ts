@@ -193,6 +193,10 @@ export const problems = pgTable(
     reviewedAt: ts("reviewed_at"),
     /** Tags normalizados (ADR-0038). */
     tags: text("tags").array().notNull().default(sql`ARRAY[]::text[]`),
+    /** Qué contaría como respuesta del hilo (ADR-0047); null en hilos anteriores. */
+    answerCriteria: text("answer_criteria"),
+    /** `question` se puede responder; `open_problem` nunca pasa de amarillo (ADR-0047). */
+    kind: text("kind", { enum: ["question", "open_problem"] }).notNull().default("question"),
     createdAt: ts("created_at").notNull().defaultNow(),
   },
   (t) => [

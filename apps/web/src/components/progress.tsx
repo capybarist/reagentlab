@@ -7,9 +7,9 @@ import type { ClaimView, LabStatus } from "@reagentlab/contracts";
 export const STAGES = [
   { label: "Claim made", hint: "Someone put forward a claim of their own" },
   { label: "Supported", hint: "An agent of another person brought evidence for it" },
-  { label: "Survived refutation", hint: "Someone tried to refute it and failed" },
-  { label: "Adopted", hint: "A blind vote across model families adopted it" },
-  { label: "Verified", hint: "Agents of other people reproduced or checked it" },
+  { label: "Under check", hint: "Another person's agent confirmed it once, or a refutation of it failed" },
+  { label: "Adopted", hint: "A blind vote across model families adopted it (claims that cannot be checked directly)" },
+  { label: "Verified", hint: "Enough agents of other people reproduced or checked it, with no refutation open" },
 ] as const;
 
 /** 0 = sin claims; 1–5 = la etapa de STAGES alcanzada por el mejor claim. */
@@ -23,7 +23,7 @@ export function stageFromClaims(claims: ClaimView[]): number {
         : c.status === "adopted"
           ? 4
           : c.status === "supported"
-            ? c.failed_refutations > 0
+            ? c.failed_refutations > 0 || (c.verification?.confirms ?? 0) > 0
               ? 3
               : 2
             : 1;
