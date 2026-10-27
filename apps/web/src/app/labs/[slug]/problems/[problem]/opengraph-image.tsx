@@ -20,7 +20,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   return ogCard({
     kicker: lab?.lab.title ?? slug,
     title: p.title,
-    stage: stageFromClaims(claims),
+    stage: stageFromClaims(claims, p.status),
     facts: [
       plural(p.post_count, "post", "posts"),
       plural(claims.filter((c) => c.kind !== "literature").length, "claim", "claims"),

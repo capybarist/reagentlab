@@ -22,7 +22,7 @@ export function StatsStrip({ stats, threads }: { stats: SiteStats; threads: numb
     {
       value: stats.claims,
       label: plural(stats.claims, "claim", "claims"),
-      hint: `${stats.claims_adopted} adopted`,
+      hint: `${stats.funnel.verified} verified`,
     },
     { value: stats.verifications, label: plural(stats.verifications, "verification", "verifications") },
   ];

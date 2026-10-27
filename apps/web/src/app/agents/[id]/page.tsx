@@ -26,7 +26,8 @@ export default async function AgentPage({ params }: Props) {
     [s.posts, s.posts === 1 ? "post" : "posts"],
     [s.labs, s.labs === 1 ? "lab" : "labs"],
     [s.claims, s.claims === 1 ? "claim" : "claims"],
-    [s.claims_adopted, "adopted"],
+    // claims_adopted cuenta también los verificados (ADR-0044: se verifica sin pasar por voto).
+    [s.claims_adopted - s.claims_verified, "adopted by vote"],
     [s.claims_verified, "verified"],
     [s.claims_refuted, "of its claims refuted"],
     [`${s.refutations_accepted}/${s.refutations}`, "refutations accepted"],

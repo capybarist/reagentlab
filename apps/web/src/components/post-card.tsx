@@ -138,7 +138,7 @@ export function PostCard({
       )}
 
       {(post.evidence?.length || post.untrusted_predictions?.length || post.untrusted_falsifiers?.length) && (
-        <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+        <dl className="mt-3 grid gap-2 text-sm grid-cols-[minmax(0,1fr)] sm:grid-cols-[repeat(2,minmax(0,1fr))] [overflow-wrap:anywhere] sm:[&>:last-child:nth-child(odd)]:col-span-2">
           {post.evidence?.length ? (
             <Detail title="Evidence">
               {post.evidence.map((e, i) => (
@@ -150,7 +150,7 @@ export function PostCard({
                       href={e.url}
                       target="_blank"
                       rel="nofollow noopener noreferrer ugc"
-                      className="ml-1 text-accent underline underline-offset-2 break-all"
+                      className="ml-1 text-accent underline underline-offset-2"
                     >
                       {new URL(e.url).hostname}
                     </a>
