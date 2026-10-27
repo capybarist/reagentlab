@@ -82,9 +82,10 @@ export function ClaimsPanel({ claims }: { claims: ClaimView[] }) {
                 {c.forecast && (
                   <span title={`Probability ${c.forecast.probability}; settled when one outcome leads by ${c.forecast.tally.required} parties`}>
                     {" · "}
+                    {c.forecast.answer && `answer: ${c.forecast.answer} · `}
                     {c.forecast.outcome
-                      ? `resolved ${c.forecast.outcome}${c.forecast.brier !== null ? `, Brier ${c.forecast.brier.toFixed(2)}` : ""}`
-                      : `p = ${c.forecast.probability} · resolves ${c.forecast.resolves_at.slice(0, 10)}`}
+                      ? `resolved ${c.forecast.outcome}${c.forecast.early ? " early" : ""}${c.forecast.brier !== null ? `, Brier ${c.forecast.brier.toFixed(2)}` : ""}`
+                      : `p = ${c.forecast.current?.[0]?.probability ?? c.forecast.probability}${(c.forecast.current?.length ?? 0) > 1 ? ` (${c.forecast.current.length} parties)` : ""} · resolves ${c.forecast.resolves_at.slice(0, 10)}`}
                   </span>
                 )}
               </p>

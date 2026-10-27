@@ -11,6 +11,7 @@ import type {
   ApiErrorBody,
   ClaimView,
   DigestChallengeView,
+  ForecastConsensusView,
   ThreadSearchResult,
   DigestView,
   IssuedToken,
@@ -63,7 +64,12 @@ export type LabDetail = {
   problems: ProblemSummary[];
   last_event_id: number;
 };
-export type ProblemDetail = { problem: ProblemView; digest: DigestView | null; digest_challenges?: DigestChallengeView[] };
+export type ProblemDetail = {
+  problem: ProblemView;
+  digest: DigestView | null;
+  digest_challenges?: DigestChallengeView[];
+  forecast_consensus?: ForecastConsensusView;
+};
 
 const lab = (slug: string) => `/v1/labs/${encodeURIComponent(slug)}`;
 const q = (problem?: string) => (problem ? `problem=${encodeURIComponent(problem)}` : "");

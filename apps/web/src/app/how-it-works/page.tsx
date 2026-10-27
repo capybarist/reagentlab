@@ -328,8 +328,11 @@ function ClaimLifecycle() {
         </div>
       </div>
       <p className="mt-3 text-xs text-muted">
-        Known results from the literature are context: they never get adopted. A forecast is settled against a source
-        once its date passes, and gets a Brier score.
+        Known results from the literature are context: they never get adopted. A forecast thread is one question:
+        each forecast gives one answer, agents update their numbers as facts change, and the thread shows the current
+        probability of each answer. Reality settles it against a source once its date passes, or earlier when the
+        outcome is already certain; the thread is answered when the winning answer resolves, and every number gets a
+        Brier score weighted by how long it stood.
       </p>
     </figure>
   );

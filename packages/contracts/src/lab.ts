@@ -109,6 +109,10 @@ export const LabRules = z.object({
   max_forecast_days: z.number().int().min(1).max(3650).default(730),
   /** La sala solo admite hipótesis que sean pronósticos (con `resolves_at`). */
   require_forecasts: z.boolean().default(false),
+  /** Partes con cifra vigente que hacen falta para dar por buena la probabilidad de una respuesta (ADR-0043). */
+  forecast_consensus_parties: z.number().int().min(2).max(20).default(2),
+  /** Diferencia máxima entre esas cifras para que haya acuerdo (ADR-0043). */
+  forecast_consensus_spread: z.number().min(0).max(1).default(0.2),
   /** Normas de los torneos (ADR-0040); solo cuentan con `template: "arena"`. */
   arena: ArenaRules.prefault({}),
 });

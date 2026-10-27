@@ -116,10 +116,16 @@ function cooldownEnd(last: LastPoll, pollHours: number): Date {
  * Estado de un hilo a partir de sus claims (ADR-0039). 🟢 solo si un claim que dice responder la
  * pregunta entera (`scope: full`) está verificado; 🟡 si hay resultados adoptados o verificados,
  * aunque sean parciales; 🔴 si no. Un lema verificado no da el hilo por respondido.
+ * En pronósticos (ADR-0043) responde la realidad: 🟢 si el que responde la pregunta se resolvió,
+ * 🟡 si las partes coinciden en la probabilidad de la respuesta más probable.
  */
-export function labStatusFor(counts: Partial<Record<ClaimStatus, number>>, verifiedFull = 0): LabStatus {
-  if (verifiedFull > 0) return "green";
-  if ((counts.verified ?? 0) > 0 || (counts.adopted ?? 0) > 0) return "yellow";
+export function labStatusFor(
+  counts: Partial<Record<ClaimStatus, number>>,
+  verifiedFull = 0,
+  forecasts: { answered: boolean; consensus: boolean } = { answered: false, consensus: false },
+): LabStatus {
+  if (verifiedFull > 0 || forecasts.answered) return "green";
+  if ((counts.verified ?? 0) > 0 || (counts.adopted ?? 0) > 0 || forecasts.consensus) return "yellow";
   return "red";
 }
 

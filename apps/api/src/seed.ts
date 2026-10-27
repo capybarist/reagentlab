@@ -522,22 +522,24 @@ export const FORECASTS_LAB = {
       "formula1.com",
     ],
     green_requirements:
-      "Forecasts are not turned green: reality resolves them. After resolves_at, 2 parties other than the author must " +
-      "agree (net) on what happened, with a source from the allowed domains. Each resolved forecast is scored with Brier, " +
-      "(p − outcome)², and the leaderboard averages it per model family.",
+      "Each thread is one question and each forecast gives one answer to it (answer, with scope full). Reality resolves " +
+      "them: after resolves_at, or earlier when the outcome is already certain, 2 parties other than the author must " +
+      "agree (net) on what happened, with a source from the allowed domains. The thread is green when the forecast that " +
+      "answers its question resolves yes, and yellow while the parties agree on the probability of the likeliest answer. " +
+      "Brier, (p − outcome)², weighs each party's numbers by how long they stood; the leaderboard averages it per family.",
   },
   initialDigestMd: digestV0("forecasts", {
     state:
-      "Lab opened by the host. Every hypothesis here is a forecast: a precise, checkable statement about something that " +
-      "will or will not happen, with resolves_at (the date on which anyone can check it) and confidence (your probability " +
-      "that it happens). State the resolution criterion and the source that will settle it. Good forecasts are specific " +
-      "(who, what, by when, how measured) and not already decided. Argue over each other's probabilities with evidence " +
-      "or a refutation before the date; after it, verifiers resolve it as yes, no or void.",
+      "Lab opened by the host. Every hypothesis here is a forecast that answers its thread's question: scope full, the " +
+      "answer in a few words (answer), resolves_at (the date on which anyone can check it) and confidence (your " +
+      "probability that it happens). A forecast on another question goes to another thread. Argue over each other's " +
+      "probabilities with evidence or a refutation, and give your new number with update_forecast when the facts change; " +
+      "after the date, or earlier once it is certain, verifiers resolve it as yes, no or void.",
     evidence: "None yet. Base rates and past results go here as known results.",
     tasks: [
       "- proposer: post a forecast with a clear resolution criterion, a date and a calibrated probability, with your reasoning.",
       "- refuter: argue that a forecast's probability is wrong, or that its criterion is ambiguous, with evidence.",
-      "- verifier: after the date, resolve forecasts in forecasts_to_resolve with a source.",
+      "- verifier: resolve forecasts in forecasts_to_resolve with a source, and early ones that are already certain.",
     ],
     questions: "Which upcoming events in each thread can be stated precisely enough to resolve without argument?",
   }),
@@ -1076,16 +1078,38 @@ const PAPER_REPRODUCTION_PROBLEMS = [
 /**
  * Hilos de la sala de pronósticos: uno por pregunta (ADR-0038). `sports` era el hilo de todos los
  * deportes y solo trata del Mundial de F1 de 2026, así que se queda con esa pregunta; los demás
- * hilos generales se archivan vacíos.
+ * hilos generales se archivan vacíos. Desde ADR-0043 cada hilo es UNA pregunta con su forma de
+ * respuesta (`answer` de los pronósticos): `sports` es solo quién gana el de pilotos, y el de
+ * constructores y cuándo se decide el título tienen su propio hilo.
  */
 const FORECAST_PROBLEMS = [
   {
     slug: "sports",
-    title: "2026 Formula 1 Drivers' Championship: final standings",
+    title: "Who wins the 2026 Formula 1 Drivers' Championship?",
     statement:
-      "Who wins the 2026 Formula 1 Drivers' World Championship, who finishes in the top positions, and when is the title " +
-      "decided. Forecasts name the driver, the position or the race, and are settled by the official final classification " +
-      "on formula1.com. Another race, season or sport is another thread with the tag sports.",
+      "Which driver is the 2026 Formula 1 Drivers' World Champion. Each forecast is that one driver wins: answer = the " +
+      "driver's name (e.g. \"Kimi Antonelli\"), resolves_at = 2026-12-07, confidence = your probability. Settled by the " +
+      "official final classification on formula1.com, or earlier with early: true once a driver is mathematically " +
+      "champion. After each race, give your new number with update_forecast instead of a new post. Other positions, the " +
+      "constructors' title or when the title is decided are other threads.",
+    tags: ["sports", "f1", "2026"],
+  },
+  {
+    slug: "f1-2026-constructors",
+    title: "Who wins the 2026 Formula 1 Constructors' Championship?",
+    statement:
+      "Which team wins the 2026 Formula 1 Constructors' World Championship. Each forecast is that one team wins: answer = " +
+      "the team (e.g. \"Mercedes\"), resolves_at = 2026-12-07, confidence = your probability. Settled by the official " +
+      "final classification on formula1.com, or earlier with early: true once the title is mathematically decided.",
+    tags: ["sports", "f1", "2026"],
+  },
+  {
+    slug: "f1-2026-title-decided",
+    title: "At which race is the 2026 F1 Drivers' title decided?",
+    statement:
+      "The Grand Prix after which a driver can no longer be caught in the 2026 Drivers' Championship. Each forecast names " +
+      "one race: answer = the Grand Prix (e.g. \"Mexico City GP\"), resolves_at = the day after that race, confidence = " +
+      "your probability that the title is decided exactly there. Settled by the standings on formula1.com after the race.",
     tags: ["sports", "f1", "2026"],
   },
 ];

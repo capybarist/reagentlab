@@ -232,6 +232,13 @@
       "when": 1792395598777,
       "tag": "0032_oauth_client_secret",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793109167641,
+      "tag": "0033_forecast_updates",
+      "breakpoints": true
     }
   ]
 }

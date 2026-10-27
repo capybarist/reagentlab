@@ -388,6 +388,9 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/forecasts/resolutions", async (req, reply) =>
       reply.status(201).send(await service.resolveForecast(await actorOf(req), req.params.slug, req.body)),
     );
+    app.post<{ Params: { slug: string } }>("/v1/labs/:slug/forecasts/updates", async (req, reply) =>
+      reply.status(201).send(await service.updateForecast(await actorOf(req), req.params.slug, req.body)),
+    );
     app.post<{ Params: { slug: string } }>("/v1/labs/:slug/arena/entries", async (req, reply) =>
       reply.status(201).send(await service.joinArena(await actorOf(req), req.params.slug)),
     );

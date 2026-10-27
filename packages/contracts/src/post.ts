@@ -109,6 +109,12 @@ export const HypothesisInput = z.object({
    * `confidence` pasa a ser la probabilidad de que ocurra. ISO 8601, con hora o solo fecha (UTC).
    */
   resolves_at: z.union([z.iso.datetime({ offset: true }), z.iso.date()]).optional(),
+  /**
+   * Solo en pronósticos que responden la pregunta del hilo (ADR-0043): la respuesta en pocas
+   * palabras ("Kimi Antonelli", "yes", "Mexico City GP"). Los pronósticos con la misma respuesta
+   * se suman en la probabilidad actual del hilo. Exige `scope: "full"`.
+   */
+  answer: z.string().trim().min(1).max(80).optional(),
 });
 
 /**

@@ -42,6 +42,9 @@ import {
   parseLabRules,
   SubmitVerificationInput,
   ResolveForecastInput,
+  UpdateForecastInput,
+  type ForecastConsensusView,
+  type ForecastUpdateResultView,
   type ForecastResultView,
   type ArtifactView,
   type VerificationResultView,
@@ -73,6 +76,7 @@ import {
   contextClaims,
   eligibleRefutations,
   refutableClaims,
+  refreshStatus,
   refutationState,
   rulingTasks,
   settleRefutation,
@@ -116,8 +120,8 @@ import { clip, hostJob, hostOutcome, hostRunSigningMessage, hostSkipReason, type
 import { sha256Hex } from "./hashing.js";
 import { DOWNLOAD_URL_TTL_SEC, UPLOAD_URL_TTL_SEC, artifactFilesIssue, requireStoredBlobs, type BlobStore } from "./blobs.js";
 import { artifactFilename } from "./sandbox.js";
-import { forecastDateIssue, resolutionBlock } from "./forecast.js";
-import { countResolvable, forecastTasks, maybeSettleForecast } from "./forecast-ops.js";
+import { forecastDateIssue, resolutionBlock, updateBlock } from "./forecast.js";
+import { countResolvable, forecastConsensus, forecastTasks, maybeSettleForecast } from "./forecast-ops.js";
 import { applyVerificationToSupport, countVerifiable, countedVerifications, kindOfClaim, maybeVerify, verificationTasks } from "./verification-ops.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -349,13 +353,20 @@ export class LabService {
   async getProblem(
     slug: string,
     problemSlug: string,
-  ): Promise<{ problem: ProblemView; digest: DigestView | null; digest_challenges: DigestChallengeView[] }> {
+  ): Promise<{
+    problem: ProblemView;
+    digest: DigestView | null;
+    digest_challenges: DigestChallengeView[];
+    forecast_consensus?: ForecastConsensusView;
+  }> {
     return this.store.read(async (r) => {
       const lab = await requireLab(r, slug);
       const p = await requireProblem(r, lab, problemSlug);
       const stats = (await r.problemStats(lab.id)).find((s) => s.problemId === p.id);
       const digest = await r.latestDigest(lab.id, p.id);
+      const consensus = await forecastConsensus(r, lab.id, p.id, parseLabRules(lab.rules));
       return {
+        ...(consensus ? { forecast_consensus: consensus } : {}),
         problem: toProblemView(p, lab.slug, stats, p.proposedByUserId ? await r.getUserHandle(p.proposedByUserId) : null),
         digest: digest ? toDigestView(digest, (await digestUpheld(r, digest)).length > 0) : null,
         // Las de este digest y las de los anteriores, para ver la historia del hilo (ADR-0037).
@@ -1086,6 +1097,28 @@ export class LabService {
             "Añade resolves_at (la fecha en que se sabrá si ocurrió) y pon en confidence tu probabilidad de que ocurra.",
           );
         }
+        // Un hilo, una pregunta (ADR-0043): la respuesta solo va en pronósticos que responden la pregunta del hilo.
+        if (input.type === "hypothesis" && input.answer !== undefined) {
+          if (!resolvesAt) {
+            throw new DomainError("VALIDATION_FAILED", "answer solo va en pronósticos: falta resolves_at.");
+          }
+          if (input.scope !== "full") {
+            throw new DomainError(
+              "VALIDATION_FAILED",
+              "Un pronóstico con answer responde la pregunta del hilo: pon scope \"full\".",
+            );
+          }
+        }
+        if (input.type === "hypothesis" && rules.require_forecasts && (input.scope !== "full" || !input.answer)) {
+          const others = (await r.listProblems(lab.id, ["active"])).filter((o) => o.id !== problem.id && o.status !== "green");
+          throw new DomainError(
+            "OFF_QUESTION",
+            `En esta sala cada pronóstico responde la pregunta de su hilo ("${problem.title}"): falta scope "full" con answer.`,
+            "Si responde esta pregunta, pon scope \"full\" y en answer la respuesta en pocas palabras. Si es otra pregunta, " +
+              "publícalo en su hilo (`other_problems`) o abre uno con propose_problem.",
+            { problem: problem.slug, other_problems: others.map((o) => ({ slug: o.slug, title: o.title })) },
+          );
+        }
 
         if (!ROLE_POST_TYPES[turn.role].includes(input.type)) {
           throw new DomainError(
@@ -1221,6 +1254,7 @@ export class LabService {
               }
             : null,
           resolvesAt,
+          answer: isHypothesis && input.answer ? sanitizeUntrusted(input.answer) : null,
           agentSignature,
           createdAt: now,
         };
@@ -1495,7 +1529,8 @@ export class LabService {
       }
       const party = partyOf(actor, rules.independence);
       const before = await r.listForecastResolutionsForClaims([claim.id]);
-      const block = resolutionBlock(claim, party, before.map((x) => x.party), now);
+      // Antes de la fecha, con early o si otra parte ya lo resolvió antes de tiempo (ADR-0043).
+      const block = resolutionBlock(claim, party, before.map((x) => x.party), now, input.early || before.length > 0);
       if (block === "not_a_forecast") {
         throw new DomainError("NOT_A_FORECAST", `El claim ${input.claim_seq} no es un pronóstico: no tiene resolves_at.`);
       }
@@ -1503,6 +1538,7 @@ export class LabService {
         throw new DomainError(
           "FORECAST_NOT_DUE",
           `El pronóstico ${input.claim_seq} vence el ${claim.resolvesAt!.toISOString()}: todavía no se puede resolver.`,
+          "Si el resultado ya es seguro (por ejemplo, un campeón matemático), resuélvelo con early: true y una fuente que lo muestre.",
         );
       }
       if (block === "resolved") {
@@ -1539,17 +1575,106 @@ export class LabService {
           claim_seq: claim.originSeq,
           problem: problem.slug,
           outcome: input.outcome,
+          ...(input.early ? { early: true } : {}),
           agent_name: actor.agentName,
           model_family: actor.modelFamily,
         },
         public: true,
       });
-      await maybeSettleForecast(r, lab, rules, claim, now, actor.agentId);
+      if (await maybeSettleForecast(r, lab, rules, claim, now, actor.agentId)) await refreshStatus(r, lab, claim.problemId);
       await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
 
       const [after] = await r.listClaimDetails(lab.id, { seqs: [claim.originSeq], limit: 1 });
       const [view] = await claimViews(r, after ? [after] : [], rules);
       return { claim: view! };
+    });
+  }
+
+  /**
+   * Probabilidad nueva para un pronóstico abierto (ADR-0043). Cualquier rol y cualquier parte,
+   * también la del autor: así el número del hilo sigue a lo que pasa sin otra hipótesis. Una
+   * por parte, pronóstico y turno.
+   */
+  async updateForecast(actor: Actor, slug: string, raw: unknown): Promise<ForecastUpdateResultView> {
+    const parsed = UpdateForecastInput.safeParse(raw);
+    if (!parsed.success) throw validationError(parsed.error);
+    const input = parsed.data;
+    const now = this.clock.now();
+
+    return this.store.transaction(async (r) => {
+      const lab = await requireLab(r, slug, true);
+      const rules = parseLabRules(lab.rules);
+      const { turn, problem } = await requireProblemTurn(r, lab, actor, now);
+      const [claim] = await r.getClaimsBySeq(lab.id, [input.claim_seq]);
+      if (!claim || claim.problemId !== problem.id) {
+        throw new DomainError(
+          "CLAIM_NOT_FOUND",
+          `El post ${input.claim_seq} no es un claim del problema "${problem.slug}".`,
+          "Usa el seq de un pronóstico del hilo de tu turno (forecast_consensus o claims del paquete de contexto).",
+        );
+      }
+      const block = updateBlock(claim, now);
+      if (block === "not_a_forecast") {
+        throw new DomainError("NOT_A_FORECAST", `El claim ${input.claim_seq} no es un pronóstico: no tiene resolves_at.`);
+      }
+      if (block === "resolved") {
+        throw new DomainError("FORECAST_RESOLVED", `El pronóstico ${input.claim_seq} ya está resuelto (${claim.resolution}).`);
+      }
+      if (block === "past_due") {
+        throw new DomainError(
+          "FORECAST_DUE",
+          `El pronóstico ${input.claim_seq} ya venció: ahora se resuelve, no se actualiza.`,
+        );
+      }
+      const party = partyOf(actor, rules.independence);
+      const reasoning = sanitizeUntrusted(input.reasoning);
+      const inserted = await r.insertForecastUpdate({
+        labId: lab.id,
+        claimId: claim.id,
+        claimSeq: claim.originSeq,
+        turnId: turn.id,
+        agentId: actor.agentId,
+        userId: actor.userId,
+        party,
+        probability: input.probability,
+        reasoning,
+        createdAt: now,
+      });
+      if (!inserted) {
+        throw new DomainError(
+          "ALREADY_UPDATED",
+          `Tu parte ya puso cifra al pronóstico ${input.claim_seq} en este turno.`,
+          "Vuelve a ponerla en otro turno si algo cambia.",
+        );
+      }
+      await r.insertEvent({
+        labId: lab.id,
+        kind: "forecast.updated",
+        actorAgentId: actor.agentId,
+        payload: {
+          claim_seq: claim.originSeq,
+          problem: problem.slug,
+          probability: input.probability,
+          agent_name: actor.agentName,
+          model_family: actor.modelFamily,
+        },
+        public: true,
+      });
+      await refreshStatus(r, lab, claim.problemId);
+      await r.updateTurn(turn.id, { leaseExpiresAt: lease(now, rules) });
+
+      const [after] = await r.listClaimDetails(lab.id, { seqs: [claim.originSeq], limit: 1 });
+      const [view] = await claimViews(r, after ? [after] : [], rules);
+      return {
+        claim: view!,
+        update: {
+          claim_seq: claim.originSeq,
+          agent: { name: actor.agentName, model_family: actor.modelFamily },
+          probability: input.probability,
+          at: now.toISOString(),
+          untrusted_reasoning: reasoning,
+        },
+      };
     });
   }
 
@@ -2487,6 +2612,7 @@ export class LabService {
         turn.role === "verifier"
           ? await forecastTasks(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id)
           : [],
+      ...(await contextConsensus(r, lab.id, problem.id, rules)),
       digest_challenges: await contextChallenges(r, turn.role, digest, rules, partyOf(actor, rules.independence), problem.slug),
       // Todos los polls abiertos de la sala, primero los del hilo del turno (ADR-0030).
       open_polls: await labPollsFirstHere(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id),
@@ -2871,4 +2997,15 @@ function toFeedItem(r: SitePostRow): FeedItem {
     problem: r.post.problemSlug ? { slug: r.post.problemSlug, title: r.problemTitle ?? r.post.problemSlug } : null,
     post: toPostView(r.post),
   };
+}
+
+/** La probabilidad actual del hilo en el paquete de contexto, si tiene pronósticos con respuesta (ADR-0043). */
+async function contextConsensus(
+  r: Repos,
+  labId: string,
+  problemId: string,
+  rules: LabRules,
+): Promise<{ forecast_consensus?: ForecastConsensusView }> {
+  const view = await forecastConsensus(r, labId, problemId, rules);
+  return view ? { forecast_consensus: view } : {};
 }

@@ -19,7 +19,7 @@ import type {
   DigestChallengeRow,
 } from "@reagentlab/core";
 import type { ArenaRoundResult, CanaryResult, ClaimStatus, Evidence, PollResult, Role } from "@reagentlab/contracts";
-import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Db } from "./connection.js";
 import {
@@ -45,6 +45,8 @@ import {
   reputationEvents,
   verifications,
   forecastResolutions,
+  forecastScores,
+  forecastUpdates,
   refutations,
   rulings,
   turns,
@@ -138,6 +140,7 @@ function toPost(r: {
     importedFrom: p.importedFrom ?? null,
     artifact: p.artifact ?? null,
     resolvesAt: p.resolvesAt ?? null,
+    answer: p.answer ?? null,
     agentSignature: p.agentSignature ?? null,
     createdAt: p.createdAt,
   };
@@ -833,6 +836,26 @@ function makeRepos(db: Db): Repos {
       return rows.map((r) => ({ ...r.v, agentName: r.agentName, modelFamily: r.modelFamily }));
     },
 
+    async insertForecastUpdate(v) {
+      const rows = await db.insert(forecastUpdates).values(v).onConflictDoNothing().returning({ id: forecastUpdates.id });
+      return rows.length > 0;
+    },
+
+    async listForecastUpdatesForClaims(claimIds) {
+      if (!claimIds.length) return [];
+      const rows = await db
+        .select({ v: forecastUpdates, agentName: agents.name, modelFamily: agents.modelFamily })
+        .from(forecastUpdates)
+        .innerJoin(agents, eq(agents.id, forecastUpdates.agentId))
+        .where(inArray(forecastUpdates.claimId, claimIds))
+        .orderBy(asc(forecastUpdates.createdAt));
+      return rows.map((r) => ({ ...r.v, agentName: r.agentName, modelFamily: r.modelFamily }));
+    },
+
+    async insertForecastScores(rows) {
+      if (rows.length) await db.insert(forecastScores).values(rows).onConflictDoNothing();
+    },
+
     async listDueForecastSeqs(labId, now, problemId) {
       const rows = await db
         .select({ seq: claims.originSeq })
@@ -843,7 +866,11 @@ function makeRepos(db: Db): Repos {
             eq(claims.labId, labId),
             sql`${posts.hiddenAt} IS NULL`,
             sql`${claims.resolution} IS NULL`,
-            lte(claims.resolvesAt, now),
+            // Vencidos, o que alguien ya resolvió antes de la fecha (ADR-0043).
+            or(
+              lte(claims.resolvesAt, now),
+              sql`EXISTS (SELECT 1 FROM ${forecastResolutions} fr WHERE fr.claim_id = ${claims.id})`,
+            ),
             problemId ? eq(claims.problemId, problemId) : undefined,
           ),
         )
@@ -1349,12 +1376,17 @@ function makeRepos(db: Db): Repos {
             FROM ${rulings} x JOIN rf ON rf.id = x.refutation_id JOIN fam g ON g.agent_id = x.agent_id GROUP BY g.family
           ),
           v AS (SELECT g.family, count(*) AS n FROM ${verifications} x JOIN fam g ON g.agent_id = x.agent_id GROUP BY g.family),
-          fc AS (
-            SELECT g.family, count(*) AS n,
-              avg(power(x.probability - CASE WHEN x.resolution = 'yes' THEN 1 ELSE 0 END, 2)) AS brier
-            FROM ${claims} x JOIN op ON op.id = x.origin_post_id JOIN fam g ON g.agent_id = x.author_agent_id
-            WHERE x.resolution IN ('yes', 'no') AND x.probability IS NOT NULL GROUP BY g.family
-          )
+          -- Brier por parte y ponderado por el tiempo (ADR-0043); los resueltos antes, con la cifra del autor.
+          sc AS (
+            SELECT s.agent_id, s.brier
+            FROM ${forecastScores} s JOIN ${claims} x ON x.id = s.claim_id JOIN op ON op.id = x.origin_post_id
+            UNION ALL
+            SELECT x.author_agent_id, power(x.probability - CASE WHEN x.resolution = 'yes' THEN 1 ELSE 0 END, 2)
+            FROM ${claims} x JOIN op ON op.id = x.origin_post_id
+            WHERE x.resolution IN ('yes', 'no') AND x.probability IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM ${forecastScores} s WHERE s.claim_id = x.id)
+          ),
+          fc AS (SELECT g.family, count(*) AS n, avg(sc.brier) AS brier FROM sc JOIN fam g ON g.agent_id = sc.agent_id GROUP BY g.family)
           SELECT people.family, people.agents, people.people,
             coalesce(p.n, 0) AS posts, coalesce(c.n, 0) AS claims, coalesce(c.adopted, 0) AS claims_adopted,
             coalesce(c.verified, 0) AS claims_verified, coalesce(c.refuted, 0) AS claims_refuted,

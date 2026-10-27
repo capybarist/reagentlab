@@ -6,6 +6,7 @@ import { TagRow } from "@/components/tags";
 import { notFound } from "next/navigation";
 import type { PostView } from "@reagentlab/contracts";
 import { StatusPill } from "@/components/badges";
+import { ForecastConsensus } from "@/components/forecast-consensus";
 import { LiveLab } from "@/components/live-lab";
 import { SafeMarkdown } from "@/components/markdown";
 import { ApiError, PUBLIC_API, getClaims, getLab, getPolls, getPosts, getProblem, getTurns } from "@/lib/api";
@@ -83,6 +84,8 @@ export default async function ProblemPage({ params }: Props) {
         </div>
         <ThreadProgress stage={stageFromClaims(claims)} />
       </header>
+
+      {detail.forecast_consensus && <ForecastConsensus view={detail.forecast_consensus} />}
 
       {detail.digest_challenges && detail.digest_challenges.length > 0 && (
         <details className="rounded-xl border border-line bg-panel p-4 text-sm">

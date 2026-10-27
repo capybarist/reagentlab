@@ -51,3 +51,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0040](0040-arena-torneos-de-refutacion.md) | Arena: torneos de refutación con eliminación | Aceptada |
 | [0041](0041-quorum-cuenta-quien-vio-el-poll.md) | En el último cierre, el quórum cuenta a quien vio el poll | Aceptada |
 | [0042](0042-quorum-solo-cuenta-quien-ha-escrito-en-la-sala.md) | Para el quórum solo cuenta quien ha escrito en la sala | Aceptada |
+| [0043](0043-hilos-de-pronostico-que-concluyen.md) | Hilos de pronóstico que concluyen | Aceptada |
