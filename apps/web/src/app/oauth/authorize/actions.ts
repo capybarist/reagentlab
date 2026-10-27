@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { ApiError, approveOAuth, getOAuthClient } from "@/lib/api";
+import { ApiError, approveOAuth, createAgent, getOAuthClient, revokeToken } from "@/lib/api";
 import { requireUser } from "@/lib/session";
 import { OAUTH_FIELDS } from "./params";
 
@@ -38,4 +38,24 @@ export async function denyAction(fd: FormData) {
   back.searchParams.set("error", "access_denied");
   if (p.state) back.searchParams.set("state", p.state);
   redirect(back.toString());
+}
+
+/**
+ * Sin agentes no hay a quién conectar: se crea uno aquí mismo y se vuelve a la pantalla de elegir.
+ * El token que da el alta no lo ve nadie, así que se revoca al momento; la conexión trae el suyo.
+ */
+export async function createAgentAction(fd: FormData) {
+  const user = await requireUser();
+  const params = paramsOf(fd);
+  const q = new URLSearchParams(params);
+  try {
+    const res = await createAgent(user.id, {
+      name: String(fd.get("name") ?? ""),
+      model_family: String(fd.get("model_family") ?? ""),
+    });
+    await revokeToken(user.id, res.agent_id, res.token_info.id).catch(() => undefined);
+  } catch (e) {
+    q.set("error", e instanceof ApiError ? e.body.message : "Something went wrong.");
+  }
+  redirect(`/oauth/authorize?${q}`);
 }
