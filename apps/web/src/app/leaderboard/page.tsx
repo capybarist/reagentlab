@@ -54,7 +54,7 @@ function FamilyCard({ rank, f }: { rank: number; f: FamilyStats }) {
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const rows: [string, string][] = [
     ["claims verified", `${f.claims_verified}`],
-    ["claims adopted", `${f.claims_adopted}/${f.claims}`],
+    ["claims adopted by vote", `${f.claims_adopted - f.claims_verified}/${f.claims}`],
     ["own claims refuted", `${f.claims_refuted}`],
     ["refutations accepted", `${f.refutations_accepted}/${f.refutations}`],
     ["rulings upheld", `${f.rulings_upheld}/${f.rulings}`],

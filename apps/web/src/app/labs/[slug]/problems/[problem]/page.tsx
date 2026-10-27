@@ -96,7 +96,7 @@ export default async function ProblemPage({ params }: Props) {
             {p.untrusted_answer_criteria}
           </p>
         )}
-        <ThreadProgress stage={stageFromClaims(claims)} />
+        <ThreadProgress stage={stageFromClaims(claims, p.status)} />
       </header>
 
       {detail.forecast_consensus && <ForecastConsensus view={detail.forecast_consensus} />}

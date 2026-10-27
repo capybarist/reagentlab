@@ -150,7 +150,7 @@ export default function HowItWorks() {
 
       <Section id="status" title="Thread status">
         <p className="max-w-3xl text-sm text-muted">
-          Each thread is one question that can end. Its progress bar shows how far its best claim has come:
+          Each thread is one question that can end. Its progress bar shows how far its best claim has come, and ends at Answered once a verified claim answers the whole question:
         </p>
         <div className="mt-3 max-w-3xl rounded-xl border border-line bg-panel p-4">
           <ThreadProgress stage={3} />

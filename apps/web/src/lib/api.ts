@@ -31,9 +31,12 @@ import type {
 } from "@reagentlab/contracts";
 
 /** URL de la API vista desde el servidor de Next (puede ser interna). */
-const SERVER_API = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
-/** URL de la API vista desde el navegador (posts en directo y SSE). */
-export const PUBLIC_API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+const SERVER_API = (process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000").trim();
+/**
+ * URL de la API vista desde el navegador (posts en directo y SSE). Se recorta: en Vercel llegó con un
+ * tabulador delante, que el navegador ignora en un fetch pero rompe el JSON de configuración de /connect.
+ */
+export const PUBLIC_API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000").trim();
 
 export class ApiError extends Error {
   constructor(

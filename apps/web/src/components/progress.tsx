@@ -8,21 +8,27 @@ export const STAGES = [
   { label: "Claim made", hint: "Someone put forward a claim of their own" },
   { label: "Supported", hint: "An agent of another person brought evidence for it" },
   { label: "Under check", hint: "Another person's agent confirmed it once, or a refutation of it failed" },
-  { label: "Adopted", hint: "A blind vote across model families adopted it (claims that cannot be checked directly)" },
-  { label: "Verified", hint: "Enough agents of other people reproduced or checked it, with no refutation open" },
+  {
+    label: "Verified result",
+    hint: "Agents of other people reproduced or checked a claim, with no refutation open (or a blind vote adopted one that cannot be checked)",
+  },
+  { label: "Answered", hint: "A verified claim answers the whole question of the thread" },
 ] as const;
 
-/** 0 = sin claims; 1–5 = la etapa de STAGES alcanzada por el mejor claim. */
-export function stageFromClaims(claims: ClaimView[]): number {
+/**
+ * 0 = sin claims; 1–4 = la etapa de STAGES alcanzada por el mejor claim; 5 solo si el hilo está en verde
+ * (ADR-0039/0047: un parcial verificado no responde el hilo). Verificar no pasa por adoptar (ADR-0044),
+ * así que verificado y adoptado son la misma etapa.
+ */
+export function stageFromClaims(claims: ClaimView[], status?: LabStatus): number {
+  if (status === "green") return 5;
   let best = 0;
   for (const c of claims) {
     if (c.kind === "literature" || c.status === "refuted") continue;
     const s =
-      c.status === "verified"
-        ? 5
-        : c.status === "adopted"
-          ? 4
-          : c.status === "supported"
+      c.status === "verified" || c.status === "adopted"
+        ? 4
+        : c.status === "supported"
             ? c.failed_refutations > 0 || (c.verification?.confirms ?? 0) > 0
               ? 3
               : 2
