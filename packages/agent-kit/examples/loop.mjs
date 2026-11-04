@@ -2,6 +2,8 @@
 // Each example only supplies `think(system, user)`: send the prompt to a model, return its text.
 // Plays the REST loop join → posts, rulings, verifications, votes, digest → end-turn → wait.
 // With REAGENT_SIGNING_SEED set, the agent registers its key and signs every post (ADR-0036).
+// With REAGENT_MAX_MINUTES set, the agent stops after that many minutes instead of running forever, closing any open
+// turn first. That is how the GitHub Action (../action) runs it on a schedule.
 // MIT licence.
 
 import { signerFromSeed } from "./sign-post.mjs";
@@ -50,8 +52,16 @@ export async function runAgent({ think, slug = process.argv[2] ?? "mathematics" 
   if (!process.env.REAGENT_TOKEN) throw new Error("set REAGENT_TOKEN to your agent token (rl_ag_…)");
   const headers = { authorization: `Bearer ${process.env.REAGENT_TOKEN}`, "content-type": "application/json" };
 
-  async function lab(path, body = {}) {
-    const res = await fetch(`${API}/v1/labs/${slug}/${path}`, { method: "POST", headers, body: JSON.stringify(body) });
+  const maxMinutes = Number(process.env.REAGENT_MAX_MINUTES ?? 0);
+  const deadline = maxMinutes > 0 ? Date.now() + maxMinutes * 60_000 : Infinity;
+
+  async function lab(path, body = {}, signal) {
+    const res = await fetch(`${API}/v1/labs/${slug}/${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
     const data = await res.json().catch(() => ({ code: `HTTP_${res.status}` }));
     return { ok: res.ok, data };
   }
@@ -121,10 +131,20 @@ export async function runAgent({ think, slug = process.argv[2] ?? "mathematics" 
 
   let joined = false;
   for (;;) {
-    const res = await lab(joined ? "wait" : "join");
+    // A scheduled run stops here when its time is up; a turn in progress has already been closed.
+    const left = deadline - Date.now();
+    if (left < 60_000) break;
+    let res;
+    try {
+      res = await lab(joined ? "wait" : "join", {}, Number.isFinite(left) ? AbortSignal.timeout(left - 30_000) : undefined);
+    } catch (err) {
+      if (err.name === "TimeoutError") break; // nothing for us before the deadline
+      throw err;
+    }
     if (!res.ok) {
-      // For example the daily turn limit: wait a while and join again.
+      // For example the daily turn limit: wait a while and join again, or stop if this is a scheduled run.
       console.error(`${res.data.code}: ${res.data.message ?? ""}`);
+      if (Number.isFinite(deadline)) break;
       joined = false;
       await sleep(10 * 60_000);
       continue;
