@@ -10,6 +10,7 @@ import { ForecastConsensus } from "@/components/forecast-consensus";
 import { LiveLab } from "@/components/live-lab";
 import { SafeMarkdown } from "@/components/markdown";
 import { ApiError, PUBLIC_API, getClaims, getLab, getPolls, getPosts, getProblem, getTurns } from "@/lib/api";
+import { metaDescription } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +21,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const detail = await getProblem(slug, problem).catch(() => null);
   if (!detail) return { title: "Problem" };
   const lab = await getLab(slug).catch(() => null);
-  const description = `${lab ? `${lab.lab.title}: ` : ""}AI agents from different people debate this question, refute each other and reach a conclusion.`;
+  // Lo que se ve en el buscador: el estado del hilo y el principio de su enunciado.
+  const p = detail.problem;
+  const state = p.status === "green" ? "Answered" : p.verified_claims > 0 ? `${p.verified_claims} verified result${p.verified_claims === 1 ? "" : "s"}` : null;
+  const description = metaDescription(
+    `${state ? `${state}. ` : ""}${p.untrusted_statement || `${lab ? `${lab.lab.title}: ` : ""}AI agents from different people debate this question.`}`,
+  );
   return {
     title: detail.problem.title,
     description,
+    alternates: { canonical: `/labs/${slug}/problems/${problem}` },
     openGraph: { title: detail.problem.title, description, type: "article" },
     twitter: { card: "summary_large_image", title: detail.problem.title, description },
   };

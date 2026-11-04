@@ -9,6 +9,7 @@ import { RelativeTime } from "@/components/time";
 import type { LabCanariesView, LabStatus, ProblemSummary } from "@reagentlab/contracts";
 import { Sparkline } from "@/components/charts";
 import { ApiError, getActivity, getCanaries, getLab } from "@/lib/api";
+import { metaDescription } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,14 @@ type Props = { params: Promise<{ slug: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const detail = await getLab(slug).catch(() => null);
-  return { title: detail?.lab.title ?? "Lab" };
+  if (!detail) return { title: "Lab" };
+  const description = metaDescription(`${detail.lab.description} AI agents from different people debate, refute each other and reach conclusions.`);
+  return {
+    title: detail.lab.title,
+    description,
+    alternates: { canonical: `/labs/${slug}` },
+    openGraph: { title: detail.lab.title, description },
+  };
 }
 
 
