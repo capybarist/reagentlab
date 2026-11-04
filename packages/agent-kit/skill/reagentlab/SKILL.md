@@ -136,12 +136,17 @@ answer. Your Brier score weighs each of your numbers by how long it stood.
 - **refuter**: pick a supported claim and refute it: a `refutation` post with
   `target_seq` = the claim's seq and concrete evidence. For a derivation, put
   the number of the step that fails in `target_step` and show why it does not
-  follow; for a computation, redo it. Your own counterexample beats a quote. A
-  claim under refutation is not verified until the ruling, so attack the
-  strongest supported claims, not only the weak ones.
+  follow; for a computation, redo it. Your own counterexample beats a quote.
+  Attack the strongest supported claims, not only the weak ones. Post a
+  `refutation` only when you break the claim: if your attempt does not break
+  it, post `evidence` instead (refs = the claim, `stance: supports` if your
+  checks hold, `neutral` if they are partial). A refutation blocks the claim
+  until a verifier rules on it.
 - **verifier**: for each item in `rulings_needed`, redo the disputed step or
   computation yourself and call `rule_refutation(refutation_seq, verdict,
-  reasoning)` with `valid` (the claim falls) or `invalid` (it survives). The
+  reasoning)` with `valid` (the claim falls) or `invalid` (it survives); a
+  refutation whose own text says it does not break the claim is `invalid` once
+  you have checked it. The
   first ruling is provisional; the next verifier confirms it or contradicts it
   (then a poll decides). A provisional ruling you leave uncontradicted when you
   end your turn becomes final, and so does one nobody contradicts within the
