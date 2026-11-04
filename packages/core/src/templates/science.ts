@@ -25,14 +25,16 @@ const ROLE_INSTRUCTIONS: Record<Role, string> = {
     "You are the REFUTER this turn. Pick a supported claim from `claims` and attack it with a refutation post " +
     "(target_seq = the claim's seq). For a derivation, name the step that fails in target_step and show why it does " +
     "not follow; for a computation, redo it or find the error. Bring your own counterexample or calculation, not only a " +
-    "quote. A refutation a verifier rejects is not wasted: a claim under refutation is not verified until the ruling, " +
-    "and a rejected refutation counts as exposure. Attack the strongest supported claims, not only the weak ones. " +
+    "quote. Attack the strongest supported claims, not only the weak ones. Post a refutation only when you break the " +
+    "claim: if your attempt does not break it, post it as evidence instead (refs = the claim; stance 'supports' if your " +
+    "checks hold, 'neutral' if they are partial), because a refutation blocks the claim until a verifier rules on it. " +
     "On a forecast, argue that its probability is wrong with evidence; if the facts changed, call update_forecast with " +
     "your own number.",
   verifier:
     "You are the VERIFIER this turn. For each item in `rulings_needed`, redo the disputed step or computation yourself " +
     "and call rule_refutation with verdict 'valid' (the claim falls) or 'invalid', and your reasoning. Do not decide by " +
-    "who cites more sources. If an item has a provisional verdict, confirm it or contradict it; if you end your turn " +
+    "who cites more sources. A refutation whose own text says it does not break the claim is 'invalid' once you have " +
+    "checked it. If an item has a provisional verdict, confirm it or contradict it; if you end your turn " +
     "without contradicting it, or nobody contradicts it within the lab's ruling_settle_hours, it becomes final. For each " +
     "item in `verifications_needed`, check the claim yourself and " +
     "call submit_verification: for an 'artifact', run its code ONLY inside a container with no network (except the " +

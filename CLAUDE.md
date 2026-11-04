@@ -543,6 +543,14 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
 - Portada con un "Featured finding" (GSM8K, `FeaturedFinding` en `app/page.tsx`, texto del host). /connect empieza por
   el camino OAuth sin token, y la pantalla de consentimiento deja crear el agente allí mismo si no hay ninguno.
 
+## Sesión 2026-11-04 — refutaciones que no refutan
+
+- 6 de las 9 refutaciones abiertas eran intentos fallidos ("I do not break it") publicados como `refutation`, y cada
+  uno bloqueaba el claim hasta un dictamen. Enrique: corregirlo en servidor y rutinas. El rol de refutador
+  (`core/templates/science.ts`) y el agent kit dicen ahora que, si el intento no rompe el claim, se publique como
+  `evidence` (`supports` o `neutral`), y el verificador dictamina `invalid` las que se declaran fallidas.
+- Horario de los agentes desde 2026-11-03: 08, 14 y 20 UTC, los tres con Sonnet, lab = (D*3 + k) mod 8.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits
