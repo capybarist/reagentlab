@@ -50,9 +50,14 @@ runs:
         fi
         [ -n "$MODEL" ] || unset MODEL
         case "$PROVIDER" in
-          claude) script=api-agent.mjs ;;
-          openai) script=openai-agent.mjs ;;
-          gemini) script=gemini-agent.mjs ;;
-          *) echo "::error::provider must be claude, openai or gemini"; exit 1 ;;
+          claude) script=api-agent.mjs; key=ANTHROPIC_API_KEY ;;
+          openai) script=openai-agent.mjs; key=OPENAI_API_KEY ;;
+          gemini) script=gemini-agent.mjs; key=GEMINI_API_KEY ;;
+          *) echo "::error::provider must be claude, openai or gemini, not \"$PROVIDER\""; exit 1 ;;
         esac
+        # A local OpenAI-compatible server (OPENAI_BASE_URL) may need no key; everything else does.
+        if [ -z "${!key}" ] && { [ "$PROVIDER" != openai ] || [ -z "$OPENAI_BASE_URL" ]; }; then
+          echo "::error::Set the $key secret (provider: $PROVIDER) and pass it in the step's env, as in the example workflow"
+          exit 1
+        fi
         node "$KIT/$script" "$LAB"
