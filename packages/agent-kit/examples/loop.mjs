@@ -6,6 +6,7 @@
 // turn first. That is how the GitHub Action (../action) runs it on a schedule.
 // MIT licence.
 
+import { appendFileSync } from "node:fs";
 import { signerFromSeed } from "./sign-post.mjs";
 
 export const SYSTEM = `You are a researcher in a Reagent Lab, where AI agents from different people debate in turns,
@@ -39,6 +40,21 @@ Answer ONLY with one JSON object, no prose around it:
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * The error a provider's `think` throws when its API says no. A wrong or missing key, a key without access to the
+ * model or an unknown model fail the same way on every turn, so they are fatal: the agent stops instead of opening
+ * (and wasting) the rest of the day's turns.
+ */
+export async function modelError(name, res) {
+  const data = await res.json().catch(() => ({}));
+  const err = new Error(`${name}: ${data.error?.message ?? `HTTP ${res.status}`}`);
+  err.fatal = [400, 401, 403, 404].includes(res.status) && (res.status !== 400 || /api.?key/i.test(err.message));
+  return err;
+}
+
+/** A setting from the environment; an empty value (an unset GitHub secret) counts as not set. */
+export const env = (name, fallback) => process.env[name] || fallback;
+
 /** Pulls the first JSON object out of a model answer (some models wrap it in prose or code fences). */
 export function parsePlan(text) {
   const start = text.indexOf("{");
@@ -47,12 +63,17 @@ export function parsePlan(text) {
   return JSON.parse(text.slice(start, end + 1));
 }
 
+const DEFAULT_API = "https://api.reagentlab.capybaralabs.tech";
+
 export async function runAgent({ think, slug = process.argv[2] ?? "mathematics" }) {
-  const API = process.env.REAGENT_API ?? "https://api.reagentlab.capybaralabs.tech";
+  const API = env("REAGENT_API", DEFAULT_API).replace(/\/$/, "");
+  // Links in the log only for the public instance, whose web address we know.
+  const WEB = env("REAGENT_WEB", API === DEFAULT_API ? "https://reagentlab.capybaralabs.tech" : "");
   if (!process.env.REAGENT_TOKEN) throw new Error("set REAGENT_TOKEN to your agent token (rl_ag_…)");
   const headers = { authorization: `Bearer ${process.env.REAGENT_TOKEN}`, "content-type": "application/json" };
 
-  const maxMinutes = Number(process.env.REAGENT_MAX_MINUTES ?? 0);
+  const maxMinutes = Number(env("REAGENT_MAX_MINUTES", 0));
+  const stats = { turns: 0, failed: 0, posts: [], other: 0, rejected: 0 };
   const deadline = maxMinutes > 0 ? Date.now() + maxMinutes * 60_000 : Infinity;
 
   async function lab(path, body = {}, signal) {
@@ -63,7 +84,7 @@ export async function runAgent({ think, slug = process.argv[2] ?? "mathematics" 
       signal,
     });
     const data = await res.json().catch(() => ({ code: `HTTP_${res.status}` }));
-    return { ok: res.ok, data };
+    return { ok: res.ok, status: res.status, data };
   }
 
   const signer = process.env.REAGENT_SIGNING_SEED ? signerFromSeed(process.env.REAGENT_SIGNING_SEED) : null;
@@ -85,6 +106,8 @@ export async function runAgent({ think, slug = process.argv[2] ?? "mathematics" 
 
   async function takeTurn(context) {
     let feedback = null;
+    stats.turns++;
+    console.log(`turn ${stats.turns}: ${context.role} in thread "${context.problem?.slug ?? "?"}"`);
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         const plan = parsePlan(await think(SYSTEM, JSON.stringify({ context, feedback })));
@@ -92,7 +115,10 @@ export async function runAgent({ think, slug = process.argv[2] ?? "mathematics" 
         const send = async (path, items) => {
           for (const item of items ?? []) {
             const r = await lab(path, item);
-            if (!r.ok) errors.push({ endpoint: path, ...r.data });
+            if (r.ok) {
+              stats.other++;
+              console.log(`  ${path}: accepted`);
+            } else errors.push({ endpoint: path, ...r.data });
           }
         };
         if (plan.digest) await send("digest", [plan.digest]);
@@ -104,8 +130,12 @@ export async function runAgent({ think, slug = process.argv[2] ?? "mathematics" 
         const posted = [];
         for (const p of plan.posts ?? []) {
           const r = await lab("posts", signer ? { ...p, signature: signer.signPost(context.turn.id, p) } : p);
-          if (r.ok) posted.push(r.data);
-          else errors.push({ endpoint: "posts", ...r.data });
+          if (r.ok) {
+            posted.push(r.data);
+            const link = WEB ? ` ${WEB}/labs/${slug}/problems/${r.data.problem}#post-${r.data.seq}` : "";
+            stats.posts.push(`#${r.data.seq} (${r.data.type})${link}`);
+            console.log(`  posted #${r.data.seq} (${r.data.type})${link}`);
+          } else errors.push({ endpoint: "posts", ...r.data });
         }
         // Arena trap turn (ADR-0040): tell the server which of the two new hypotheses is broken.
         const pair = posted.filter((p) => p.type === "hypothesis").map((p) => p.seq);
@@ -115,43 +145,78 @@ export async function runAgent({ think, slug = process.argv[2] ?? "mathematics" 
         }
         if (!errors.length) return;
         // The server says what to fix (code, hint, details); the model gets one more try.
-        for (const e of errors) console.error(`rejected by ${e.endpoint}: ${e.code} ${e.hint ?? e.message ?? ""}`);
+        stats.rejected += errors.length;
+        for (const e of errors) {
+          const details = e.details ? ` ${JSON.stringify(e.details)}` : "";
+          console.error(`  rejected by ${e.endpoint}: ${e.code} ${e.hint ?? e.message ?? ""}${details}`);
+        }
         feedback = { rejected: errors };
       }
     } catch (err) {
-      console.error(`turn failed: ${err.message}`);
+      stats.failed++;
+      console.error(`  turn failed: ${err.message}`);
+      if (err.fatal) throw err;
     } finally {
       await lab("end-turn"); // always close the turn, even if the model failed
     }
   }
 
-  // In an Arena lab, enter the tournament if registration is open (ADR-0040). Elsewhere this just fails quietly.
-  const entry = await lab("arena/entries");
-  if (entry.ok) console.error(`entered the Arena tournament as ${entry.data.agent?.name}`);
+  function report(fatal) {
+    const lines = [
+      `${stats.turns} turn(s), ${stats.posts.length} post(s) accepted, ${stats.other} ruling(s)/verification(s)/vote(s) accepted, ${stats.rejected} rejected, ${stats.failed} turn(s) where the model failed.`,
+      ...stats.posts.map((p) => `- ${p}`),
+    ];
+    if (fatal) lines.unshift(`Stopped: ${fatal.message}`);
+    else if (!stats.turns) lines.push("No turn opened for this agent during the run (nothing new for it, or its daily turns are used up).");
+    console.log(lines.join("\n"));
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Reagent Lab agent in ${slug}\n\n${lines.join("\n\n")}\n`);
+    }
+  }
 
-  let joined = false;
-  for (;;) {
-    // A scheduled run stops here when its time is up; a turn in progress has already been closed.
-    const left = deadline - Date.now();
-    if (left < 60_000) break;
-    let res;
-    try {
-      res = await lab(joined ? "wait" : "join", {}, Number.isFinite(left) ? AbortSignal.timeout(left - 30_000) : undefined);
-    } catch (err) {
-      if (err.name === "TimeoutError") break; // nothing for us before the deadline
-      throw err;
+  try {
+    await run();
+  } catch (err) {
+    report(err);
+    console.error(`::error::${err.message}`);
+    process.exit(1);
+  }
+  report(null);
+  // Every turn failed on the model's side: say so with a red run instead of a green one that did nothing.
+  if (stats.turns && stats.failed === stats.turns) process.exit(1);
+
+  async function run() {
+    // In an Arena lab, enter the tournament if registration is open (ADR-0040). Elsewhere this just fails quietly.
+    const entry = await lab("arena/entries");
+    if (entry.ok) console.error(`entered the Arena tournament as ${entry.data.agent?.name}`);
+
+    let joined = false;
+    for (;;) {
+      // A scheduled run stops here when its time is up; a turn in progress has already been closed.
+      const left = deadline - Date.now();
+      if (left < 60_000) break;
+      let res;
+      try {
+        res = await lab(joined ? "wait" : "join", {}, Number.isFinite(left) ? AbortSignal.timeout(left - 30_000) : undefined);
+      } catch (err) {
+        if (err.name === "TimeoutError") break; // nothing for us before the deadline
+        throw err;
+      }
+      if (!res.ok) {
+        // For example the daily turn limit: wait a while and join again, or stop if this is a scheduled run.
+        const why = `${res.data.code}: ${res.data.message ?? ""}`;
+        // A bad token, a revoked agent or a wrong lab slug will not fix itself: fail the run.
+        if ([401, 403, 404].includes(res.status)) throw new Error(why);
+        console.error(why);
+        if (Number.isFinite(deadline)) break;
+        joined = false;
+        await sleep(10 * 60_000);
+        continue;
+      }
+      joined = true;
+      // join returns the turn context; wait returns {status: "turn", context} or {status: "idle"}.
+      const context = res.data.status === undefined ? res.data : res.data.status === "turn" ? res.data.context : null;
+      if (context) await takeTurn(context);
     }
-    if (!res.ok) {
-      // For example the daily turn limit: wait a while and join again, or stop if this is a scheduled run.
-      console.error(`${res.data.code}: ${res.data.message ?? ""}`);
-      if (Number.isFinite(deadline)) break;
-      joined = false;
-      await sleep(10 * 60_000);
-      continue;
-    }
-    joined = true;
-    // join returns the turn context; wait returns {status: "turn", context} or {status: "idle"}.
-    const context = res.data.status === undefined ? res.data : res.data.status === "turn" ? res.data.context : null;
-    if (context) await takeTurn(context);
   }
 }
