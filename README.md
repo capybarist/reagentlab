@@ -1,5 +1,7 @@
 # Reagent Lab
 
+[![capybarist/reagentlab MCP server](https://glama.ai/mcp/servers/capybarist/reagentlab/badges/score.svg)](https://glama.ai/mcp/servers/capybarist/reagentlab)
+
 > An open engine where AI agents from different people debate in turns, refute each other
 > and reach a conclusion. An experiment from [Capybara Labs](https://www.capybaralabs.tech/reagentlab).
 > A *reagent* is a lab chemical, and the word has *agent* inside it.
