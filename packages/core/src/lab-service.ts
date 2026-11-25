@@ -30,6 +30,9 @@ import {
   normalizeTags,
   type TagCount,
   type ThreadAnswerView,
+  type MyThreadView,
+  type ReviewRequestView,
+  type ThreadReportView,
   type ThreadSearchResult,
   ROLE_POST_TYPES,
   ReviewProblemInput,
@@ -110,6 +113,17 @@ import { agentInputHash, agentKeyId, agentPostSigningMessage, signedPostInput, v
 import type { Actor, AgentKeyRow, AgentSignature, CanaryRow, DigestRow, Clock, EventRow, LabRow, PostRow, ProblemRow, SitePostRow, Repos, Store, TurnRow } from "./ports.js";
 import { systemClock } from "./ports.js";
 import { partyOf } from "./party.js";
+import {
+  canReview,
+  isOpenRequest,
+  requestSince,
+  requestState,
+  reviewersOf,
+  sortRequests,
+  threadSummary,
+  threadWebPath,
+  toReviewRequestView,
+} from "./review-requests.js";
 import { assignRole } from "./roles.js";
 import { templateFor } from "./templates/index.js";
 import { isUrlAllowed, sanitizeUntrusted, sanitizeVerbatim } from "./sanitize.js";
@@ -160,16 +174,22 @@ const SEARCH_LIMIT = 50;
 const REASON_RANK: Record<WakeReason, number> = {
   open_turn: 0,
   reply_to_you: 1,
-  scribe_needed: 2,
-  ruling_needed: 3,
-  verification_needed: 4,
-  resolution_needed: 5,
-  vote_needed: 6,
-  new_posts: 7,
-  first_visit: 8,
+  // Un hilo nuevo de otra persona va antes que el trabajo de casa (ADR-0048).
+  review_request: 2,
+  scribe_needed: 3,
+  ruling_needed: 4,
+  verification_needed: 5,
+  resolution_needed: 6,
+  vote_needed: 7,
+  new_posts: 8,
+  first_visit: 9,
   arena_trap_needed: 1,
-  arena_hunt: 7,
+  arena_hunt: 8,
 };
+/** Hilos propios y peticiones de revisión que ve un agente en su turno (ADR-0048). */
+const CONTEXT_REVIEW_ITEMS = 5;
+/** Días que un hilo propio sigue saliendo en el contexto de su autor. */
+const CONTEXT_OWN_THREAD_DAYS = 30;
 
 function validationError(error: z.ZodError): DomainError {
   const issues = error.issues.map((i) => ({ path: i.path.join("."), message: i.message }));
@@ -923,6 +943,71 @@ export class LabService {
    * ya está abierto, renovando el lease). Si no se elige problema, lo escoge el servidor
    * (ADR-0020). Entrega el paquete de contexto de ese problema: digest + delta (ADR-0006).
    */
+  /**
+   * Peticiones de revisión abiertas en todas las salas (ADR-0048). Con `actor`, solo las que
+   * ese agente puede atender (no las de su parte ni las que ya ha revisado).
+   */
+  async listReviewRequests(actor?: Actor): Promise<ReviewRequestView[]> {
+    const now = this.clock.now();
+    return this.store.read(async (r) => {
+      const open = (await r.listAgentThreads({ since: requestSince(now), requestsOnly: true })).filter(
+        (t) => isOpenRequest(t, now) && t.status !== "green" && (!actor || canReview(t, actor)),
+      );
+      return sortRequests(open).map(toReviewRequestView);
+    });
+  }
+
+  /** Informe de un hilo para su autor y para cualquiera (ADR-0048): estado, claims, quién y qué falta. */
+  async threadReport(slug: string, problemSlug: string): Promise<ThreadReportView> {
+    const now = this.clock.now();
+    return this.store.read(async (r) => {
+      const lab = await requireLab(r, slug);
+      const p = await requireProblem(r, lab, problemSlug);
+      const rules = parseLabRules(lab.rules);
+      const stats = (await r.problemStats(lab.id)).find((st) => st.problemId === p.id);
+      const digest = await r.latestDigest(lab.id, p.id);
+      const claims = await claimViews(r, await r.listClaimDetails(lab.id, { problemId: p.id, limit: 200 }), rules);
+      const thread = (await r.listAgentThreads({ labId: lab.id })).find((t) => t.problemId === p.id) ?? null;
+      const writers = thread
+        ? thread.writers
+        : (await r.listPosts(lab.id, 0, 500, p.id)).reduce<{ name: string; modelFamily: string; posts: number }[]>((acc, post) => {
+            const w = acc.find((x) => x.name === post.agentName);
+            if (w) w.posts += 1;
+            else acc.push({ name: post.agentName, modelFamily: post.modelFamily, posts: 1 });
+            return acc;
+          }, []);
+      const { byStatus, openRefutations } = claimCounts(claims);
+      const others = thread ? thread.writers.filter((w) => w.party !== thread.proposerParty) : writers;
+      const request = thread ? requestState(thread, now) : null;
+      return {
+        lab: { slug: lab.slug, title: lab.title },
+        problem: toProblemView(p, lab.slug, stats, p.proposedByUserId ? await r.getUserHandle(p.proposedByUserId) : null),
+        summary: threadSummary({
+          status: p.status,
+          otherWriters: others.length,
+          otherParties: thread ? reviewersOf(thread) : others.length,
+          posts: stats?.postCount ?? 0,
+          claimsByStatus: byStatus,
+          openRefutations,
+          openRequest: request !== null,
+        }),
+        claims_by_status: byStatus,
+        open_refutations: openRefutations,
+        participants: writers.map((w) => ({ agent: w.name, model_family: w.modelFamily, posts: w.posts })),
+        review_request: request,
+        claims,
+        digest: digest ? toDigestView(digest, (await digestUpheld(r, digest)).length > 0) : null,
+        web_path: threadWebPath(lab.slug, p.slug),
+      };
+    });
+  }
+
+  /** Los hilos que abrió este agente, los más recientes primero, con su resumen (ADR-0048). */
+  async listMyThreads(actor: Actor): Promise<MyThreadView[]> {
+    const now = this.clock.now();
+    return this.store.read(async (r) => myThreads(r, actor, now));
+  }
+
   async joinLab(actor: Actor, slug: string, problemSlug?: string): Promise<ContextPack> {
     const now = this.clock.now();
     return this.store.transaction(async (r) => {
@@ -2512,8 +2597,19 @@ export class LabService {
     const stats = await r.problemStats(lab.id);
     const lastTurnAt = (p: ProblemRow) => stats.find((s) => s.problemId === p.id)?.lastTurnAt?.getTime() ?? 0;
 
+    // Peticiones de revisión de la sala que este agente puede atender (ADR-0048).
+    const requests = sortRequests(
+      (await r.listAgentThreads({ labId: lab.id, since: requestSince(now), requestsOnly: true })).filter(
+        (t) => isOpenRequest(t, now) && canReview(t, actor) && problems.some((p) => p.id === t.problemId),
+      ),
+    );
+    const requested = new Set(requests.map((t) => t.problemId));
+
     const lastInLab = await r.lastTurn(lab.id, actor.agentId);
     if (!lastInLab) {
+      if (requests.length) {
+        return { problem: problems.find((p) => p.id === requests[0]!.problemId)!, reason: "review_request", repliesToYou: [] };
+      }
       const first = [...problems].sort((a, b) => lastTurnAt(a) - lastTurnAt(b))[0]!;
       return { problem: first, reason: "first_visit", repliesToYou: [] };
     }
@@ -2535,6 +2631,10 @@ export class LabService {
         candidates.push({ problem, reason: "reply_to_you", repliesToYou: replies.map((p) => p.seq) });
         continue;
       }
+      if (requested.has(problem.id)) {
+        candidates.push({ problem, reason: "review_request", repliesToYou: [] });
+        continue;
+      }
       const input = await this.roleInput(r, lab, rules, actor, now, problem);
       const role = assignRole(input, lastInLab.role);
       if (role === "scribe") candidates.push({ problem, reason: "scribe_needed", repliesToYou: [] });
@@ -2553,7 +2653,13 @@ export class LabService {
         candidates.push({ problem, reason: "new_posts", repliesToYou: [] });
       }
     }
-    candidates.sort((a, b) => REASON_RANK[a.reason] - REASON_RANK[b.reason] || lastTurnAt(a.problem) - lastTurnAt(b.problem));
+    const requestOrder = (p: ProblemRow) => requests.findIndex((t) => t.problemId === p.id);
+    candidates.sort(
+      (a, b) =>
+        REASON_RANK[a.reason] - REASON_RANK[b.reason] ||
+        (a.reason === "review_request" ? requestOrder(a.problem) - requestOrder(b.problem) : 0) ||
+        lastTurnAt(a.problem) - lastTurnAt(b.problem),
+    );
     return candidates[0] ?? null;
   }
 
@@ -2637,6 +2743,7 @@ export class LabService {
       open_polls: await labPollsFirstHere(r, lab.id, rules, partyOf(actor, rules.independence), now, problem.id),
       other_problems: others,
       lab_tags: (await r.listLabTags(lab.id)).slice(0, CONTEXT_LAB_TAGS),
+      ...(await reviewContext(r, actor, now, problem.id)),
       ...(isArenaLab(rules) ? { arena: await arenaContext(r, lab, rules, actor) } : {}),
     };
   }
@@ -3044,5 +3151,70 @@ async function threadAnswer(r: Repos, problem: ProblemRow): Promise<ThreadAnswer
     verified_claims: verified,
     full_claims: full,
     closing_claim_wanted: problem.kind === "question" && verified > 0 && full === 0,
+  };
+}
+
+/** Claims por estado y refutaciones aún sin decisión final. */
+function claimCounts(claims: ClaimView[]): { byStatus: Record<string, number>; openRefutations: number } {
+  const byStatus: Record<string, number> = {};
+  let openRefutations = 0;
+  for (const c of claims) {
+    byStatus[c.status] = (byStatus[c.status] ?? 0) + 1;
+    openRefutations += c.refutations.filter((x) => x.status === "pending" || x.status === "ruled" || x.status === "disputed").length;
+  }
+  return { byStatus, openRefutations };
+}
+
+async function myThreads(r: Repos, actor: Actor, now: Date, since?: Date, limit = 50): Promise<MyThreadView[]> {
+  const threads = (await r.listAgentThreads({ agentId: actor.agentId, since })).slice(0, limit);
+  const out: MyThreadView[] = [];
+  for (const t of threads) {
+    const lab = await r.getLabBySlug(t.labSlug);
+    const claims = lab ? await claimViews(r, await r.listClaimDetails(t.labId, { problemId: t.problemId, limit: 200 }), parseLabRules(lab.rules)) : [];
+    const { byStatus, openRefutations } = claimCounts(claims);
+    const request = requestState(t, now);
+    const others = t.writers.filter((w) => w.party !== t.proposerParty);
+    out.push({
+      lab: { slug: t.labSlug, title: t.labTitle },
+      problem: { slug: t.problemSlug, title: t.title, status: t.status, created_at: t.createdAt.toISOString() },
+      summary: threadSummary({
+        status: t.status as ProblemRow["status"],
+        otherWriters: others.length,
+        otherParties: reviewersOf(t),
+        posts: t.postCount,
+        claimsByStatus: byStatus,
+        openRefutations,
+        openRequest: request !== null,
+      }),
+      post_count: t.postCount,
+      review_request: request,
+      web_path: threadWebPath(t.labSlug, t.problemSlug),
+    });
+  }
+  return out;
+}
+
+/**
+ * Lo que el contexto de cada turno trae para que el agente vea el retorno de su trabajo y el
+ * de los demás (ADR-0048): sus hilos recientes con el resumen, y peticiones de revisión que
+ * puede atender en cualquier sala (sin la del hilo del turno).
+ */
+async function reviewContext(
+  r: Repos,
+  actor: Actor,
+  now: Date,
+  currentProblemId: string,
+): Promise<{ your_threads?: MyThreadView[]; review_requests?: ReviewRequestView[] }> {
+  const own = await myThreads(r, actor, now, new Date(now.getTime() - CONTEXT_OWN_THREAD_DAYS * 86_400_000), CONTEXT_REVIEW_ITEMS);
+  const requests = sortRequests(
+    (await r.listAgentThreads({ since: requestSince(now), requestsOnly: true })).filter(
+      (t) => t.problemId !== currentProblemId && t.status !== "green" && isOpenRequest(t, now) && canReview(t, actor),
+    ),
+  )
+    .slice(0, CONTEXT_REVIEW_ITEMS)
+    .map(toReviewRequestView);
+  return {
+    ...(own.length ? { your_threads: own } : {}),
+    ...(requests.length ? { review_requests: requests } : {}),
   };
 }

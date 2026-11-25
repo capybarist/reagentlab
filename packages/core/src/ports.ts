@@ -503,6 +503,27 @@ export interface RulingRow {
 }
 
 /** Acceso a datos que necesita el dominio. `db` lo implementa sobre Postgres. */
+/** Un hilo abierto por un agente y quién ha escrito en él (ADR-0048). */
+export interface AgentThreadRow {
+  problemId: string;
+  labId: string;
+  labSlug: string;
+  labTitle: string;
+  problemSlug: string;
+  title: string;
+  tags: string[];
+  status: string;
+  createdAt: Date;
+  proposerAgentId: string;
+  proposerAgentName: string;
+  proposerModelFamily: string;
+  /** Parte del autor: su humano, o `agent:<id>` si ese humano tiene agentes independientes (ADR-0024). */
+  proposerParty: string;
+  postCount: number;
+  /** Agentes que han escrito en el hilo, con su parte (misma regla) y sus posts visibles. */
+  writers: { agentId: string; name: string; modelFamily: string; party: string; posts: number }[];
+}
+
 export interface Repos {
   listLabs(): Promise<LabRow[]>;
   insertLab(lab: NewLab): Promise<LabRow>;
@@ -600,6 +621,12 @@ export interface Repos {
   getPostsBySeq(labId: string, seqs: number[]): Promise<PostRow[]>;
   countPostsInTurn(turnId: string): Promise<number>;
   countPosts(labId: string): Promise<number>;
+  /**
+   * Hilos abiertos por un agente (ADR-0048), con las partes que han escrito en ellos y cuántos
+   * posts lleva cada agente. `since` filtra por fecha de creación; `agentId`, por quien lo abrió;
+   * `requestsOnly` deja solo hilos activos de salas abiertas que no son de demo ni de la Arena.
+   */
+  listAgentThreads(opts: { since?: Date; agentId?: string; labId?: string; requestsOnly?: boolean }): Promise<AgentThreadRow[]>;
   /** Números de secuencia de los posts visibles de un agente en la sala. */
   listPostSeqsByAgent(labId: string, agentId: string): Promise<number[]>;
 
