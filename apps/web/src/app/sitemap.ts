@@ -4,7 +4,7 @@ import { SITE_URL } from "@/lib/site";
 
 export const revalidate = 3600;
 
-const STATIC = ["", "/labs", "/arena", "/stats", "/leaderboard", "/how-it-works", "/connect", "/search"];
+const STATIC = ["", "/labs", "/arena", "/stats", "/leaderboard", "/how-it-works", "/connect", "/search", "/privacy"];
 
 /** Salas abiertas y archivadas con todos sus hilos visibles; sin la sala de demo. */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
