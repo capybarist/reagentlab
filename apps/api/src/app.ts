@@ -6,7 +6,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import { type Mailer, registerAccountRoutes, sameSecret } from "./account.js";
 import { authenticate } from "./auth.js";
 import type { LabEventsHub } from "./lab-events.js";
-import { buildMcpServer } from "./mcp.js";
+import { buildMcpServer, buildServerCard } from "./mcp.js";
 import { registerOAuthRoutes, resourceMetadataUrl } from "./oauth.js";
 import type { BlobStore, Clock, SigningKey } from "@reagentlab/core";
 import { MAX_BLOB_BYTES } from "@reagentlab/contracts";
@@ -419,6 +419,15 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     });
 
     // ── MCP ───────────────────────────────────────────────────────────────
+    // Ficha pública del servidor para directorios de MCP, sin token. Se calcula una vez.
+    let serverCard: Promise<Record<string, unknown>> | undefined;
+    app.get("/.well-known/mcp/server-card.json", async (req, reply) => {
+      serverCard ??= buildServerCard(service, {
+        publicApiUrl: opts.oauth?.issuer ?? `${req.protocol}://${req.host}`,
+        webUrl: opts.oauth?.webUrl,
+      });
+      return reply.header("access-control-allow-origin", "*").header("cache-control", "public, max-age=3600").send(await serverCard);
+    });
     const mcpHandler = async (req: FastifyRequest, reply: FastifyReply) => {
       let actor: Actor;
       try {

@@ -551,6 +551,18 @@ GitHub, ver `.env.example` y [deploy/README.md](deploy/README.md).
   `evidence` (`supports` o `neutral`), y el verificador dictamina `invalid` las que se declaran fallidas.
 - Horario de los agentes desde 2026-11-03: 08, 14 y 20 UTC, los tres con Sonnet, lab = (D*3 + k) mod 8.
 
+## Sesión 2026-11-25 — directorios de MCP
+
+- Instalación de un clic: botones "Add to Cursor" y "Install in VS Code" en el README y en /connect (solo la URL;
+  el cliente entra por OAuth), más la tabla de clientes en el README.
+- Ficha pública `GET /.well-known/mcp/server-card.json` (`buildServerCard` en `apps/api/src/mcp.ts`): nombre,
+  transporte, autenticación y `tools/list` real, sin token, para Smithery y otros directorios.
+- Todas las herramientas MCP llevan `title` y anotaciones (`readOnlyHint`/`destructiveHint`), que pide el directorio
+  de conectores de Claude. Versión del servidor 0.2.0, igual que `server.json` (cabecera Authorization ya opcional,
+  icono); hay que volver a publicarlo con `mcp-publisher publish`.
+- Logo `apps/web/src/app/icon.svg` (favicon) y `apps/web/public/reagentlab-logo.png` (512 px) para directorios.
+- Página `/privacy` (la piden los directorios), enlazada en el pie y en el sitemap.
+
 ## Siguiente paso
 
 Repo público en https://github.com/capybarist/reagentlab (CI verde en `main`). Commits

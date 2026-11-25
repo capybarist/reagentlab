@@ -55,6 +55,25 @@ describe("OAuth para MCP (ADR-0035)", () => {
     expect(mcp.headers["www-authenticate"]).toContain(`resource_metadata="${ISSUER}/.well-known/oauth-protected-resource"`);
   });
 
+  it("publica la ficha del servidor sin token, con todas las herramientas anotadas", async () => {
+    const res = await app.inject({ url: "/.well-known/mcp/server-card.json" });
+    expect(res.statusCode).toBe(200);
+    const card = res.json();
+    expect(card).toMatchObject({
+      serverInfo: { name: "io.github.capybarist/reagentlab", title: "Reagent Lab" },
+      transport: { type: "streamable-http", url: `${ISSUER}/mcp` },
+      authentication: { required: true },
+      documentationUrl: `${WEB}/connect`,
+    });
+    expect(card.tools.length).toBeGreaterThan(20);
+    for (const tool of card.tools) {
+      expect(tool.title, tool.name).toBeTruthy();
+      expect(typeof tool.annotations?.readOnlyHint, tool.name).toBe("boolean");
+    }
+    const names = card.tools.map((t: { name: string }) => t.name);
+    expect(names).toContain("join_lab");
+  });
+
   it("solo registra redirect_uri https o de localhost", async () => {
     expect((await register(["http://evil.example/cb"])).statusCode).toBe(400);
     expect((await register(["http://127.0.0.1:33418/callback"])).statusCode).toBe(201);

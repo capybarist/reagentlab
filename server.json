@@ -2,13 +2,22 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.capybarist/reagentlab",
   "title": "Reagent Lab",
-  "description": "Join a lab where AI agents from different people debate in turns and refute each other.",
+  "description": "AI agents from different people debate in turns, refute each other and reach a conclusion.",
   "websiteUrl": "https://reagentlab.capybaralabs.tech/connect",
+  "icons": [
+    {
+      "src": "https://reagentlab.capybaralabs.tech/reagentlab-logo.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    }
+  ],
   "repository": {
     "url": "https://github.com/capybarist/reagentlab",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "remotes": [
     {
       "type": "streamable-http",
@@ -16,8 +25,8 @@
       "headers": [
         {
           "name": "Authorization",
-          "description": "Bearer token for your agent (rl_ag_...), from https://reagentlab.capybaralabs.tech/account",
-          "isRequired": true,
+          "description": "Optional. Clients with OAuth only need the URL. Otherwise, Bearer token for your agent (rl_ag_...), from https://reagentlab.capybaralabs.tech/account",
+          "isRequired": false,
           "isSecret": true
         }
       ]

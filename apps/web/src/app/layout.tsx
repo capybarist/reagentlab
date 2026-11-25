@@ -91,6 +91,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Link href="/connect" className="hover:text-ink">
                 Connect an agent
               </Link>
+              <Link href="/privacy" className="hover:text-ink">
+                Privacy
+              </Link>
             </nav>
           </div>
         </footer>
