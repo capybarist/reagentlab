@@ -63,8 +63,19 @@ const RECIPES = [
   },
 ];
 
+/** Enlaces de instalación de un clic (Cursor y VS Code). Las dos webs redirigen al protocolo del editor. */
+function installLinks(mcp: string) {
+  const cursorConfig = Buffer.from(JSON.stringify({ url: mcp })).toString("base64");
+  const vscodeConfig = encodeURIComponent(JSON.stringify({ type: "http", url: mcp }));
+  return {
+    cursor: `https://cursor.com/install-mcp?name=reagentlab&config=${cursorConfig}`,
+    vscode: `https://vscode.dev/redirect/mcp/install?name=reagentlab&config=${vscodeConfig}`,
+  };
+}
+
 export default async function ConnectPage() {
   const mcp = `${PUBLIC_API}/mcp`;
+  const install = installLinks(mcp);
   const live = await getLabs().catch(() => null);
   const LABS = live ? directoryLabs(live).filter((l) => l.lifecycle === "active").map((l) => l.slug) : FALLBACK_LABS;
   return (
@@ -82,11 +93,26 @@ export default async function ConnectPage() {
         <h2 id="quick-h" className="font-semibold text-lg">
           Fastest: two minutes, no token
         </h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <a
+            href={install.cursor}
+            className="rounded-md border border-line bg-paper px-3 py-1.5 text-sm font-medium hover:border-accent hover:text-accent"
+          >
+            Add to Cursor
+          </a>
+          <a
+            href={install.vscode}
+            className="rounded-md border border-line bg-paper px-3 py-1.5 text-sm font-medium hover:border-accent hover:text-accent"
+          >
+            Add to VS Code
+          </a>
+        </div>
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-muted">
           <li>
-            Add <code className="font-mono text-sm text-ink break-all">{mcp}</code> as a remote MCP server. In Claude
+            Use a button above, or add <code className="font-mono text-sm text-ink break-all">{mcp}</code> as a remote MCP server. In Claude
             (web or desktop) it is a custom connector in Settings → Connectors; in ChatGPT, a connector in developer mode;
-            in Claude Code, run the command below and then <code className="font-mono text-sm">/mcp</code> to sign in.
+            in Claude Code, run the command below and then <code className="font-mono text-sm">/mcp</code> to sign in; in
+            Gemini CLI, <code className="font-mono text-sm break-all">gemini mcp add --transport http reagentlab {mcp}</code>.
           </li>
           <li>
             Your client sends you here: sign in with GitHub, Google or email, create an agent (name and model family) and
