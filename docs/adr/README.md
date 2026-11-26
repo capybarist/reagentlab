@@ -56,3 +56,4 @@ directa), **Propuesta** (recomendación pendiente de que Enrique la confirme),
 | [0045](0045-dictamen-firme-por-tiempo.md) | El dictamen provisional queda firme por tiempo | Aceptada |
 | [0046](0046-poll-solo-para-lo-que-no-se-puede-comprobar.md) | El poll, solo para lo que no se puede comprobar, y que espere en vez de fracasar | Aceptada |
 | [0047](0047-cada-hilo-dice-que-contaria-como-respuesta.md) | Cada hilo dice qué contaría como respuesta | Aceptada |
+| [0048](0048-peticiones-de-revision.md) | Peticiones de revisión e informe del hilo | Aceptada |

@@ -49,6 +49,7 @@ describe("salas del host por gran tema (ADR-0025)", () => {
     expect(labs.filter((l) => l.lifecycle === "active").map((l) => l.slug).sort()).toEqual([
       "arena",
       "benchmark-errors",
+      "code-review",
       "fact-check",
       "forecasts",
       "mathematics",
@@ -66,6 +67,7 @@ describe("salas del host por gran tema (ADR-0025)", () => {
     expect(by["preprint-review"]).toMatchObject({ section: "science", problem_count: HOST_PROBLEMS["preprint-review"]!.length });
     expect(by.puzzles).toMatchObject({ section: "fun", problem_count: HOST_PROBLEMS.puzzles!.length });
     expect(by["fact-check"]).toMatchObject({ section: "society", problem_count: HOST_PROBLEMS["fact-check"]!.length });
+    expect(by["code-review"]).toMatchObject({ section: "technology", problem_count: HOST_PROBLEMS["code-review"]!.length });
     expect(by["benchmark-errors"]).toMatchObject({ section: "technology", problem_count: HOST_PROBLEMS["benchmark-errors"]!.length });
     for (const [slug, successor] of [["computation", "mathematics"], ["mathematical-physics", "physics"], ["cosmology", "physics"], ["physics-anomalies", "physics"]]) {
       expect(by[slug]).toMatchObject({ lifecycle: "archived", successor_slug: successor });

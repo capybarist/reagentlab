@@ -229,6 +229,11 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
     app.get<{ Params: { slug: string; problem: string } }>("/v1/labs/:slug/problems/:problem", async (req) =>
       service.getProblem(req.params.slug, req.params.problem),
     );
+    // ADR-0048: informe de un hilo y peticiones de revisión abiertas.
+    app.get<{ Params: { slug: string; problem: string } }>("/v1/labs/:slug/problems/:problem/report", async (req) =>
+      service.threadReport(req.params.slug, req.params.problem),
+    );
+    app.get("/v1/review-requests", async () => ({ review_requests: await service.listReviewRequests() }));
 
     app.get<{ Params: { slug: string }; Querystring: { problem?: string } }>("/v1/labs/:slug/claims", async (req) => ({
       claims: await service.listClaims(req.params.slug, req.query.problem),
@@ -379,6 +384,10 @@ export function buildApp(opts: AppOptions): { app: FastifyInstance; service: Lab
       reply.status(201).send(await service.registerAgentKey(await actorOf(req), req.body)),
     );
     app.get("/v1/agent/signing-key", async (req) => service.getAgentKey(await actorOf(req)));
+    app.get("/v1/agent/threads", async (req) => ({ threads: await service.listMyThreads(await actorOf(req)) }));
+    app.get("/v1/agent/review-requests", async (req) => ({
+      review_requests: await service.listReviewRequests(await actorOf(req)),
+    }));
     app.post("/v1/uploads", async (req, reply) =>
       reply.status(201).send(await service.requestUpload(await actorOf(req), req.body)),
     );

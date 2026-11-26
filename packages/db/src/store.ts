@@ -600,6 +600,77 @@ function makeRepos(db: Db): Repos {
       return Number(r!.n);
     },
 
+    async listAgentThreads(opts) {
+      // Parte de un agente (ADR-0023/0024), con la independencia por humano de las salas del host.
+      const party = (a: string, u: string) =>
+        sql.raw(`CASE WHEN ${u}.independent_agents THEN 'agent:' || ${a}.id::text ELSE ${u}.id::text END`);
+      const conds = [sql`pr.proposed_by_agent_id IS NOT NULL`];
+      if (opts.since) conds.push(sql`pr.created_at >= ${opts.since.toISOString()}`);
+      if (opts.agentId) conds.push(sql`pr.proposed_by_agent_id = ${opts.agentId}`);
+      if (opts.labId) conds.push(sql`pr.lab_id = ${opts.labId}`);
+      if (opts.requestsOnly) {
+        conds.push(sql`pr.review = 'active'`);
+        conds.push(sql`l.lifecycle <> 'archived'`);
+        conds.push(sql`l.slug <> 'demo'`);
+        conds.push(sql`coalesce(l.rules->>'template', 'science') <> 'arena'`);
+      }
+      const rows = await db.execute<Record<string, unknown>>(sql`
+        SELECT pr.id AS problem_id, l.id AS lab_id, l.slug AS lab_slug, l.title AS lab_title,
+          pr.slug AS problem_slug, pr.title, pr.tags, pr.status, pr.created_at,
+          pa.id AS proposer_agent_id, pa.name AS proposer_name, pa.model_family AS proposer_family,
+          ${party("pa", "pu")} AS proposer_party,
+          coalesce((
+            SELECT json_agg(json_build_object('agent_id', w.agent_id, 'name', w.name, 'model_family', w.model_family,
+              'party', w.party, 'posts', w.posts) ORDER BY w.posts DESC)
+            FROM (
+              SELECT a.id AS agent_id, a.name, a.model_family, ${party("a", "u")} AS party, count(*)::int AS posts
+              FROM ${posts} p JOIN ${agents} a ON a.id = p.agent_id JOIN ${users} u ON u.id = a.user_id
+              WHERE p.problem_id = pr.id AND p.hidden_at IS NULL
+              GROUP BY a.id, a.name, a.model_family, u.id, u.independent_agents
+            ) w
+          ), '[]'::json) AS writers
+        FROM ${problems} pr
+        JOIN ${labs} l ON l.id = pr.lab_id
+        JOIN ${agents} pa ON pa.id = pr.proposed_by_agent_id
+        JOIN ${users} pu ON pu.id = pa.user_id
+        WHERE ${sql.join(conds, sql` AND `)}
+        ORDER BY pr.created_at DESC
+        LIMIT 200`);
+      const list = (Array.isArray(rows) ? rows : (rows as { rows: Record<string, unknown>[] }).rows) as Record<string, any>[];
+      return list.map((r) => {
+        const writers = (typeof r.writers === "string" ? JSON.parse(r.writers) : r.writers) as {
+          agent_id: string;
+          name: string;
+          model_family: string;
+          party: string;
+          posts: number;
+        }[];
+        return {
+          problemId: r.problem_id,
+          labId: r.lab_id,
+          labSlug: r.lab_slug,
+          labTitle: r.lab_title,
+          problemSlug: r.problem_slug,
+          title: r.title,
+          tags: (r.tags ?? []) as string[],
+          status: r.status,
+          createdAt: new Date(r.created_at),
+          proposerAgentId: r.proposer_agent_id,
+          proposerAgentName: r.proposer_name,
+          proposerModelFamily: r.proposer_family,
+          proposerParty: r.proposer_party,
+          postCount: writers.reduce((n, w) => n + Number(w.posts), 0),
+          writers: writers.map((w) => ({
+            agentId: w.agent_id,
+            name: w.name,
+            modelFamily: w.model_family,
+            party: w.party,
+            posts: Number(w.posts),
+          })),
+        };
+      });
+    },
+
     async listPostSeqsByAgent(labId, agentId) {
       const rows = await db
         .select({ seq: posts.seq })

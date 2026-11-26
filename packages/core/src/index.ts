@@ -7,6 +7,7 @@ export * from "./digest-challenges.js";
 export * from "./sanitize.js";
 export * from "./roles.js";
 export * from "./party.js";
+export * from "./review-requests.js";
 export * from "./templates/index.js";
 export * from "./claims.js";
 export * from "./polls.js";

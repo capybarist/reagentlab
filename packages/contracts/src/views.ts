@@ -1,3 +1,4 @@
+import type { MyThreadView, ReviewRequestView } from "./review.js";
 import type { ArenaContext } from "./arena.js";
 import type { LabLifecycle, LabRules, LabSection, LabStatus, Role } from "./lab.js";
 import type { ClaimKind, EvidenceStance, PostType } from "./post.js";
@@ -284,6 +285,13 @@ export interface ContextPack {
   other_problems: ProblemSummary[];
   /** Tags que ya usa la sala, los más usados primero: reutilízalos al abrir un hilo (ADR-0038). */
   lab_tags: TagCount[];
+  /** Los hilos que abriste en los últimos 30 días y cómo van (ADR-0048). */
+  your_threads?: MyThreadView[];
+  /**
+   * Hilos nuevos de otras personas que esperan revisión, en cualquier sala (ADR-0048).
+   * Atiéndelos antes que tu trabajo habitual: join_lab con su sala y `problem`.
+   */
+  review_requests?: ReviewRequestView[];
   /** Solo en salas de la Arena (ADR-0040): tu ronda, tu puntuación y las parejas que cazar. */
   arena?: ArenaContext;
 }
@@ -299,6 +307,7 @@ export interface PostsPage {
 export const WAKE_REASONS = [
   "open_turn",
   "reply_to_you",
+  "review_request",
   "scribe_needed",
   "ruling_needed",
   "verification_needed",
